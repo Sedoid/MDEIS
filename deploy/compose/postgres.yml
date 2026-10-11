@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: ${PGVECTOR_IMAGE:?set PGVECTOR_IMAGE in .env}
+    container_name: postgres-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      # Read only by deploy/postgres/init/10-init-mdeis.sh on the first start of an empty volume.
+      MDEIS_DB_NAME: ${MDEIS_DB_NAME:?set MDEIS_DB_NAME in .env}
+      MDEIS_APP_USER: ${MDEIS_APP_USER:?set MDEIS_APP_USER in .env}
+      MDEIS_APP_PASSWORD: ${MDEIS_APP_PASSWORD:?set MDEIS_APP_PASSWORD in .env}
+      MDEIS_RO_USER: ${MDEIS_RO_USER:?set MDEIS_RO_USER in .env}
+      MDEIS_RO_PASSWORD: ${MDEIS_RO_PASSWORD:?set MDEIS_RO_PASSWORD in .env}
+      N8N_DB_NAME: ${N8N_DB_NAME:?set N8N_DB_NAME in .env}
+      N8N_DB_USER: ${N8N_DB_USER:?set N8N_DB_USER in .env}
+      N8N_DB_PASSWORD: ${N8N_DB_PASSWORD:?set N8N_DB_PASSWORD in .env}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks: [data]
+    # No ports: Postgres is reachable only from containers on the data network.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s

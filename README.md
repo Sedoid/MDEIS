@@ -1,1 +1,303 @@
-# MDEIS
+# MDEIS: Multidimensional Educational Intelligence System
+
+Entry for the **African Agentic AI Design Challenge** (Nairobi AI Community and Qhala Trust),
+Education track, "The Long View".
+
+MDEIS reads one learner's school records across subjects, terms and years, and reports what the
+data shows against a **criteria template the school supplies**. Every finding cites the records
+and the template clauses behind it. A **named human approver** must release every report.
+
+> **Status: build in progress (window closes 15 Oct 2026).** Sections marked **Planned** describe
+> the design in `docs/SPEC.md`. They are not delivered features until the status table below says
+> so. Nothing here claims a test passed that has not been run. Results are committed under
+> `evals/results/` once they exist.
+
+| Part | Status |
+| --- | --- |
+| Design, tool contracts, test plan | Written (`docs/`) |
+| Criteria templates and loader | Planned |
+| Synthetic data generator | Planned |
+| Database and migrations | Planned |
+| MCP server tools | Planned |
+| n8n workflow, Open WebUI, OpenRouter | Planned |
+| Evaluation results | None yet. `EVALS.md` will quote real runs only |
+
+**All data in this repository is synthetic.** There are no real learners, names, photos or
+schools.
+
+---
+
+## Problem statement
+
+In many African schools a learner can move up a class without having the basics of the class
+below. A learner in Form 3 may still read, write, listen or do arithmetic at a Form 1 level, and
+nobody sees it until it is very late. The evidence exists, in marks, assessment types and teacher
+notes spread over terms and years, but it is scattered, uses different scales, and is rarely read
+as one story.
+
+Existing "AI for schools" tools tend to do one of two harmful things: hand a model a pile of
+marks and let it say what it likes (unsourced, unrepeatable), or put a judgement on a child
+("weak", "gifted", a rank, a career path). The challenge forbids both, and so do we.
+
+## Solution overview
+
+MDEIS is a small agent system that:
+
+1. **Loads** one learner's assessment records and converts every scale using the school's
+   template. Messy data (missing terms, duplicates, marks above the maximum, notes that
+   contradict marks) becomes a **typed issue** with a plain question, never a silent fix.
+2. **Computes**, with deterministic code only, a trend per skill across terms and the **gap to
+   the stage standard**: where the learner's work sits against what the template expects at that
+   stage. The comparison is always with the standard, never with classmates.
+3. **Drafts** a plain-language report. The model writes words only. Every number comes from a
+   tool, and every sentence carries record and clause citations.
+4. **Checks** the draft mechanically (`check_citations`) and **holds** it until a named approver
+   reads it and releases it.
+5. **Logs** every tool call in an append-only action log.
+
+The rules (scales, thresholds, stage ranges, minimum evidence, banned words) live in the
+template, not in code. A different school brings a different template, and the code is
+unchanged.
+
+## Target users
+
+- **Teachers and school heads** (the approver): see where a learner's foundation skills sit
+  against the stage standard, and decide what the report says before it goes anywhere.
+- **Parents and guardians** (readers of released reports): get a sourced, plain-words account of
+  the data, with the evidence behind each statement.
+- **School leaders** (later, locked): counts of learners below, within and above the stage range,
+  with no names. This view is built only after the safety tests pass. See Limitations.
+
+## Architecture
+
+Every part is a container, and they talk to each other over private Docker networks. Only the
+Open WebUI port is published to your machine.
+
+```
+Approver (signed in) -> webui (Open WebUI) -> gateway (FastAPI) -> n8n agent workflow
+                                                                    |-> OpenRouter (pinned open-weights model)
+                                                                    |-> mdeis-mcp (ours)
+                                                                    |-> pg-mcp-ro (borrowed, read-only)
+mdeis-mcp -> Postgres + pgvector (records, template rules, clause index, action log)
+mdeis-mcp -> embedder (text to vectors for the clause index)
+Langfuse (optional): traces, tokens, cost per run
+```
+
+- **The gateway** knows who is signed in, signs the approver token and calls n8n. No calculation.
+- **n8n** runs the sequence and the ask-and-resolve loop. It does no calculation.
+- **The model** plans, calls tools and writes the summary text. It never produces a number that
+  a tool did not return.
+- **The MDEIS server** does every calculation, check and release, and makes no model calls.
+- **Postgres** holds records, parsed template rules, a pgvector index of clause text, and the
+  action log.
+
+Details: [`docs/SPEC.md`](docs/SPEC.md) and [`docs/CONTAINERS.md`](docs/CONTAINERS.md) (containers, networks, ports). Decisions and their reasons: [`docs/DECISIONS.md`](docs/DECISIONS.md).
+
+## Setup/installation instructions
+
+**Planned.** Prerequisites: Docker with Compose, and `make`. You supply
+your own keys; **no key or secret is ever committed**.
+
+```bash
+git clone <this repo> && cd MDEIS
+cp .env.example .env     # then fill in the values in the table below
+make demo                # the one command
+```
+
+`make demo` is designed to: check that `.env` is complete (and say exactly which variables are
+missing), start the services, apply the database migrations, load the template and the synthetic
+data, wait until everything reports healthy, run a smoke test, and print the address to open. It
+is safe to run twice. `make clean` removes the containers and data volumes.
+
+### Values you provide
+
+`.env.example` is the source of truth and has a one-line comment for every variable. The names
+below are the plan. Each service's task adds its own and updates the file.
+
+| Variable | Needed | What it is and where it comes from |
+| --- | --- | --- |
+| `OPENROUTER_API_KEY` | yes | Your key from openrouter.ai |
+| `OPENROUTER_MODEL` | yes | The pinned open-weights model slug (see D-007) |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | yes | Any values you choose for the local database |
+| `DATABASE_URL` | yes | Built from the three values above |
+| `APPROVER_TOKEN_SECRET` | yes | A long random string you generate. It signs the approver token (D-003) |
+| `WEBUI_SECRET_KEY` | yes | A long random string for Open WebUI sessions |
+| `N8N_ENCRYPTION_KEY` | yes | A long random string for n8n credentials |
+| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` | no | Only if you want tracing |
+
+Generate a random string with `openssl rand -hex 32`.
+
+For development:
+
+```bash
+make dev-up      # build and start every container, wait until healthy
+make dev-down    # stop everything, keep the data
+make dev-ps      # state and health of each container
+make migrate     # apply database migrations
+make test        # unit and acceptance tests
+make check       # structure check and secret scan
+```
+
+Until these commands land, this section is a plan. We will not call the one-command run done
+until it has been run from a fresh clone on a clean machine with only `.env` edited.
+
+## Usage instructions
+
+**Planned.** The intended walkthrough, which is also the demo script:
+
+1. Sign in to Open WebUI as the approver and ask about a synthetic learner, for example
+   "Show me the longitudinal picture for L-0007."
+2. If the records have blocking problems (a missing term, a duplicate, a mark above the
+   maximum), the agent asks you in chat. You answer; the agent records your answer with
+   `resolve_issue`.
+3. The agent computes trends and the gap to the stage standard, and drafts a report with
+   `[A-000123]` record citations and `[TR-2]` clause citations.
+4. `check_citations` runs. If it fails, the draft is fixed and re-checked (bounded retries).
+5. You read the draft and approve. Only then does `release_report` run, with your name from the
+   session.
+6. Ask it to rank two learners. It refuses and explains why.
+
+Swapping `templates/v1.yaml` for `templates/v2-strict.yaml` changes the results for the same
+data, with no code change. That is the proof that rules live in the template.
+
+## Technology stack
+
+| Layer | Choice |
+| --- | --- |
+| Interface | Open WebUI, behind a small FastAPI gateway |
+| Orchestration | n8n (agent workflow), open source |
+| Model | A pinned open-weights model through OpenRouter (provider order fixed, fallbacks off, data collection denied). The model slug is recorded in D-007 once chosen |
+| Our MCP server | Python 3.12 and the official MCP Python SDK, Streamable HTTP |
+| Borrowed MCP server | A read-only Postgres MCP server |
+| Data | Postgres 16 with pgvector |
+| Embeddings | llama.cpp server with an open embedding model (see D-012) |
+| Packaging | Docker Compose, one container per part |
+| Tracing (optional) | Langfuse |
+| Quality | pytest, ruff, GitHub Actions |
+| Deployment (bonus) | Docker Compose on a personal server |
+
+## Agent architecture
+
+One agent loop, orchestrated by n8n, using tools. It is not a chatbot wrapper: the model cannot
+produce a finding except through a tool call, and the gate sits on the only irreversible action.
+
+- **Plan and call:** the model chooses which tools to call and in what order for the request.
+- **Ask and resolve:** a blocking data issue stops the affected subject. The agent asks the
+  approver, then records the answer. It does not guess.
+- **Draft and check:** the model writes the summary text; a deterministic checker accepts or
+  rejects it.
+- **Gate:** release needs a human approver taken from the signed-in session. The model cannot
+  name or change the approver.
+- **Refuse:** requests to rank, compare learners, put a judgement on a child or suggest a pathway are refused
+  with a reason.
+
+This project is built with the help of AI coding agents (Claude Code). The agent rules and task
+plans are kept outside this repository. Every change is reviewed by the author, and the tests and
+CI are the check on the code.
+
+## MCP implementation
+
+Our server is written in Python with the official MCP SDK and served over Streamable HTTP, which
+Open WebUI supports natively. All tools return structured JSON. A refusal is a normal structured
+result with reasons, not an exception. Every call is written to the action log with the run id
+and the approver, if any. The approver is read from a verified, short-lived signed token
+forwarded as a header, never from a tool argument.
+
+Contracts for every tool: [`docs/SPEC.md`](docs/SPEC.md) section 5. Tool examples for reuse will
+be in `TOOLS.md` once the tools exist.
+
+## MCP tools/servers
+
+**Ours (the MDEIS server). Planned.**
+
+| Tool | Kind | What it does |
+| --- | --- | --- |
+| `ingest_assessments` | read | Loads one learner's records, converts scales, returns typed issues |
+| `resolve_issue` | **acting** | Records the approver's answer to one issue |
+| `compute_trend` | read | Deterministic trend and gap to the stage standard, with citations and a `result_hash` |
+| `get_criterion` | read | Finds the template clause to cite (pgvector search) |
+| `draft_summary` | write | Stores the model's text as a pending report |
+| `check_citations` | read | Rejects uncited, unsourced or banned-word text |
+| `release_report` | **acting, the gate** | Releases a checked report. Needs a valid approver |
+| `stage_gap_counts` | read, **locked** | Counts only, no names, one school. Not built until the safety tests pass |
+
+**Borrowed.** A read-only Postgres MCP server, used for inspection queries. The exact server and
+the reason for choosing it will be recorded here and in `docs/DECISIONS.md` when wired in.
+
+## Human-in-the-loop workflow
+
+Two points need a person, both with the named approver taken from the session:
+
+1. **Resolving data problems.** The system does not repair records. A person answers.
+2. **Releasing a report.** `release_report` refuses without a valid approver or if
+   `check_citations` has not passed. Both allowed and refused attempts are logged.
+
+Nothing reaches a parent or teacher outside this gate. The approver reads the draft in chat
+before anything is released.
+
+## Evaluation
+
+**Planned.** Eleven tests (E-01 to E-11) in two layers, described in
+[`docs/TESTS.md`](docs/TESTS.md): a deterministic core layer that runs on every push, and an
+agent layer that runs five times each and reports the spread. Results will be committed under
+`evals/results/` and quoted in `EVALS.md`. Failures are recorded as failures.
+
+## Safety rules
+
+- Numbers come only from deterministic code and SQL.
+- Rules come from the template, with a clause ID on each.
+- No judgement on a child: findings describe the data ("reading in the Form 1 range for three
+  terms"), never "weak" or "gifted". No ranking or comparison between learners.
+- No pathway, subject-choice or career suggestions.
+- Synthetic data only.
+- No secrets in the repo.
+
+## Limitations
+
+- **Not built yet.** See the status table. This README will say what works and what was tested,
+  and nothing more.
+- **Synthetic data only.** Real-world messiness, real handwriting and real school records are
+  untested. The template values in `v1` are placeholders until a teacher confirms them.
+- **Evidence is limited to records.** Marks and notes show attainment, not why. MDEIS does not
+  explain causes and does not decide anything about a learner.
+- **Small-model risk.** An open-weights model can write a poor sentence. The citation checker
+  catches missing sources and banned words, but not every poor phrasing, which is why a person
+  approves.
+- **Class view is locked.** It is built only after the safety tests pass and an approver is
+  named. When built: counts only, no names, a minimum group size from the template, one school.
+- **One school, one language** in the first version.
+
+## Future improvements
+
+- Teacher-confirmed template values from real stage standards, and templates for other
+  curricula.
+- The locked class view, then school-level gap reporting for leaders.
+- Local-language report text, checked by a human.
+- Evidence from cases judged by teachers to measure how often the gap findings agree with
+  teachers' own judgement.
+- Parent-facing report layouts, and charts and PDF downloads served by our own server after
+  release.
+- Import from common school record formats.
+
+## Repository map
+
+Full detail in [`docs/STRUCTURE.md`](docs/STRUCTURE.md).
+
+```
+src/mdeis/      MCP server (tools/) and deterministic core (core/)
+templates/      criteria templates
+workflows/      n8n workflow exports
+synthetic/      synthetic data generator    data/synthetic/  its output
+tests/ evals/   deterministic tests, agent-layer evals and results
+deploy/         service config and scripts
+docs/           spec, containers, tests, template, decisions
+```
+
+## Licence
+
+Apache License 2.0, an OSI-approved licence. See [`LICENSE`](LICENSE) and D-002.
+
+## Team
+
+Up to three members, all 18 or over and resident in Africa, as the challenge requires. Names to
+be added.

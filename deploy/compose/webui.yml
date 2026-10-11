@@ -1,0 +1,66 @@
+services:
+  # Open WebUI, set up to use only our gateway as its model source.
+  # Variable names were checked against the Open WebUI environment reference
+  # (docs.openwebui.com, "Environment Variable Configuration"). Re-check them when the tag changes.
+  webui:
+    image: ${WEBUI_IMAGE:?set WEBUI_IMAGE in .env}
+    container_name: webui-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    restart: unless-stopped
+    ports:
+      - "${HOST_BIND:-127.0.0.1}:${WEBUI_PORT:-3000}:8080"
+    environment:
+      WEBUI_NAME: MDEIS
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?set WEBUI_SECRET_KEY in .env}
+      # Environment wins over anything saved in the admin screen, so the setup is repeatable.
+      ENABLE_PERSISTENT_CONFIG: "false"
+
+      # The only model source is our gateway. No Ollama, no direct connections.
+      ENABLE_OPENAI_API: "true"
+      OPENAI_API_BASE_URL: http://gateway:8000/v1
+      OPENAI_API_KEY: ${GATEWAY_API_KEY:?set GATEWAY_API_KEY in .env}
+      ENABLE_OLLAMA_API: "false"
+      ENABLE_DIRECT_CONNECTIONS: "false"
+
+      # Send the signed-in user's name, id, email and role to the gateway as X-OpenWebUI-User-* headers.
+      ENABLE_FORWARD_USER_INFO_HEADERS: "true"
+
+      # First administrator, created on first start. Sign-up is then closed automatically.
+      WEBUI_ADMIN_EMAIL: ${WEBUI_ADMIN_EMAIL:?set WEBUI_ADMIN_EMAIL in .env}
+      WEBUI_ADMIN_NAME: ${WEBUI_ADMIN_NAME:-Approver}
+      WEBUI_ADMIN_PASSWORD: ${WEBUI_ADMIN_PASSWORD:?set WEBUI_ADMIN_PASSWORD in .env}
+      ENABLE_SIGNUP: "false"
+
+      # Background requests (titles, tags, follow-ups) would wake the agent. Switch them off.
+      ENABLE_TITLE_GENERATION: "false"
+      ENABLE_TAGS_GENERATION: "false"
+      ENABLE_FOLLOW_UP_GENERATION: "false"
+      ENABLE_AUTOCOMPLETE_GENERATION: "false"
+      ENABLE_SEARCH_QUERY_GENERATION: "false"
+      ENABLE_RETRIEVAL_QUERY_GENERATION: "false"
+
+      # Features we do not use, and calls out to the internet we do not want.
+      ENABLE_WEB_SEARCH: "false"
+      BYPASS_EMBEDDING_AND_RETRIEVAL: "true"
+      RAG_EMBEDDING_MODEL_AUTO_UPDATE: "false"
+      ENABLE_COMMUNITY_SHARING: "false"
+      ENABLE_EVALUATION_ARENA_MODELS: "false"
+      ENABLE_CHANNELS: "false"
+      ENABLE_NOTES: "false"
+      ENABLE_USER_WEBHOOKS: "false"
+      ENABLE_VERSION_UPDATE_CHECK: "false"
+      OFFLINE_MODE: "true"
+      ANONYMIZED_TELEMETRY: "false"
+      DO_NOT_TRACK: "true"
+      SCARF_NO_ANALYTICS: "true"
+    volumes:
+      - webui_data:/app/backend/data
+    networks: [edge]
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s

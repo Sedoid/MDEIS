@@ -1,0 +1,56 @@
+services:
+  n8n:
+    image: ${N8N_IMAGE:?set N8N_IMAGE in .env}
+    container_name: n8n-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    restart: unless-stopped
+    # Imports workflows/ (or the echo workflow when that is empty), then starts n8n.
+    entrypoint: ["/bin/sh", "/mdeis/entrypoint.sh"]
+    environment:
+      # Its own database and role. n8n_app cannot connect to the mdeis database.
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: "5432"
+      DB_POSTGRESDB_DATABASE: ${N8N_DB_NAME:?set N8N_DB_NAME in .env}
+      DB_POSTGRESDB_USER: ${N8N_DB_USER:?set N8N_DB_USER in .env}
+      DB_POSTGRESDB_PASSWORD: ${N8N_DB_PASSWORD:?set N8N_DB_PASSWORD in .env}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?set N8N_ENCRYPTION_KEY in .env}
+      N8N_HOST: n8n
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://n8n:5678/
+      N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE:-false}
+      GENERIC_TIMEZONE: ${TZ:-UTC}
+      TZ: ${TZ:-UTC}
+      # No telemetry, no update nags, no template gallery.
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_TEMPLATES_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      # The workflow reads the values below with $env. n8n blocks that by default.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      # The model lives here and nowhere else. mdeis-mcp never receives these.
+      # Not required to start the stack (the model is chosen in H-6). `make check-env --strict` requires them.
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
+      OPENROUTER_PROVIDER: ${OPENROUTER_PROVIDER:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_ALLOW_FALLBACKS: ${OPENROUTER_ALLOW_FALLBACKS:-false}
+      OPENROUTER_DATA_COLLECTION: ${OPENROUTER_DATA_COLLECTION:-deny}
+      # Where the workflow finds the tool servers.
+      MDEIS_MCP_URL: http://mdeis-mcp:8100/mcp
+      PG_MCP_URL: http://pg-mcp-ro:8200/sse
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workflows:/workflows:ro
+      - ./deploy/n8n:/mdeis:ro
+    networks: [agent, data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # No ports here. The editor port is added by n8n.dev.yml, which the Makefile includes in dev.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5678/healthz >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s

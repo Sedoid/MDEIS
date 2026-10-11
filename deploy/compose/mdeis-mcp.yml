@@ -1,0 +1,54 @@
+services:
+  # One-shot step: applies the SQL migrations as the app role, then exits 0.
+  # mdeis-mcp starts only after it has finished. `make migrate` runs it by hand.
+  migrate:
+    build:
+      context: .
+      dockerfile: deploy/docker/mdeis-mcp.Dockerfile
+      target: runtime
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?set PYTHON_IMAGE in .env}
+    image: mdeis-mcp:local
+    container_name: migrate-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    command: ["python", "-m", "mdeis.db.migrate"]
+    environment:
+      DATABASE_URL: postgresql://${MDEIS_APP_USER:?set MDEIS_APP_USER in .env}:${MDEIS_APP_PASSWORD:?set MDEIS_APP_PASSWORD in .env}@postgres:5432/${MDEIS_DB_NAME:?set MDEIS_DB_NAME in .env}
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  mdeis-mcp:
+    build:
+      context: .
+      dockerfile: deploy/docker/mdeis-mcp.Dockerfile
+      target: runtime
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?set PYTHON_IMAGE in .env}
+    image: mdeis-mcp:local
+    container_name: mdeis-mcp-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    restart: unless-stopped
+    # No OPENROUTER variable here, ever: this server makes no model calls.
+    environment:
+      DATABASE_URL: postgresql://${MDEIS_APP_USER}:${MDEIS_APP_PASSWORD}@postgres:5432/${MDEIS_DB_NAME}
+      EMBEDDER_URL: http://embedder:8081
+      EMBED_DIM: ${EMBED_DIM:-768}
+      APPROVER_TOKEN_SECRET: ${APPROVER_TOKEN_SECRET:?set APPROVER_TOKEN_SECRET in .env}
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8100"
+    networks: [agent, data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      embedder:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # No ports: n8n reaches it at http://mdeis-mcp:8100/mcp over the agent network.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s

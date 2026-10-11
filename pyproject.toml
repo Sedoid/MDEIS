@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mdeis"
+version = "0.1.0"
+description = "Multidimensional Educational Intelligence System: cited, template-driven findings from school records."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.12"
+# Pre-approved libraries only (docs/DECISIONS.md D-001). Anything else is a "Needs decision".
+dependencies = [
+    # mcp 2.x renamed FastMCP to MCPServer. The stub server is written for 1.x. mcp-engineer decides on 2.x in T-006.
+    "mcp>=1.30,<2",
+    "pydantic",
+    "pyyaml",
+    "psycopg[binary]",
+    "pgvector",
+    "httpx",
+    "fastapi",
+    "uvicorn",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+mdeis = ["db/migrations/*.sql"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "integration: needs a running Postgres with pgvector (DATABASE_URL); skipped otherwise",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

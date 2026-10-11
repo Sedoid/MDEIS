@@ -1,0 +1,26 @@
+services:
+  # The borrowed MCP server: crystaldba/postgres-mcp ("Postgres MCP Pro", MIT licence).
+  # Restricted access mode (read-only transactions) AND a database role that can only SELECT,
+  # so a write is refused twice. Pending the human's pick in T-027.
+  pg-mcp-ro:
+    image: ${PG_MCP_IMAGE:?set PG_MCP_IMAGE in .env}
+    container_name: pg-mcp-ro-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    restart: unless-stopped
+    command:
+      - "--access-mode=restricted"
+      - "--transport=sse"
+      - "--sse-host=0.0.0.0"
+      - "--sse-port=8200"
+    environment:
+      DATABASE_URI: postgresql://${MDEIS_RO_USER:?set MDEIS_RO_USER in .env}:${MDEIS_RO_PASSWORD:?set MDEIS_RO_PASSWORD in .env}@postgres:5432/${MDEIS_DB_NAME:?set MDEIS_DB_NAME in .env}
+    networks: [agent, data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # No ports. The SSE endpoint is http://pg-mcp-ro:8200/sse inside the agent network.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8200), 3).close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
