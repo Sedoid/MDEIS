@@ -14,7 +14,11 @@ A version is known by its file name without the extension (v1.yaml is version `v
 * is safe to repeat: the same file again changes nothing (no rows, no vectors, no diary line);
 * refuses a changed file under a name that is already loaded. A loaded version never changes.
   Save the edit under a new file name instead;
-* makes the version just loaded the active one, unless told not to. Only one can be active.
+* makes a version it has just loaded the active one, unless told not to. Only one can be active.
+  A repeat of a file that is already loaded leaves the active version alone;
+* records who did it when given `--by "Name"` (or RULEBOOK_BY in the environment), in the rulebook's
+  row and in the diary. Loading or activating changes which rules new reports are pinned to, so
+  say who did it.
 
 Vectors are a second step, so a stopped embedder never blocks loading. `load` tries it straight
 after; if the embedder is unreachable the rules stay loaded without vectors, a warning says so,
@@ -163,9 +167,20 @@ def _rule_rows(template: Template) -> list[tuple[str, str, str, str | None, dict
 
 
 def load_file(
-    conn: psycopg.Connection, path: Path, *, activate: bool = True, url: str | None = None
+    conn: psycopg.Connection,
+    path: Path,
+    *,
+    activate: bool = True,
+    url: str | None = None,
+    by: str | None = None,
+    _retry: bool = False,
 ) -> LoadResult:
-    """Load one rulebook file. Commits on success. Raises RulebookError if it must be refused."""
+    """Load one rulebook file. Commits on success. Raises RulebookError if it must be refused.
+
+    `by` is the person doing it. If another run loads the same version between our check and our
+    insert, the database refuses the second insert; we then look again once and report what the
+    other run left (unchanged if it was the same file, a refusal if it was a different one).
+    """
     path = Path(path)
     if not path.is_file():
         raise RulebookError(f"{path} is not a file")
@@ -188,6 +203,7 @@ def load_file(
             inputs={"version": name, "sha256": digest},
             outputs={"reason": "a different file is already loaded under this name"},
             outcome="refused",
+            approver_name=by,
             url=url,
         )
         raise RulebookError(
@@ -196,64 +212,82 @@ def load_file(
         )
 
     rows = _rule_rows(template)
-    with diary.logged_call(
-        "load_rulebook", inputs={"version": name, "sha256": digest}, work=conn, url=url
-    ) as call:
-        if activate:
-            conn.execute("UPDATE templates SET active = false WHERE active")
-        conn.execute(
-            "INSERT INTO templates (version_name, file_name, sha256, template_id, declared_version,"
-            " language, institution_code, institution_name, methodology_version, start_date,"
-            " review_date, approved_by, content, active, loaded_by)"
-            " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-            (
-                name,
-                path.name,
-                digest,
-                template.template_id,
-                str(template.version),
-                template.language,
-                template.institution.code,
-                template.institution.name,
-                template.methodology_version,
-                template.start_date,
-                template.review_date,
-                template.approved_by,
-                diary.jsonb(template.model_dump(mode="json")),
-                activate,
-                LOADED_BY,
-            ),
-        )
-        for clause_id, area, text, method_ref, params in rows:
-            conn.execute(
-                "INSERT INTO clauses (version_name, clause_id, area, text, method_ref, params,"
-                " text_sha256) VALUES (%s,%s,%s,%s,%s,%s,%s)",
-                (
-                    name,
-                    clause_id,
-                    area,
-                    text,
-                    method_ref,
-                    diary.jsonb(params),
-                    hashlib.sha256(text.encode("utf-8")).hexdigest(),
-                ),
-            )
-        call.outputs = {
-            "clauses": len(rows),
-            "active": activate,
-            "approved_by": template.approved_by,
-        }
+    try:
+        with diary.logged_call(
+            "load_rulebook", inputs={"version": name, "sha256": digest}, work=conn, url=url
+        ) as call:
+            call.approver_name = by
+            _insert_version(conn, name, path, digest, template, rows, activate, by)
+            call.outputs = {
+                "clauses": len(rows),
+                "active": activate,
+                "approved_by": template.approved_by,
+            }
+    except psycopg.errors.UniqueViolation:
+        # Another run loaded this version after we looked. Look again once, then give up.
+        if _retry:
+            raise
+        conn.rollback()
+        return load_file(conn, path, activate=activate, url=url, by=by, _retry=True)
     return LoadResult(name, "loaded", len(rows), activate)
 
 
-def activate_version(conn: psycopg.Connection, name: str, *, url: str | None = None) -> bool:
+def _insert_version(conn, name, path, digest, template, rows, activate, by) -> None:
+    """The writes of one load. The caller wraps them in one logged transaction."""
+    if activate:
+        conn.execute("UPDATE templates SET active = false WHERE active")
+    conn.execute(
+        "INSERT INTO templates (version_name, file_name, sha256, template_id, declared_version,"
+        " language, institution_code, institution_name, methodology_version, start_date,"
+        " review_date, approved_by, content, active, loaded_by)"
+        " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        (
+            name,
+            path.name,
+            digest,
+            template.template_id,
+            str(template.version),
+            template.language,
+            template.institution.code,
+            template.institution.name,
+            template.methodology_version,
+            template.start_date,
+            template.review_date,
+            template.approved_by,
+            diary.jsonb(template.model_dump(mode="json")),
+            activate,
+            by or LOADED_BY,
+        ),
+    )
+    for clause_id, area, text, method_ref, params in rows:
+        conn.execute(
+            "INSERT INTO clauses (version_name, clause_id, area, text, method_ref, params,"
+            " text_sha256) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+            (
+                name,
+                clause_id,
+                area,
+                text,
+                method_ref,
+                diary.jsonb(params),
+                hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            ),
+        )
+
+
+def activate_version(
+    conn: psycopg.Connection, name: str, *, url: str | None = None, by: str | None = None
+) -> bool:
     """Make an already loaded version the active one. False if it already was."""
     row = conn.execute("SELECT active FROM templates WHERE version_name = %s", (name,)).fetchone()
     if row is None:
         raise RulebookError(f"no version named {name} is loaded")
     if row[0]:
         return False
-    with diary.logged_call("activate_rulebook", inputs={"version": name}, work=conn, url=url):
+    with diary.logged_call(
+        "activate_rulebook", inputs={"version": name}, work=conn, url=url
+    ) as call:
+        call.approver_name = by
         conn.execute("UPDATE templates SET active = false WHERE active")
         conn.execute("UPDATE templates SET active = true WHERE version_name = %s", (name,))
     return True
@@ -340,9 +374,9 @@ def search_clauses(
 def status(conn: psycopg.Connection) -> dict:
     versions = conn.execute(
         "SELECT t.version_name, t.active, t.approved_by, left(t.sha256, 12), "
-        "       count(c.clause_id), count(c.embedding) "
+        "       count(c.clause_id), count(c.embedding), t.loaded_by "
         "FROM templates t LEFT JOIN clauses c USING (version_name) "
-        "GROUP BY t.version_name, t.active, t.approved_by, t.sha256, t.loaded_at "
+        "GROUP BY t.version_name, t.active, t.approved_by, t.sha256, t.loaded_at, t.loaded_by "
         "ORDER BY t.loaded_at, t.version_name"
     ).fetchall()
     ids = {
@@ -363,11 +397,14 @@ def _print_status(conn: psycopg.Connection) -> None:
     if not s["versions"]:
         print("no rulebook version is loaded")
         return
-    print(f"{'version':<16}{'active':<8}{'rules':<7}{'vectors':<9}{'approved by':<14}file hash")
-    for name, active, approved, short, rules, vectors in s["versions"]:
+    print(
+        f"{'version':<16}{'active':<8}{'rules':<7}{'vectors':<9}{'approved by':<14}"
+        f"{'loaded by':<14}file hash"
+    )
+    for name, active, approved, short, rules, vectors, loaded_by in s["versions"]:
         print(
             f"{name:<16}{'yes' if active else '-':<8}{rules:<7}{vectors:<9}"
-            f"{approved or 'nobody yet':<14}{short}"
+            f"{approved or 'nobody yet':<14}{loaded_by or '-':<14}{short}"
         )
     if len(s["versions"]) > 1:
         if s["same_ids"]:
@@ -395,6 +432,7 @@ def main(argv: list[str] | None = None) -> int:
     load.add_argument("files", nargs="+", type=Path)
     load.add_argument("--no-activate", action="store_true", help="load without making it active")
     load.add_argument("--no-embed", action="store_true", help="do not make vectors now")
+    load.add_argument("--by", help='who is loading it, for example --by "Ada Teacher"')
     load.add_argument(
         "--require-embeddings", action="store_true", help="exit 2 if vectors are missing"
     )
@@ -403,6 +441,7 @@ def main(argv: list[str] | None = None) -> int:
     emb.add_argument("--require-embeddings", action="store_true")
     act = sub.add_parser("activate", help="make a loaded version the active one")
     act.add_argument("version")
+    act.add_argument("--by", help="who is switching it")
     sub.add_parser("status", help="show what is loaded")
     find = sub.add_parser("search", help="find rules by meaning")
     find.add_argument("query")
@@ -414,11 +453,12 @@ def main(argv: list[str] | None = None) -> int:
     if not url:
         print("DATABASE_URL is not set", file=sys.stderr)
         return 1
+    by = (getattr(args, "by", None) or os.environ.get("RULEBOOK_BY") or "").strip() or None
     try:
         with psycopg.connect(url) as conn:
             if args.cmd == "load":
                 for path in args.files:
-                    r = load_file(conn, path, activate=not args.no_activate, url=url)
+                    r = load_file(conn, path, activate=not args.no_activate, url=url, by=by)
                     word = "loaded" if r.status == "loaded" else "already loaded, unchanged"
                     print(
                         f"{r.version}: {word} ({r.clauses} rules{', active' if r.active else ''})"
@@ -433,7 +473,7 @@ def main(argv: list[str] | None = None) -> int:
                 _print_status(conn)
                 return code
             if args.cmd == "activate":
-                changed = activate_version(conn, args.version, url=url)
+                changed = activate_version(conn, args.version, url=url, by=by)
                 print(f"{args.version} is now active" if changed else f"{args.version} already was")
                 return 0
             if args.cmd == "status":
@@ -444,6 +484,11 @@ def main(argv: list[str] | None = None) -> int:
             return 0
     except (RulebookError, diary.DiaryUnavailable) as e:
         print(f"refused: {e}", file=sys.stderr)
+        return 1
+    except psycopg.Error as e:
+        # The database could not be reached, or refused a statement. Say so in a line, no traceback.
+        first_line = (str(e).strip().splitlines() or [""])[0]
+        print(f"refused: a database problem ({type(e).__name__}): {first_line}", file=sys.stderr)
         return 1
 
 

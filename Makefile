@@ -144,8 +144,8 @@ clean: $(ENV_FILE) ## Stop the stack and DELETE its data volumes, no question as
 migrate: $(ENV_FILE) ## Apply database migrations (safe to run twice)
 	$(COMPOSE) run --rm migrate
 
-load-criteria: $(ENV_FILE) ## Load both rulebook versions (v1 active) and make their vectors (safe to run twice)
-	$(COMPOSE) --profile tools run --rm --build rules
+load-criteria: $(ENV_FILE) ## Load both rulebook versions (v1 active) and their vectors (BY="Your Name" records who)
+	$(COMPOSE) --profile tools run --rm --build $(if $(BY),-e RULEBOOK_BY="$(BY)") rules
 
 rules-status: $(ENV_FILE) ## Show the loaded rulebook versions, their rule counts and vectors
 	@$(COMPOSE) --profile tools run --rm rules python -m mdeis.rulebook status

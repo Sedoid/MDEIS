@@ -31,6 +31,14 @@ QUESTIONS = [
 ]
 TOP = 3  # the answer must be among the first three rules returned
 
+# The stage rules (ST-) say nearly the same thing for each stage and area. For the Form 1 reading
+# question the right rule must come BEFORE every other stage rule, or the search has not really
+# understood "Form 1" and "reading". Being in the top three is not enough when the other stage
+# rules are also there.
+MUST_OUTRANK_PREFIX = {
+    "expected reading level for Form 1": "ST-",
+}
+
 
 def embedder_is_up():
     url = os.environ.get("EMBEDDER_URL")
@@ -66,10 +74,17 @@ def test_questions_find_their_rule_with_the_real_model(loaded, built_schema, ver
         for question, wanted in QUESTIONS:
             hits = rulebook.search_clauses(conn, embedder, question, version=version, k=total)
             ids = [h["clause_id"] for h in hits]
-            all_hits[question] = (wanted, ids.index(wanted) + 1, ids[:TOP])
+            prefix = MUST_OUTRANK_PREFIX.get(question)
+            ahead = (
+                [i for i in ids[: ids.index(wanted)] if i.startswith(prefix)] if prefix else []
+            )
+            all_hits[question] = (wanted, ids.index(wanted) + 1, ids[:TOP], ahead)
     with capsys.disabled():
         print(f"\n--- rank of the right rule, version {version} (1 is best) ---")
-        for question, (wanted, rank, first) in all_hits.items():
-            print(f"{rank:>3}  {wanted:<6} {question!r:<58} top {TOP}: {first}")
-    missed = {q: v for q, v in all_hits.items() if v[1] > TOP}
+        for question, (wanted, rank, first, ahead) in all_hits.items():
+            note = f"  WRONG ORDER, ahead of it: {ahead}" if ahead else ""
+            print(f"{rank:>3}  {wanted:<6} {question!r:<58} top {TOP}: {first}{note}")
+    missed = {q: v[1] for q, v in all_hits.items() if v[1] > TOP}
     assert not missed, f"not in the top {TOP}: {missed}"
+    wrong_order = {q: v[3] for q, v in all_hits.items() if v[3]}
+    assert not wrong_order, f"a rule for another stage came first: {wrong_order}"

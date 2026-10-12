@@ -320,3 +320,104 @@ def test_every_change_is_in_the_diary_and_the_chain_holds(env, db):
     assert tools.count(("load_rulebook", "ok")) == 2
     assert tools.count(("embed_rulebook", "ok")) == 1
     assert db.execute("SELECT count(*) FROM verify_action_log()").fetchone()[0] == 0
+
+
+# --------------------------------------------------------------------------- who did it
+def who(db, tool):
+    db.rollback()
+    return db.execute(
+        "SELECT approver_name FROM action_log WHERE tool = %s ORDER BY event_id", (tool,)
+    ).fetchall()
+
+
+@integration
+def test_a_named_person_is_recorded_on_the_rulebook_and_in_the_diary(env, db, capsys):
+    assert run("load", str(V1), "--by", "Ada Teacher") == 0
+    assert db.execute("SELECT loaded_by FROM templates WHERE version_name = 'v1'").fetchone() == (
+        "Ada Teacher",
+    )
+    assert ("Ada Teacher",) in who(db, "load_rulebook")
+    assert "Ada Teacher" in capsys.readouterr().out  # `status` shows who loaded it
+
+
+@integration
+def test_without_a_name_the_record_says_the_command_line_did_it(env, db):
+    run("load", str(V1))
+    assert db.execute("SELECT loaded_by FROM templates WHERE version_name = 'v1'").fetchone() == (
+        rulebook.LOADED_BY,
+    )
+    assert who(db, "load_rulebook") == [(None,)]
+
+
+@integration
+def test_the_name_can_come_from_the_environment(env, db, monkeypatch):
+    monkeypatch.setenv("RULEBOOK_BY", "Env Person")
+    run("load", str(V1))
+    assert db.execute("SELECT loaded_by FROM templates WHERE version_name = 'v1'").fetchone() == (
+        "Env Person",
+    )
+
+
+@integration
+def test_switching_the_active_version_records_who_did_it(env, db):
+    run("load", str(V1), str(STRICT), "--no-activate")
+    assert run("activate", "v2-strict", "--by", "Ben Head") == 0
+    assert who(db, "activate_rulebook") == [("Ben Head",)]
+
+
+@integration
+def test_a_refused_load_records_who_tried(env, db, tmp_path):
+    run("load", str(V1))
+    edited = tmp_path / "v1.yaml"
+    edited.write_text(V1.read_text(encoding="utf-8").replace("Form 1 literacy", "Form 1 reading"))
+    assert run("load", str(edited), "--by", "Cy Clerk") == 1
+    refused_lines = db.execute(
+        "SELECT approver_name FROM action_log WHERE tool = 'load_rulebook' AND outcome = 'refused'"
+    ).fetchall()
+    assert refused_lines == [("Cy Clerk",)]
+
+
+# --------------------------------------------------------------------------- two runs at once
+@integration
+def test_a_run_that_loses_a_race_reports_what_the_other_left_and_does_not_duplicate(
+    env, db, monkeypatch
+):
+    real_rows = rulebook._rule_rows
+    state = {"other_has_run": False}
+
+    def rows_then_the_other_run_finishes(template):
+        rows = real_rows(template)
+        if not state["other_has_run"]:
+            state["other_has_run"] = True
+            with psycopg.connect(env) as other:
+                rulebook.load_file(other, V1, url=env)  # finishes between our check and our insert
+        return rows
+
+    monkeypatch.setattr(rulebook, "_rule_rows", rows_then_the_other_run_finishes)
+    result = rulebook.load_file(db, V1, url=env)
+    assert result.status == "unchanged"
+    assert db.execute("SELECT count(*) FROM templates").fetchone()[0] == 1
+    assert db.execute("SELECT count(*) FROM clauses").fetchone()[0] == len(
+        load_template(V1).clauses()
+    )
+    assert ("load_rulebook", "error") in diary_tools(db)  # the failed insert is on record
+
+
+# --------------------------------------------------------------------------- no database needed
+def test_a_database_that_is_not_there_gives_one_plain_line_not_a_traceback(monkeypatch, capsys):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://nobody@127.0.0.1:1/none?connect_timeout=2")
+    assert run("status") == 1
+    err = capsys.readouterr().err
+    assert "refused: a database problem" in err
+    assert "Traceback" not in err
+
+
+def test_the_admin_name_from_the_spec_runs_the_same_load(monkeypatch):
+    from mdeis import admin
+
+    seen = []
+    monkeypatch.setattr(rulebook, "main", lambda argv: seen.append(argv) or 0)
+    assert admin.main(["load-criteria", "a.yaml", "b.yaml", "--by", "Ada Teacher"]) == 0
+    assert seen == [["load", "a.yaml", "b.yaml", "--by", "Ada Teacher"]]
+    assert admin.main([]) == 2
+    assert admin.main(["nonsense"]) == 2
