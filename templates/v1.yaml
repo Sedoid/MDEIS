@@ -1,8 +1,11 @@
 # MDEIS criteria template v1. Shape: docs/TEMPLATE.md. Loader: src/mdeis/core/template.py.
 #
-# Two kinds of value are marked in this file:
+# Three kinds of value are marked in this file:
 #   # FROM SAMPLE CARD OCC 2022/23: teacher to confirm
 #       printed on data/synthetic/samples/amara_nfor_form1_2022-2023.pdf (a synthetic card)
+#   # STATED BY THE PRODUCT OWNER 2026-10-12: teacher to confirm
+#       said by the person building MDEIS, not printed on the card. It is the working rule
+#       until the teacher confirms or changes it.
 #   # PLACEHOLDER: teacher to confirm
 #       not printed on the card. Set here only so the system can run. These are NOT the school's
 #       values. H-1 replaces them with the teacher's real ones. No code change is needed.
@@ -11,6 +14,12 @@ template_id: occ-demo                     # PLACEHOLDER: teacher to confirm
 version: 1                                # PLACEHOLDER: teacher to confirm
 language: en                              # PLACEHOLDER: teacher to confirm
 institution: {name: "Outliers Comprehensive College", code: OCC}  # FROM SAMPLE CARD OCC 2022/23: teacher to confirm
+methodology_version: "2.0"                # V 2.0 Methodology of MDEIS
+start_date: 2026-10-12                    # PLACEHOLDER: teacher to confirm
+review_date: 2027-10-12                   # PLACEHOLDER: teacher to confirm
+approved_by: null                         # stays null until a named person approves these rules
+change_log:
+  - {version: 1, date: 2026-10-12, note: "First draft for the demo school. Values marked PLACEHOLDER are not the school's."}
 
 scales:
   - id: SC-1
@@ -29,6 +38,9 @@ scales:
       - {grade: "D",  min: 10}
       - {grade: "E",  min: 0}
     text: "18 to 20 is grade A+, 16 to 17.99 is A, 14 to 15.99 is B, 12 to 13.99 is C, 10 to 11.99 is D, below 10 is E."
+  - id: SC-3
+    pass_mark: 10                         # STATED BY THE PRODUCT OWNER 2026-10-12: teacher to confirm
+    text: "A subject's annual score of 10 or more out of 20 is a pass."
 
 coefficients:
   - id: WT-1
@@ -49,6 +61,34 @@ coefficients:
       Physical Education: 1
       Manual Labor: 1
     text: "Mathematics, English and French have coefficient 4. Biology, Physics, Chemistry, Geography, History, Literature in English and Home Economics have coefficient 2. Citizenship, Logic, Physical Education and Manual Labor have coefficient 1."
+
+# STATED BY THE PRODUCT OWNER 2026-10-12: teacher to confirm. Scores in the later years of
+# school count more when scores from different school years are averaged together.
+stage_weights:
+  - id: SW-1
+    stages: {"Form 1": 1, "Form 2": 1, "Form 3": 2, "Form 4": 2, "Form 5": 2, "Lower Sixth": 2.5, "Upper Sixth": 2.5}
+    text: "A term score counts once in Form 1 and Form 2, twice in Form 3, Form 4 and Form 5, and two and a half times in Lower Sixth and Upper Sixth."
+
+# How each number is built. The first two are printed on the sample card (FROM SAMPLE CARD OCC
+# 2022/23: teacher to confirm). The others are PLACEHOLDER: teacher to confirm, set so the system
+# can run. terms_per_year is 3 at every level (STATED BY THE PRODUCT OWNER 2026-10-12).
+calculations:
+  - id: CA-1
+    terms_per_year: 3
+    annual_score: mean_of_terms
+    text: "A subject's annual score is the average of its 3 term scores."
+  - id: CA-2
+    annual_average: coefficient_weighted
+    text: "The annual average is the sum of each subject's annual score times its coefficient, divided by the sum of the coefficients."
+  - id: CA-3
+    skill_term_value: coefficient_weighted
+    text: "A skill's score in one term is the average of its subjects' scores in that term, each weighted by its coefficient."
+  - id: CA-4
+    window_average: stage_weighted
+    text: "When term scores from different school years are averaged, each term score is weighted by its stage weight. Form 3, Form 4 and Form 5 count twice as much as Form 1 and Form 2. Lower Sixth and Upper Sixth count two and a half times as much."
+  - id: CA-5
+    gap: distance_to_range
+    text: "The gap is the distance between a skill's score and the nearest edge of the expected range for the stage. It is zero inside the range."
 
 foundation_areas: [literacy, numeracy]    # PLACEHOLDER: teacher to confirm
 
@@ -96,6 +136,46 @@ stage_expectations:
     area: numeracy
     range: [12, 16]
     text: "Form 3 numeracy is expected between 12 and 16 out of 20."
+  - id: ST-7
+    stage: "Form 4"
+    area: literacy
+    range: [13, 17]
+    text: "Form 4 literacy is expected between 13 and 17 out of 20."
+  - id: ST-8
+    stage: "Form 5"
+    area: literacy
+    range: [14, 18]
+    text: "Form 5 literacy is expected between 14 and 18 out of 20."
+  - id: ST-9
+    stage: "Form 4"
+    area: numeracy
+    range: [13, 17]
+    text: "Form 4 numeracy is expected between 13 and 17 out of 20."
+  - id: ST-10
+    stage: "Form 5"
+    area: numeracy
+    range: [14, 18]
+    text: "Form 5 numeracy is expected between 14 and 18 out of 20."
+  - id: ST-11
+    stage: "Lower Sixth"
+    area: literacy
+    range: [15, 19]
+    text: "Lower Sixth literacy is expected between 15 and 19 out of 20."
+  - id: ST-12
+    stage: "Upper Sixth"
+    area: literacy
+    range: [16, 20]
+    text: "Upper Sixth literacy is expected between 16 and 20 out of 20."
+  - id: ST-13
+    stage: "Lower Sixth"
+    area: numeracy
+    range: [15, 19]
+    text: "Lower Sixth numeracy is expected between 15 and 19 out of 20."
+  - id: ST-14
+    stage: "Upper Sixth"
+    area: numeracy
+    range: [16, 20]
+    text: "Upper Sixth numeracy is expected between 16 and 20 out of 20."
 
 # PLACEHOLDER: teacher to confirm. Level names and statements describe a result against the
 # stage range. They say nothing about the child.
@@ -123,12 +203,13 @@ trend:
   - id: TR-1
     min_scores: 3
     min_terms: 3
+    window_terms: 3
     method_ref: "6.4"
-    text: "A trend is stated only with at least 3 term scores."
+    text: "A trend is stated only with at least 3 term scores. The level is the average of the last 3 terms, and those 3 terms are the time period of the trend."
   - id: TR-2
     move_threshold: 1.0
     method_ref: "6.3"
-    text: "A change of more than 1 point out of 20 between periods counts as a move."
+    text: "The change is the last value minus the first value in the window. A change of more than 1 point out of 20 counts as a move. A change of 1 point or less is steady."
   - id: TR-3
     missing_term: ask_approver
     method_ref: "4"

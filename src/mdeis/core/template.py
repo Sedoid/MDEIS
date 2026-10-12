@@ -15,6 +15,7 @@ Public API:
 
 from __future__ import annotations
 
+import datetime as dt
 import re
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -27,6 +28,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 SECTION_AREAS: dict[str, str] = {
     "scales": "SC",
     "coefficients": "WT",
+    "stage_weights": "SW",
+    "calculations": "CA",
     "areas": "SK",
     "stage_expectations": "ST",
     "levels": "LV",
@@ -41,9 +44,19 @@ SCALE_TYPES: tuple[str, ...] = ("out_of",)
 
 # Parameters that must be set by exactly one rule of the section (a value the code will read).
 REQUIRED_PARAMS: dict[str, tuple[str, ...]] = {
+    "scales": ("pass_mark",),
+    "calculations": (
+        "terms_per_year",
+        "annual_score",
+        "annual_average",
+        "skill_term_value",
+        "window_average",
+        "gap",
+    ),
     "trend": (
         "min_scores",
         "min_terms",
+        "window_terms",
         "move_threshold",
         "missing_term",
         "gap_direction_threshold",
@@ -99,11 +112,12 @@ class GradeBand(_Model):
 
 
 class ScaleRule(_Rule):
-    """Either a scale (type and max) or the grade bands. Not both."""
+    """One of three kinds: a scale (type and max), the grade bands, or the pass mark."""
 
     type: str | None = None
     max: PosNum | None = None
     grade_bands: list[GradeBand] | None = None
+    pass_mark: PosNum | None = None
 
     @model_validator(mode="after")
     def _one_kind(self) -> ScaleRule:
@@ -112,9 +126,12 @@ class ScaleRule(_Rule):
             raise ValueError(f"unknown scale type {self.type!r} in {self.id}; known types: {known}")
         is_scale = self.type is not None and self.max is not None
         has_bands = self.grade_bands is not None
+        has_pass = self.pass_mark is not None
         stray = (self.type is not None) != (self.max is not None)
-        if is_scale == has_bands or stray:
-            raise ValueError(f"scale {self.id} needs either a type with max, or grade_bands")
+        if [is_scale, has_bands, has_pass].count(True) != 1 or stray:
+            raise ValueError(
+                f"scale {self.id} needs exactly one of: a type with max, grade_bands, pass_mark"
+            )
         return self
 
 
@@ -132,6 +149,36 @@ class CoefficientRule(_Rule):
                         f"must be a positive whole number, got {value!r}"
                     )
         return data
+
+
+class StageWeightRule(_Rule):
+    """How much a term score counts when scores from different school years are averaged."""
+
+    stages: Annotated[dict[Name, PosNum], Field(min_length=1)]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _whole_positive(cls, data: Any) -> Any:
+        if isinstance(data, dict) and isinstance(data.get("stages"), dict):
+            for name, value in data["stages"].items():
+                ok = isinstance(value, (int, float)) and not isinstance(value, bool)
+                if not ok or value <= 0:
+                    raise ValueError(
+                        f"stage weight for {name} in {data.get('id')} "
+                        f"must be a positive number, got {value!r}"
+                    )
+        return data
+
+
+class CalculationRule(_Rule):
+    """How a number is built. Each calculation names one method the code knows."""
+
+    terms_per_year: PosInt | None = None
+    annual_score: Literal["mean_of_terms"] | None = None
+    annual_average: Literal["coefficient_weighted"] | None = None
+    skill_term_value: Literal["coefficient_weighted"] | None = None
+    window_average: Literal["stage_weighted"] | None = None
+    gap: Literal["distance_to_range"] | None = None
 
 
 class AreaRule(_Rule):
@@ -159,6 +206,7 @@ class LevelRule(_Rule):
 class TrendRule(_Rule):
     min_scores: PosInt | None = None
     min_terms: PosInt | None = None
+    window_terms: PosInt | None = None
     move_threshold: PosNum | None = None
     missing_term: Literal["ask_approver"] | None = None
     gap_direction_threshold: PosNum | None = None
@@ -181,6 +229,14 @@ class Institution(_Model):
     code: Name
 
 
+class ChangeEntry(_Model):
+    """One line of the record of changes (methodology section 9)."""
+
+    version: int
+    date: dt.date
+    note: Name
+
+
 class Clause(_Model):
     """One citable rule, as the clause index will store it."""
 
@@ -195,8 +251,16 @@ class Template(_Model):
     version: int
     language: Name
     institution: Institution
+    # Methodology section 9: what a configuration records about itself.
+    methodology_version: Name
+    start_date: dt.date
+    review_date: dt.date | None = None
+    approved_by: Name | None = None  # None until a named person approves the rules
+    change_log: Annotated[list[ChangeEntry], Field(min_length=1)]
     scales: list[ScaleRule]
     coefficients: list[CoefficientRule]
+    stage_weights: list[StageWeightRule]
+    calculations: list[CalculationRule]
     foundation_areas: Annotated[list[Name], Field(min_length=1)]
     areas: list[AreaRule]
     stage_expectations: list[StageRule]
@@ -231,7 +295,9 @@ class Template(_Model):
         self._check_coefficients()
         self._check_areas()
         self._check_stages(max_score)
+        self._check_stage_weights()
         self._check_required_params()
+        self._check_dates_and_window(max_score)
         return self
 
     def _section(self, section: str) -> list[Any]:
@@ -339,6 +405,41 @@ class Template(_Model):
                     f"{seen[key]} and {rule.id} both set the range for {rule.stage} {rule.area}"
                 )
             seen[key] = rule.id
+
+    def _check_stage_weights(self) -> None:
+        weighted: dict[str, str] = {}
+        for rule in self.stage_weights:
+            for stage in rule.stages:
+                if stage in weighted:
+                    raise ValueError(
+                        f"stage {stage} has a weight in both {weighted[stage]} and {rule.id}"
+                    )
+                weighted[stage] = rule.id
+        staged = {r.stage for r in self.stage_expectations}
+        for stage in sorted(staged - weighted.keys()):
+            raise ValueError(f"stage {stage} has an expected range but no weight in SW")
+        for stage in sorted(weighted.keys() - staged):
+            raise ValueError(f"stage {stage} has a weight in {weighted[stage]} but no range in ST")
+        for area in self.foundation_areas:
+            for stage in sorted(staged):
+                if not any(r.stage == stage and r.area == area for r in self.stage_expectations):
+                    raise ValueError(f"stage {stage} has no expected range for {area}")
+
+    def _check_dates_and_window(self, max_score: float) -> None:
+        if self.review_date is not None and self.review_date <= self.start_date:
+            raise ValueError("review_date must be after start_date")
+        for first, second in zip(self.change_log, self.change_log[1:], strict=False):
+            if second.date < first.date:
+                raise ValueError("change_log must be in date order, oldest first")
+        pass_mark = next(r.pass_mark for r in self.scales if r.pass_mark is not None)
+        if pass_mark > max_score:
+            raise ValueError(f"pass_mark must lie between 0 and {max_score:g}")
+        trend = {
+            p: next(getattr(r, p) for r in self.trend if getattr(r, p) is not None)
+            for p in ("min_terms", "window_terms")
+        }
+        if trend["window_terms"] < trend["min_terms"]:
+            raise ValueError("window_terms must be at least min_terms")
 
     def _check_required_params(self) -> None:
         for section, params in REQUIRED_PARAMS.items():

@@ -26,6 +26,8 @@ LOADER_SOURCE = ROOT / "src" / "mdeis" / "core" / "template.py"
 SECTIONS = {
     "scales": "SC",
     "coefficients": "WT",
+    "stage_weights": "SW",
+    "calculations": "CA",
     "areas": "SK",
     "stage_expectations": "ST",
     "levels": "LV",
@@ -133,7 +135,15 @@ def test_foundation_areas_and_stages(path):
     pairs = {(s.stage, s.area) for s in t.stage_expectations}
     assert pairs == {
         (stage, area)
-        for stage in ("Form 1", "Form 2", "Form 3")
+        for stage in (
+            "Form 1",
+            "Form 2",
+            "Form 3",
+            "Form 4",
+            "Form 5",
+            "Lower Sixth",
+            "Upper Sixth",
+        )
         for area in ("literacy", "numeracy")
     }
 
@@ -160,13 +170,15 @@ def test_v2_strict_is_stricter_than_v1():
     p1, p2 = trend(t1), trend(t2)
     assert p2["min_scores"] > p1["min_scores"]
     assert p2["min_terms"] > p1["min_terms"]
+    assert p2["window_terms"] > p1["window_terms"]
     assert p2["move_threshold"] < p1["move_threshold"]
     assert p2["gap_direction_threshold"] < p1["gap_direction_threshold"]
     r1 = {(s.stage, s.area): s.range for s in t1.stage_expectations}
     r2 = {(s.stage, s.area): s.range for s in t2.stage_expectations}
     assert r1.keys() == r2.keys()
     for key in r1:
-        assert r2[key][0] > r1[key][0] and r2[key][1] > r1[key][1], key
+        # the top of the scale is 20, so the top edge can only stay level there
+        assert r2[key][0] > r1[key][0] and r2[key][1] >= r1[key][1], key
     assert t2.group_minimum[0].min_group_size > t1.group_minimum[0].min_group_size
 
 
@@ -276,19 +288,19 @@ def test_rejects_scale_with_neither_type_nor_bands():
     data = raw()
     del rule(data, "scales", "SC-1")["type"]
     del rule(data, "scales", "SC-1")["max"]
-    rejects(data, "scale SC-1 needs either a type with max, or grade_bands")
+    rejects(data, "scale SC-1 needs exactly one of")
 
 
 def test_rejects_scale_with_both_type_and_bands():
     data = raw()
     rule(data, "scales", "SC-1")["grade_bands"] = [{"grade": "A", "min": 0}]
-    rejects(data, "scale SC-1 needs either a type with max, or grade_bands")
+    rejects(data, "scale SC-1 needs exactly one of")
 
 
 def test_rejects_scale_type_without_max():
     data = raw()
     del rule(data, "scales", "SC-1")["max"]
-    rejects(data, "scale SC-1 needs either a type with max, or grade_bands")
+    rejects(data, "scale SC-1 needs exactly one of")
 
 
 def test_rejects_non_positive_scale_max():
@@ -509,3 +521,204 @@ def test_loader_does_not_modify_its_input():
     before = copy.deepcopy(data)
     parse_template(data)
     assert data == before
+
+
+# --- Added 2026-10-12: parts the methodology (6.4, 8, 9) asks a configuration for ---
+
+
+def rule_in(t: Template, section: str, rule_id: str):
+    return next(r for r in getattr(t, section) if r.id == rule_id)
+
+
+@pytest.mark.parametrize("path", [V1, V2], ids=["v1", "v2-strict"])
+def test_pass_mark_and_stage_weights_as_stated(path):
+    t = load_template(path)
+    assert rule_in(t, "scales", "SC-3").pass_mark == 10
+    weights = rule_in(t, "stage_weights", "SW-1").stages
+    assert weights == {
+        "Form 1": 1,
+        "Form 2": 1,
+        "Form 3": 2,
+        "Form 4": 2,
+        "Form 5": 2,
+        "Lower Sixth": 2.5,
+        "Upper Sixth": 2.5,
+    }
+
+
+@pytest.mark.parametrize("path", [V1, V2], ids=["v1", "v2-strict"])
+def test_three_terms_per_year_and_calculation_methods(path):
+    t = load_template(path)
+    assert rule_in(t, "calculations", "CA-1").terms_per_year == 3
+    assert rule_in(t, "calculations", "CA-1").annual_score == "mean_of_terms"
+    assert rule_in(t, "calculations", "CA-2").annual_average == "coefficient_weighted"
+    assert rule_in(t, "calculations", "CA-3").skill_term_value == "coefficient_weighted"
+    assert rule_in(t, "calculations", "CA-4").window_average == "stage_weighted"
+    assert rule_in(t, "calculations", "CA-5").gap == "distance_to_range"
+
+
+@pytest.mark.parametrize("path", [V1, V2], ids=["v1", "v2-strict"])
+def test_configuration_record_of_methodology_section_9(path):
+    t = load_template(path)
+    assert t.methodology_version == "2.0"
+    assert t.start_date < t.review_date
+    assert t.approved_by is None  # nobody has approved these drafts
+    assert [c.version for c in t.change_log] == [t.version]
+
+
+# The sentence a parent reads must say the number the code uses. Typed by hand per rule.
+
+
+@pytest.mark.parametrize("path", [V1, V2], ids=["v1", "v2-strict"])
+def test_sentences_say_the_numbers_the_rules_hold(path):
+    t = load_template(path)
+    trend = {}
+    for r in t.trend:
+        trend.update(r.model_dump(exclude={"id", "text", "method_ref"}, exclude_none=True))
+
+    def num(x: float) -> str:
+        return f"{x:g}"
+
+    n = num(trend["window_terms"])
+    assert f"at least {num(trend['min_scores'])} term scores" in t.clause("TR-1").text
+    assert f"last {n} terms" in t.clause("TR-1").text
+    assert f"more than {num(trend['move_threshold'])} point" in t.clause("TR-2").text
+    assert f"{num(trend['move_threshold'])} point or less is steady" in t.clause("TR-2").text
+    assert f"more than {num(trend['gap_direction_threshold'])} point" in t.clause("TR-4").text
+    for lv in ("LV-1", "LV-2", "LV-3"):
+        rl = rule_in(t, "levels", lv)
+        assert f"last {n} term scores" in rl.statement
+        assert f"last {n} term scores" in rl.text
+    gm = t.group_minimum[0].min_group_size
+    assert f"smaller than {gm}" in t.clause("GM-1").text
+    assert f"{num(rule_in(t, 'scales', 'SC-3').pass_mark)} or more out of" in t.clause("SC-3").text
+    assert (
+        f"{rule_in(t, 'calculations', 'CA-1').terms_per_year} term scores" in t.clause("CA-1").text
+    )
+    for st in t.stage_expectations:
+        low, high = st.range
+        assert f"{st.stage} {st.area} is expected between {low:g} and {high:g}" in st.text, st.id
+    # twice as much: the Form 3 to 5 weight is double the Form 1 and 2 weight
+    w = rule_in(t, "stage_weights", "SW-1").stages
+    assert w["Form 3"] == w["Form 4"] == w["Form 5"] == 2 * w["Form 1"] == 2 * w["Form 2"]
+    assert w["Lower Sixth"] == w["Upper Sixth"] == 2.5 * w["Form 1"]
+    assert "twice" in t.clause("SW-1").text and "twice as much" in t.clause("CA-4").text
+    assert "two and a half times" in t.clause("SW-1").text
+    assert "two and a half times as much" in t.clause("CA-4").text
+
+
+def test_rejects_stage_without_weight():
+    data = raw()
+    del rule(data, "stage_weights", "SW-1")["stages"]["Form 5"]
+    rejects(data, "stage Form 5 has an expected range but no weight in SW")
+
+
+def test_rejects_weight_for_stage_without_range():
+    data = raw()
+    rule(data, "stage_weights", "SW-1")["stages"]["Form 6"] = 2
+    rejects(data, "stage Form 6 has a weight in SW-1 but no range in ST")
+
+
+def test_rejects_stage_missing_one_area():
+    data = raw()
+    data["stage_expectations"] = [r for r in data["stage_expectations"] if r["id"] != "ST-10"]
+    rejects(data, "stage Form 5 has no expected range for numeracy")
+
+
+def test_accepts_fractional_stage_weight():
+    data = raw()
+    rule(data, "stage_weights", "SW-1")["stages"]["Form 3"] = 1.5
+    assert rule_in(parse_template(data), "stage_weights", "SW-1").stages["Form 3"] == 1.5
+
+
+@pytest.mark.parametrize("bad", [0, -1, -0.5, "2", True, None])
+def test_rejects_bad_stage_weight(bad):
+    data = raw()
+    rule(data, "stage_weights", "SW-1")["stages"]["Form 3"] = bad
+    rejects(data, "stage weight for Form 3 in SW-1 must be a positive number")
+
+
+def test_rejects_stage_with_two_weights():
+    data = raw()
+    data["stage_weights"].append(
+        {"id": "SW-2", "stages": {"Form 3": 3}, "text": "Form 3 counts three times."}
+    )
+    rejects(data, "stage Form 3 has a weight in both SW-1 and SW-2")
+
+
+def test_rejects_missing_pass_mark():
+    data = raw()
+    data["scales"] = [r for r in data["scales"] if r["id"] != "SC-3"]
+    rejects(data, "no scales rule sets pass_mark")
+
+
+def test_rejects_pass_mark_above_scale():
+    data = raw()
+    rule(data, "scales", "SC-3")["pass_mark"] = 21
+    rejects(data, "pass_mark must lie between 0 and 20")
+
+
+@pytest.mark.parametrize(
+    "param",
+    [
+        "terms_per_year",
+        "annual_score",
+        "annual_average",
+        "skill_term_value",
+        "window_average",
+        "gap",
+    ],
+)
+def test_rejects_missing_calculation(param):
+    data = raw()
+    for r in data["calculations"]:
+        r.pop(param, None)
+    rejects(data, f"no calculations rule sets {param}")
+
+
+def test_rejects_unknown_calculation_method():
+    data = raw()
+    rule(data, "calculations", "CA-1")["annual_score"] = "median_of_terms"
+    with pytest.raises(TemplateError, match="annual_score"):
+        parse_template(data)
+
+
+def test_rejects_missing_window_terms():
+    data = raw()
+    del rule(data, "trend", "TR-1")["window_terms"]
+    rejects(data, "no trend rule sets window_terms")
+
+
+def test_rejects_window_shorter_than_minimum_terms():
+    data = raw()
+    rule(data, "trend", "TR-1")["window_terms"] = 2
+    rejects(data, "window_terms must be at least min_terms")
+
+
+@pytest.mark.parametrize("field", ["methodology_version", "start_date", "change_log"])
+def test_rejects_missing_configuration_field(field):
+    data = raw()
+    del data[field]
+    with pytest.raises(TemplateError, match=field):
+        parse_template(data)
+
+
+def test_rejects_review_date_before_start():
+    data = raw()
+    data["review_date"] = data["start_date"]
+    rejects(data, "review_date must be after start_date")
+
+
+def test_rejects_change_log_out_of_order():
+    data = raw()
+    data["change_log"].append(
+        {"version": 2, "date": data["change_log"][0]["date"].replace(year=2020), "note": "x"}
+    )
+    rejects(data, "change_log must be in date order")
+
+
+def test_rejects_empty_change_log():
+    data = raw()
+    data["change_log"] = []
+    with pytest.raises(TemplateError, match="change_log"):
+        parse_template(data)
