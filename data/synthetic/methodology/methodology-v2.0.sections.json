@@ -1,0 +1,312 @@
+[
+  {
+    "id": "1",
+    "level": 1,
+    "title": "Purpose"
+  },
+  {
+    "id": "2",
+    "level": 1,
+    "title": "Main principles"
+  },
+  {
+    "id": "2.1",
+    "level": 2,
+    "title": "Use evidence"
+  },
+  {
+    "id": "2.2",
+    "level": 2,
+    "title": "Allow local settings"
+  },
+  {
+    "id": "2.3",
+    "level": 2,
+    "title": "Consider the context"
+  },
+  {
+    "id": "2.4",
+    "level": 2,
+    "title": "Be clear and traceable"
+  },
+  {
+    "id": "2.5",
+    "level": 2,
+    "title": "Keep people involved"
+  },
+  {
+    "id": "2.6",
+    "level": 2,
+    "title": "Support fairness"
+  },
+  {
+    "id": "3",
+    "level": 1,
+    "title": "Evaluation settings"
+  },
+  {
+    "id": "3.1",
+    "level": 2,
+    "title": "Required settings"
+  },
+  {
+    "id": "3.2",
+    "level": 2,
+    "title": "Order of priority"
+  },
+  {
+    "id": "3.3",
+    "level": 2,
+    "title": "Checking the settings"
+  },
+  {
+    "id": "4",
+    "level": 1,
+    "title": "Standard evaluation process"
+  },
+  {
+    "id": "4.S1",
+    "level": 2,
+    "title": "Understand the request"
+  },
+  {
+    "id": "4.S2",
+    "level": 2,
+    "title": "Find the relevant information"
+  },
+  {
+    "id": "4.S3",
+    "level": 2,
+    "title": "Check the data"
+  },
+  {
+    "id": "4.S4",
+    "level": 2,
+    "title": "Link results to learning goals"
+  },
+  {
+    "id": "4.S5",
+    "level": 2,
+    "title": "Calculate the results"
+  },
+  {
+    "id": "4.S6",
+    "level": 2,
+    "title": "Apply proficiency levels"
+  },
+  {
+    "id": "4.S7",
+    "level": 2,
+    "title": "Explain the findings"
+  },
+  {
+    "id": "4.S8",
+    "level": 2,
+    "title": "Prepare the report"
+  },
+  {
+    "id": "4.S9",
+    "level": 2,
+    "title": "Human review"
+  },
+  {
+    "id": "5",
+    "level": 1,
+    "title": "Evaluation type A: Cross-sectional analysis"
+  },
+  {
+    "id": "5.1",
+    "level": 2,
+    "title": "Purpose"
+  },
+  {
+    "id": "5.2",
+    "level": 2,
+    "title": "Possible evidence (Data sets to reference from)"
+  },
+  {
+    "id": "5.3",
+    "level": 2,
+    "title": "Main measures"
+  },
+  {
+    "id": "5.3.A",
+    "level": 3,
+    "title": "Proficiency distribution"
+  },
+  {
+    "id": "5.3.B",
+    "level": 3,
+    "title": "Performance by learning area"
+  },
+  {
+    "id": "5.3.C",
+    "level": 3,
+    "title": "Meeting a threshold"
+  },
+  {
+    "id": "5.3.D",
+    "level": 3,
+    "title": "Evidence coverage"
+  },
+  {
+    "id": "5.3.E",
+    "level": 3,
+    "title": "Differences between learning areas"
+  },
+  {
+    "id": "5.4",
+    "level": 2,
+    "title": "Interpretation rules"
+  },
+  {
+    "id": "5.5",
+    "level": 2,
+    "title": "Example"
+  },
+  {
+    "id": "6",
+    "level": 1,
+    "title": "Evaluation type B: Longitudinal analysis"
+  },
+  {
+    "id": "6.1",
+    "level": 2,
+    "title": "Purpose"
+  },
+  {
+    "id": "6.2",
+    "level": 2,
+    "title": "Possible evidence"
+  },
+  {
+    "id": "6.3",
+    "level": 2,
+    "title": "Main measures"
+  },
+  {
+    "id": "6.3.A",
+    "level": 3,
+    "title": "Current performance"
+  },
+  {
+    "id": "6.3.B",
+    "level": 3,
+    "title": "Absolute score change"
+  },
+  {
+    "id": "6.3.C",
+    "level": 3,
+    "title": "Change in proficiency level"
+  },
+  {
+    "id": "6.3.D",
+    "level": 3,
+    "title": "Consistency"
+  },
+  {
+    "id": "6.3.E",
+    "level": 3,
+    "title": "Topic-level progress"
+  },
+  {
+    "id": "6.3.F",
+    "level": 3,
+    "title": "Evidence strength"
+  },
+  {
+    "id": "6.4",
+    "level": 2,
+    "title": "Trend labels"
+  },
+  {
+    "id": "6.5",
+    "level": 2,
+    "title": "Interpretation rules"
+  },
+  {
+    "id": "6.6",
+    "level": 2,
+    "title": "Example"
+  },
+  {
+    "id": "7",
+    "level": 1,
+    "title": "Proficiency levels"
+  },
+  {
+    "id": "8",
+    "level": 1,
+    "title": "Assessment weighting"
+  },
+  {
+    "id": "9",
+    "level": 1,
+    "title": "Changing institutional settings"
+  },
+  {
+    "id": "10",
+    "level": 1,
+    "title": "Evidence and uncertainty"
+  },
+  {
+    "id": "11",
+    "level": 1,
+    "title": "Safeguards"
+  },
+  {
+    "id": "12",
+    "level": 1,
+    "title": "Human review and responsibility"
+  },
+  {
+    "id": "13",
+    "level": 1,
+    "title": "Reference framework"
+  },
+  {
+    "id": "13.1",
+    "level": 2,
+    "title": "United Nations Sustainable Development Goal 4"
+  },
+  {
+    "id": "13.2",
+    "level": 2,
+    "title": "UNESCO Institute for Statistics: Global Proficiency Framework"
+  },
+  {
+    "id": "13.3",
+    "level": 2,
+    "title": "UNESCO Institute for Statistics: Principles of Good Practice in Learning Assessments"
+  },
+  {
+    "id": "13.4",
+    "level": 2,
+    "title": "UNESCO: AI Competency Framework for Teachers"
+  },
+  {
+    "id": "13.5",
+    "level": 2,
+    "title": "UNESCO: AI Competency Framework for Students"
+  },
+  {
+    "id": "13.6",
+    "level": 2,
+    "title": "UNESCO: Guidance for Generative AI in Education and Research"
+  },
+  {
+    "id": "14",
+    "level": 1,
+    "title": "Quality checks"
+  },
+  {
+    "id": "15",
+    "level": 1,
+    "title": "Expected report content"
+  },
+  {
+    "id": "16",
+    "level": 1,
+    "title": "Conclusion"
+  }
+]

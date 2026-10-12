@@ -1,0 +1,32 @@
+{
+  "image_only.pdf": {
+    "failure_kind": "no_text_layer",
+    "page": 1,
+    "row": null
+  },
+  "no_id_number.pdf": {
+    "failure_kind": "learner_ref_missing",
+    "page": 1,
+    "row": null
+  },
+  "not_a_pdf.pdf": {
+    "failure_kind": "not_a_pdf",
+    "page": null,
+    "row": null
+  },
+  "unreadable_row.pdf": {
+    "failure_kind": "row_unreadable",
+    "page": 1,
+    "row": 7
+  },
+  "wrong_layout.pdf": {
+    "failure_kind": "layout_unrecognised",
+    "page": 1,
+    "row": null
+  },
+  "year_mismatch.pdf": {
+    "failure_kind": "year_mismatch",
+    "page": 1,
+    "row": null
+  }
+}

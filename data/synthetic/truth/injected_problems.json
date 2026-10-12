@@ -1,0 +1,123 @@
+{
+  "hidden_pattern": {
+    "learners": [
+      "OCC/2023/0008",
+      "OCC/2023/0075",
+      "OCC/2023/0108",
+      "OCC/2023/0149",
+      "OCC/2023/0188",
+      "OCC/2023/0192",
+      "OCC/2023/0197"
+    ],
+    "note": "This is not tagged anywhere in cohort/. It is only here.",
+    "what": "literacy subjects (English, French, Literature in English) sit in the Form 1 expected range, flat, across every term of the learner's cards"
+  },
+  "injected": [
+    {
+      "card_id": "C-0049-2025-1",
+      "kind": "missing_term",
+      "learner_ref": "OCC/2023/0039",
+      "subject": "Physical Education",
+      "term": 2,
+      "year": "2025/2026"
+    },
+    {
+      "card_id": "C-0053-2025-1",
+      "kind": "missing_term",
+      "learner_ref": "OCC/2023/0130",
+      "subject": "French",
+      "term": 1,
+      "year": "2025/2026"
+    },
+    {
+      "card_id": "C-0019-2025-1",
+      "kind": "missing_term",
+      "learner_ref": "OCC/2025/0091",
+      "subject": "Literature in English",
+      "term": 3,
+      "year": "2025/2026"
+    },
+    {
+      "card_id": "C-0018-2025-1",
+      "kind": "value_out_of_range",
+      "learner_ref": "OCC/2025/0148",
+      "subject": "Home Economics",
+      "term": 3,
+      "value": "22",
+      "year": "2025/2026"
+    },
+    {
+      "card_id": "C-0052-2025-1",
+      "kind": "value_out_of_range",
+      "learner_ref": "OCC/2023/0032",
+      "subject": "Physical Education",
+      "term": 3,
+      "value": "45/2",
+      "year": "2025/2026"
+    },
+    {
+      "card_id": [
+        "C-0058-2025-1",
+        "C-0058-2025-2"
+      ],
+      "kind": "duplicate_card",
+      "learner_ref": "OCC/2023/0031",
+      "year": "2025/2026"
+    },
+    {
+      "card_id": [
+        "C-0038-2025-1",
+        "C-0038-2025-2"
+      ],
+      "kind": "duplicate_card",
+      "learner_ref": "OCC/2024/0021",
+      "year": "2025/2026"
+    },
+    {
+      "card_id": "C-0048-2025-1",
+      "delta": "+1.00",
+      "kind": "printed_value_mismatch",
+      "learner_ref": "OCC/2023/0179",
+      "subject": "Geography",
+      "year": "2025/2026"
+    },
+    {
+      "card_id": "C-0027-2025-1",
+      "delta": "+1.00",
+      "kind": "printed_value_mismatch",
+      "learner_ref": "OCC/2025/0110",
+      "subject": "Manual Labor",
+      "year": "2025/2026"
+    },
+    {
+      "card_id": "C-0014-2025-1",
+      "delta": "+1.00",
+      "kind": "printed_value_mismatch",
+      "learner_ref": "OCC/2025/0048",
+      "subject": "French",
+      "year": "2025/2026"
+    },
+    {
+      "card_id": "C-0050-2025-1",
+      "kind": "note_conflict",
+      "learner_ref": "OCC/2023/0019",
+      "subject": "English",
+      "year": "2025/2026"
+    },
+    {
+      "card_id": "C-0033-2025-1",
+      "kind": "note_conflict",
+      "learner_ref": "OCC/2024/0055",
+      "subject": "History",
+      "year": "2025/2026"
+    },
+    {
+      "card_id": "C-0029-2025-1",
+      "kind": "note_conflict",
+      "learner_ref": "OCC/2024/0179",
+      "subject": "Physics",
+      "year": "2025/2026"
+    }
+  ],
+  "seed": 42
+}

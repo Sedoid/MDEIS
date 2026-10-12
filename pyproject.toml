@@ -31,6 +31,10 @@ orchestrator = [
 dev = [
     "pytest",
     "ruff",
+    # Practice data and its tests (T-002, T-032), dev only (H-11): cards are drawn with fpdf2
+    # and read back with pdfplumber.
+    "fpdf2",
+    "pdfplumber",
 ]
 
 [tool.setuptools.packages.find]
