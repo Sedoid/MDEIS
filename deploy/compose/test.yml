@@ -29,3 +29,22 @@ services:
       postgres:
         condition: service_healthy
     command: ["pytest"]
+
+  # Makes the practice school (data/synthetic) with the container's Python, so the bytes are the
+  # same on every machine. `make practice-data` runs it. It needs no database. Only ./data is
+  # writable; the generator and the templates are read-only.
+  practice-data:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: deploy/docker/mdeis-mcp.Dockerfile
+      target: dev
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?set PYTHON_IMAGE in .env}
+    image: mdeis-test:local
+    working_dir: /app
+    volumes:
+      - ./synthetic:/app/synthetic:ro
+      - ./templates:/app/templates:ro
+      - ./data:/app/data
+    command: ["python", "synthetic/generate.py", "--seed", "42", "--out", "data/synthetic"]

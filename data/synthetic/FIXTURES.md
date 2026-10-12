@@ -3,7 +3,12 @@
 Everything here is made up. The learners, names, references and scores are synthetic; nothing comes
 from a real person.
 
-The cohort (60 learners) is made by `python3 synthetic/generate.py --seed 42 --out data/synthetic`.
+The cohort (60 learners), the demo cards and the methodology copies are made by
+`python3 synthetic/generate.py --seed 42 --out data/synthetic` (the default is `--cards demo`).
+On the server use `make practice-data`, which runs it in the test container, so the Python version
+(and so the bytes) is always the same. Regenerate and commit the output only when the generator, a
+template or the seed changes: the answer key alone is about 2 MB, and each regenerated copy adds
+that to git history.
 The 13 learners below do not depend on the seed: their scores are typed into
 `synthetic/cohort.py`, so these answers hold for every seed. The answer key for all 60 is in
 `truth/answer_key.json`.
@@ -109,9 +114,11 @@ Mathematics `10, 12, 14` out of 20, and `50, 60, 70` out of 100. Converted by sc
 both become 10, 12, 14. Result under v1: change **4.00**, level 12.00 (36/3), **improving**. v2-strict
 needs four scores, so it gives not_enough_evidence for both.
 
-**E-03 needs a template with scale 100 to pass cleanly.** Under v1 (scale 20) FX-03b raises a
-`denominator_unexpected` warning (SPEC 5.1), then converts. If the test wants *no* issue, it needs a
-template whose `SC-1` is 100. None exists yet.
+**E-03 passes under v1 with one warning.** Under v1 (scale 20) FX-03b raises a
+`denominator_unexpected` warning (SPEC 5.1), then converts, and the trend equals FX-03a's. That is
+what "the same trend after conversion" asks for, so no scale-100 template is needed. Only if the
+test must also see *no issue at all* would it need a template whose `SC-1` is 100. None exists; do
+not add one unless the test is changed to demand it.
 
 ### FX-04a..d: bad records (E-04)
 
@@ -228,7 +235,7 @@ file; two runs give the same list.
 | `cards/*.pdf` and `*.truth.json` beside each | the demo cards: all 11 fixtures that have a card, plus 8 other learners with all their years (40 PDFs) | E-12, E-14, the demo | the truth sheet is written from the same numbers the PDF is drawn from, then checked by reading the PDF back (`tests/acceptance/test_cards.py`) |
 | `cards/*_card2.pdf` | FX-04c's second card for 2025/26, and another learner's | E-04 duplicate | recorded |
 | `cards_bad/*.pdf`, `expected_failures.json` | six cards that must be refused, each broken in one way | E-13 | recorded when each is broken: `not_a_pdf`, `no_text_layer`, `layout_unrecognised`, `learner_ref_missing`, `row_unreadable` (row 7, four numbers instead of five), `year_mismatch` |
-| `samples/amara_nfor_form1_2022-2023.truth.json` | the real sample card, every field, page and row | E-12 | read by eye from the three pages; the sums were then checked by arithmetic, and the numbers against the text layer by a plain pattern (`test_the_real_cards_truth_sheet_matches_the_printed_numbers`) |
+| `samples/amara_nfor_form1_2022-2023.truth.json` | the school's sample card (synthetic data in the school's real card format), every field, page and row | E-12 | read by eye from the three pages; the sums were then checked by arithmetic, and the numbers against the text layer by a plain pattern (`test_the_real_cards_truth_sheet_matches_the_printed_numbers`) |
 | `methodology/methodology-v2.0.md` | the real v2.0 methodology as Markdown, headings kept | E-15 | converted from the PDF by `synthetic/methodology_from_pdf.py` (an input, committed) |
 | `methodology/methodology-v2.1-small.md` | v2.0 with one sentence of 6.4 reworded | E-15 | `synthetic/methodology.py` |
 | `methodology/methodology-v2.1-full.md` | that, plus 5.6 Small groups added and 6.6 Example removed | E-15 | same |
@@ -245,7 +252,12 @@ one is Georgia), the grading scale uses a hyphen where the real card has an en d
 generated cards run to two pages where the real one runs to three (its remarks are slightly longer).
 
 **The grade words on a card** ("Weak", "Average" and so on) are the school's own printed scale. The
-cards print them; the system must not repeat them (WD-1).
+cards print them; the system must not repeat them (WD-1). **For whoever writes the card parser:**
+keep the grade *letter* only. Do not store, return or quote the word. The truth sheets carry the
+word in `grade_word` so a reader can be checked, but `cohort/` and `truth/answer_key.json` have no
+`grade_word` field and none of the scale's words "Weak", "Fairly Good" or "Very Good", and
+`test_no_grade_word_is_in_the_cohort_files_or_the_key` fails if that changes. (A teacher's remark
+may still say "Excellent results": that is the teacher's free text, not the scale.)
 
 **What the personal-data scan checks, and what it cannot.** `python3 -m synthetic.scan data/synthetic`
 looks in every file and in the text of every PDF for email addresses, web addresses (only the UNESCO

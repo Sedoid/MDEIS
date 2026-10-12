@@ -32,7 +32,7 @@ COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yml $(addpref
 
 .PHONY: help env-init env-sync check-env check-docker models dev-config dev-build dev-up dev-down up down dev-ps \
         dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules \
-        test lint check \
+        test lint check practice-data \
         demo demo-data smoke clean \
         probe-embed probe-mcp probe-pg-mcp probe-n8n probe-orchestrator probe-portal
 
@@ -159,6 +159,9 @@ test: $(ENV_FILE) ## Run pytest in a container (ARGS="-m integration" to pass op
 
 lint: $(ENV_FILE) ## Run ruff in a container
 	$(COMPOSE) --profile test run --rm --build test ruff check src tests
+
+practice-data: $(ENV_FILE) ## Make the practice school (data/synthetic) in a container. Commit it only when the generator, a template or the seed changed
+	$(COMPOSE) --profile test run --rm --build --user "$$(id -u):$$(id -g)" practice-data
 
 check: ## Secret scan, and the structure check when docs/STRUCTURE.md is present
 	@python3 scripts/scan_secrets.py

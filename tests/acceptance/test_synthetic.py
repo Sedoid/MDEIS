@@ -306,6 +306,17 @@ def test_generated_output_sits_where_it_should(files):
     }  # fmt: skip
 
 
+def test_no_grade_word_is_in_the_cohort_files_or_the_key(files):
+    """The card prints a word beside each grade ("Weak"). The system must keep the letter only, so
+    the data it is tested with must not hand it the word. (A remark may say "Excellent results":
+    that is a teacher's free text, so only the scale's words that no remark uses are checked.)"""
+    for name, data in files.items():
+        text = data.decode("utf-8")
+        assert '"grade_word"' not in text, name
+        for word in ("Weak", "Fairly Good", "Very Good"):
+            assert word not in text, f"{name} has the grade word {word!r}"
+
+
 def test_fixtures_md_covers_every_fixture_and_the_core_tests(root):
     text = (root / "data" / "synthetic" / "FIXTURES.md").read_text()
     for handle in FIXTURE_HANDLES:

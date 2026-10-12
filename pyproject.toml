@@ -35,6 +35,8 @@ dev = [
     # and read back with pdfplumber.
     "fpdf2",
     "pdfplumber",
+    # Imported directly by synthetic/bad_cards.py; it is already installed as a dependency of fpdf2.
+    "pillow",
 ]
 
 [tool.setuptools.packages.find]

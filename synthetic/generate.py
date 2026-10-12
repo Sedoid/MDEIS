@@ -290,8 +290,9 @@ def main(argv=None):
     ap.add_argument(
         "--cards",
         choices=("none", "demo", "all"),
-        default="none",
-        help="also print report cards as PDFs: the fixtures and 8 more learners, or everyone",
+        default="demo",
+        help="print report cards as PDFs: the fixtures and 8 more learners (the default), "
+        "everyone, or none",
     )
     ap.add_argument(
         "--methodology",
