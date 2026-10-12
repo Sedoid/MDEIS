@@ -93,7 +93,7 @@ def test_a_duplicate_points_at_the_first_upload(conn):
 def test_document_problems_record_page_and_row(conn):
     doc = make_document(conn, status="needs_review")
     conn.execute(
-        'INSERT INTO document_issues (document_id, kind, clause_id, page, "row", detail) '
+        'INSERT INTO document_issues (document_id, kind, ref_id, page, "row", detail) '
         "VALUES (%s, 'template_ref_missing', 'TR-1', 2, 14, 'section 6.4 not found')",
         (doc,),
     )

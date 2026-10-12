@@ -467,10 +467,17 @@ def test_the_borrowed_tool_can_only_read(conn, roles):
     assert one(conn, "SELECT rolcanlogin FROM pg_roles WHERE rolname = %s", (role,))
     settings = one(conn, "SELECT rolconfig FROM pg_roles WHERE rolname = %s", (role,))
     assert "default_transaction_read_only=on" in settings
+    # It reads every table except the diary, and `learners` only by column (no names).
+    # Migration 003. The full answer, named views for it, comes with the n8n views.
+    not_whole = {"action_log", "learners"}
     for table in tables(conn):
-        assert can(conn, role, table, "SELECT"), table
+        assert can(conn, role, table, "SELECT") == (table not in not_whole), table
         for write in ("INSERT", "UPDATE", "DELETE", "TRUNCATE"):
             assert not can(conn, role, table, write), (table, write)
+    column = "SELECT has_column_privilege(%s, 'public.learners', %s, 'SELECT')"
+    assert one(conn, column, (role, "learner_id"))
+    assert one(conn, column, (role, "school_code"))
+    assert not one(conn, column, (role, "display_name"))
 
 
 def test_the_toolbox_can_write_but_not_edit_the_diary(conn, roles):

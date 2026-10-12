@@ -77,10 +77,12 @@ SELECT pg_temp.denied('empty the diary', :'app_role', $$TRUNCATE action_log$$);
 SELECT pg_temp.allowed('write learners', :'app_role', $$UPDATE learners SET display_name = display_name$$);
 
 -- ---- the read-only role: the borrowed server -------------------------------------------------
-SELECT pg_temp.allowed('read learners', :'ro_role', $$SELECT * FROM learners$$);
+SELECT pg_temp.allowed('read learner ids', :'ro_role', $$SELECT learner_id, school_code FROM learners$$);
+SELECT pg_temp.denied('read learner names', :'ro_role', $$SELECT display_name FROM learners$$);
+SELECT pg_temp.denied('read the diary', :'ro_role', $$SELECT 1 FROM action_log$$);
 SELECT pg_temp.allowed('read documents', :'ro_role', $$SELECT * FROM documents$$);
 SELECT pg_temp.allowed('read scores and the rule sentences', :'ro_role',
-    $$SELECT count(*) FROM assessments, clauses, templates, reports, issues, runs, action_log, report_pin_status$$);
+    $$SELECT count(*) FROM assessments, clauses, templates, reports, issues, runs, report_pin_status$$);
 SELECT pg_temp.denied('add a row', :'ro_role', $$INSERT INTO runs DEFAULT VALUES$$);
 SELECT pg_temp.denied('edit a row', :'ro_role', $$UPDATE issues SET detail = 'x'$$);
 SELECT pg_temp.denied('create a table', :'ro_role', $$CREATE TABLE ro_probe (x int)$$);
