@@ -270,10 +270,18 @@ agent layer that runs five times each and reports the spread. Results will be co
   approves.
 - **Class view is locked.** It is built only after the safety tests pass and an approver is
   named. When built: counts only, no names, a minimum group size from the template, one school.
+- **The diary is protected from edits, but not from its own owner.** The action log refuses
+  UPDATE, DELETE and TRUNCATE three ways: the tools' database role has no such rights, a trigger
+  refuses them, and each line is chained to the one before it, so `verify_action_log()` shows a
+  changed line. That role also owns the tables, so it could switch the trigger off, and a full
+  rewrite by it would not be detected. A call that is killed in the middle (a crash, a stopped
+  container) leaves no line.
 - **One school, one language** in the first version.
 
 ## Future improvements
 
+- A separate owner role for the database tables, so the tools' role cannot change the diary's
+  protections.
 - Teacher-confirmed template values from real stage standards, and templates for other
   curricula.
 - The locked class view, then school-level gap reporting for leaders.
