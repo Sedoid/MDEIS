@@ -39,8 +39,16 @@ def schema_fingerprint(conn):
 
 
 def test_every_migration_file_is_recorded(conn):
-    recorded = [r[0] for r in conn.execute("SELECT name FROM schema_migrations ORDER BY name")]
+    # `public.` on purpose: this checks the live database was migrated (run `make migrate` first),
+    # not the throwaway schema the other tests use.
+    recorded = [
+        r[0] for r in conn.execute("SELECT name FROM public.schema_migrations ORDER BY name")
+    ]
     assert recorded == sorted(p.name for p in MIGRATIONS.glob("*.sql"))
+
+
+def test_the_tests_run_in_a_throwaway_schema_not_the_live_one(conn):
+    assert one(conn, "SELECT current_schema()").startswith("mdeis_test_")
 
 
 def test_running_the_migrations_again_changes_nothing(conn):

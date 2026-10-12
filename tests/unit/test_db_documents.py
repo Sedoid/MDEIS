@@ -153,7 +153,8 @@ def test_date_of_birth_and_gender_are_not_stored_anywhere(conn):
     names = [
         r[0]
         for r in conn.execute(
-            "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public'"
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema IN ('public', current_schema())"
         )
     ]
     for name in names:
