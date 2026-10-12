@@ -31,7 +31,8 @@ endif
 COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yml $(addprefix -f ,$(SERVICE_FILES))
 
 .PHONY: help env-init env-sync check-env check-docker models dev-config dev-build dev-up dev-down up down dev-ps \
-        dev-logs dev-restart dev-psql dev-reset dev-health migrate test lint check \
+        dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules \
+        test lint check \
         demo demo-data smoke clean \
         probe-embed probe-mcp probe-pg-mcp probe-n8n probe-orchestrator probe-portal
 
@@ -142,6 +143,16 @@ clean: $(ENV_FILE) ## Stop the stack and DELETE its data volumes, no question as
 
 migrate: $(ENV_FILE) ## Apply database migrations (safe to run twice)
 	$(COMPOSE) run --rm migrate
+
+load-criteria: $(ENV_FILE) ## Load both rulebook versions (v1 active) and make their vectors (safe to run twice)
+	$(COMPOSE) --profile tools run --rm --build rules
+
+rules-status: $(ENV_FILE) ## Show the loaded rulebook versions, their rule counts and vectors
+	@$(COMPOSE) --profile tools run --rm rules python -m mdeis.rulebook status
+
+search-rules: $(ENV_FILE) ## Find rules by meaning:  make search-rules Q="expected reading level for Form 1"
+	@test -n "$(Q)" || { echo 'usage: make search-rules Q="your question"' >&2; exit 1; }
+	@$(COMPOSE) --profile tools run --rm rules python -m mdeis.rulebook search "$(Q)"
 
 test: $(ENV_FILE) ## Run pytest in a container (ARGS="-m integration" to pass options)
 	$(COMPOSE) --profile test run --rm --build test pytest $(ARGS)
