@@ -1,0 +1,34 @@
+services:
+  # The page a user opens: upload boxes, a status list, and Open WebUI beside it. Saves files to
+  # the inbox volume and records a documents row. Parses nothing, holds no model key, and holds
+  # neither the approver-token secret nor the mdeis_app password.
+  portal:
+    build:
+      context: .
+      dockerfile: deploy/docker/portal.Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?set PYTHON_IMAGE in .env}
+    image: mdeis-portal:local
+    container_name: portal-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    restart: unless-stopped
+    ports:
+      - "${HOST_BIND:-127.0.0.1}:${PORTAL_PORT:-8080}:8080"
+    environment:
+      PORTAL_DATABASE_URL: postgresql://${PORTAL_DB_USER:?set PORTAL_DB_USER in .env}:${PORTAL_DB_PASSWORD:?set PORTAL_DB_PASSWORD in .env}@postgres:5432/${MDEIS_DB_NAME:?set MDEIS_DB_NAME in .env}
+      PORTAL_SESSION_SECRET: ${PORTAL_SESSION_SECRET:?set PORTAL_SESSION_SECRET in .env}
+      WEBUI_URL: http://webui:8080
+      INBOX_DIR: /inbox
+    volumes:
+      - inbox:/inbox
+    networks: [edge, data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      webui:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=4)"]
+      interval: 10s
+      timeout: 6s
+      retries: 10
+      start_period: 10s

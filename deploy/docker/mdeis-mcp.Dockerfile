@@ -17,8 +17,12 @@ RUN pip install -e ".[dev]"
 CMD ["pytest"]
 
 FROM base AS runtime
+# /inbox is shared with the portal image: group 10010, mode 2775 (see portal.Dockerfile).
+# ingestd, which runs from this image, only reads it.
 RUN pip install . \
-    && useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin mdeis
+    && groupadd --system --gid 10010 inbox \
+    && useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin --groups inbox mdeis \
+    && mkdir /inbox && chown root:inbox /inbox && chmod 2775 /inbox
 USER mdeis
 EXPOSE 8100
 CMD ["python", "-m", "mdeis.server"]

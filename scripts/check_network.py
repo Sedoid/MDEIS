@@ -12,10 +12,11 @@ from envfile import ROOT, parse_env
 
 # service -> expected to keep running (True) or to run once and exit 0 (False)
 SERVICES = {"postgres": True, "embedder": True, "migrate": False, "mdeis-mcp": True,
-            "pg-mcp-ro": True, "n8n": True, "gateway": True, "webui": True}
-HOLDS_OPENROUTER = {"n8n"}
+            "ingestd": True, "pg-mcp-ro": True, "orchestrator": True, "n8n": True,
+            "gateway": True, "webui": True, "portal": True}
+HOLDS_OPENROUTER = {"orchestrator"}
 HOLDS_TOKEN_SECRET = {"gateway", "mdeis-mcp"}
-NON_ROOT = ["mdeis-mcp", "gateway"]
+NON_ROOT = ["mdeis-mcp", "ingestd", "orchestrator", "gateway", "portal"]
 
 results: list[tuple[str, str, str]] = []
 
@@ -63,8 +64,9 @@ def main() -> int:
             ok = status == "exited" and exit_code == "0"
             record("PASS" if ok else "FAIL", f"{svc}: ran once and exited 0", f"{status}, exit {exit_code}")
 
-    # 2. published ports: only webui, and the n8n editor in dev, both on 127.0.0.1
-    allowed = {("webui", env.get("WEBUI_PORT", "3000")), ("n8n", env.get("N8N_EDITOR_PORT", "5678"))}
+    # 2. published ports: webui, portal, and the n8n editor in dev, all on 127.0.0.1
+    allowed = {("webui", env.get("WEBUI_PORT", "3000")), ("portal", env.get("PORTAL_PORT", "8080")),
+               ("n8n", env.get("N8N_EDITOR_PORT", "5678"))}
     bad = []
     for svc in SERVICES:
         code, out = run(["docker", "inspect", "-f", "{{json .HostConfig.PortBindings}}", cname[svc]])
@@ -76,7 +78,7 @@ def main() -> int:
                     bad.append(f"{svc}:{b['HostPort']}")
                 if b["HostIp"] != "127.0.0.1":
                     bad.append(f"{svc}:{b['HostPort']} bound to {b['HostIp'] or 'all addresses'}")
-    record("PASS" if not bad else "FAIL", "published ports are only webui and the n8n editor, on 127.0.0.1",
+    record("PASS" if not bad else "FAIL", "published ports are only webui, portal and the n8n editor, on 127.0.0.1",
            ", ".join(bad))
 
     # 3. the data network is internal
@@ -103,14 +105,33 @@ def main() -> int:
         code, out = run(["docker", "exec", cname[svc], "id", "-u"])
         record("PASS" if code == 0 and out != "0" else "FAIL", f"{svc}: runs as non-root", f"uid {out}" if code == 0 else out)
 
-    # 6. database roles: n8n's role cannot open mdeis, the read-only role cannot write
+    # 6. database roles: each role reaches only what CONTAINERS.md section 6 says
     def psql(user_key: str, pw_key: str, db: str, sql: str) -> int:
         code, _ = run(["docker", "exec", "-e", f"PGPASSWORD={env.get(pw_key, '')}", cname["postgres"],
                        "psql", "-h", "postgres", "-U", env.get(user_key, ""), "-d", db, "-v", "ON_ERROR_STOP=1",
                        "-c", sql])
         return code
-    record("PASS" if psql("N8N_DB_USER", "N8N_DB_PASSWORD", env.get("MDEIS_DB_NAME", "mdeis"), "select 1") != 0 else "FAIL",
+    mdeis_db = env.get("MDEIS_DB_NAME", "mdeis")
+    record("PASS" if psql("N8N_DB_USER", "N8N_DB_PASSWORD", mdeis_db, "select 1") != 0 else "FAIL",
            "n8n role cannot connect to the mdeis database")
+    record("PASS" if psql("ORCHESTRATOR_DB_USER", "ORCHESTRATOR_DB_PASSWORD", mdeis_db, "select 1") != 0 else "FAIL",
+           "orchestrator role cannot connect to the mdeis database")
+    record("PASS" if psql("ORCHESTRATOR_DB_USER", "ORCHESTRATOR_DB_PASSWORD",
+                          env.get("ORCHESTRATOR_DB_NAME", "orchestrator"), "select 1") == 0 else "FAIL",
+           "orchestrator role can connect to its own database")
+    record("PASS" if psql("N8N_AUTO_DB_USER", "N8N_AUTO_DB_PASSWORD", mdeis_db, "select 1") == 0 else "FAIL",
+           "n8n read-only role can connect to the mdeis database")
+    record("PASS" if psql("N8N_AUTO_DB_USER", "N8N_AUTO_DB_PASSWORD", mdeis_db,
+                          "create table probe_should_fail (i int)") != 0 else "FAIL",
+           "n8n read-only role cannot create a table")
+    record("PASS" if psql("N8N_AUTO_DB_USER", "N8N_AUTO_DB_PASSWORD", mdeis_db,
+                          "select 1 from public.schema_migrations limit 1") != 0 else "FAIL",
+           "n8n read-only role cannot read the base tables")
+    record("PASS" if psql("PORTAL_DB_USER", "PORTAL_DB_PASSWORD", mdeis_db, "select 1") == 0 else "FAIL",
+           "portal role can connect to the mdeis database")
+    record("PASS" if psql("PORTAL_DB_USER", "PORTAL_DB_PASSWORD", mdeis_db,
+                          "select 1 from public.schema_migrations limit 1") != 0 else "FAIL",
+           "portal role cannot read tables it was not granted")
     record("PASS" if psql("MDEIS_RO_USER", "MDEIS_RO_PASSWORD", env.get("MDEIS_DB_NAME", "mdeis"),
                           "create table probe_should_fail (i int)") != 0 else "FAIL",
            "read-only role cannot create a table")
@@ -122,12 +143,17 @@ def main() -> int:
     sock = "import socket,sys; socket.create_connection((sys.argv[1], int(sys.argv[2])), 5).close()"
     hops = [
         ("webui -> gateway", "webui", ["curl", "-fsS", "-o", "/dev/null", "http://gateway:8000/healthz"]),
-        ("gateway -> n8n", "gateway", ["python", "-c", py, "http://n8n:5678/healthz"]),
+        ("gateway -> orchestrator", "gateway", ["python", "-c", py, "http://orchestrator:8300/healthz"]),
         ("gateway -> mdeis-mcp", "gateway", ["python", "-c", py, "http://mdeis-mcp:8100/healthz"]),
-        ("n8n -> mdeis-mcp", "n8n", ["wget", "-q", "-O", "/dev/null", "-T", "5", "http://mdeis-mcp:8100/healthz"]),
-        ("n8n -> pg-mcp-ro", "n8n", ["nc", "-z", "-w", "5", "pg-mcp-ro", "8200"]),
+        ("orchestrator -> mdeis-mcp", "orchestrator", ["python", "-c", py, "http://mdeis-mcp:8100/healthz"]),
+        ("orchestrator -> pg-mcp-ro", "orchestrator", ["python", "-c", sock, "pg-mcp-ro", "8200"]),
+        ("orchestrator -> n8n", "orchestrator", ["python", "-c", py, "http://n8n:5678/healthz"]),
+        ("orchestrator -> postgres", "orchestrator", ["python", "-c", sock, "postgres", "5432"]),
         ("mdeis-mcp -> postgres", "mdeis-mcp", ["python", "-c", sock, "postgres", "5432"]),
         ("mdeis-mcp -> embedder", "mdeis-mcp", ["python", "-c", py, "http://embedder:8081/health"]),
+        ("ingestd -> postgres", "ingestd", ["python", "-c", sock, "postgres", "5432"]),
+        ("portal -> postgres", "portal", ["python", "-c", sock, "postgres", "5432"]),
+        ("portal -> webui", "portal", ["python", "-c", py, "http://webui:8080/health"]),
     ]
     for label, svc, cmd in hops:
         code, out = run(["docker", "exec", cname[svc]] + cmd)

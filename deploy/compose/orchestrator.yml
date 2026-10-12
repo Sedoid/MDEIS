@@ -1,0 +1,51 @@
+services:
+  # The agent: model calls, tool calls, the ask-and-resolve loop. The only container in the agent
+  # path with a model key. It never receives APPROVER_TOKEN_SECRET, so it can pass a token on but
+  # cannot make one. Its database is its own: the role cannot connect to the mdeis database.
+  orchestrator:
+    build:
+      context: .
+      dockerfile: deploy/docker/orchestrator.Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?set PYTHON_IMAGE in .env}
+    image: mdeis-orchestrator:local
+    container_name: orchestrator-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    restart: unless-stopped
+    environment:
+      ORCHESTRATOR_API_KEY: ${ORCHESTRATOR_API_KEY:?set ORCHESTRATOR_API_KEY in .env}
+      ORCHESTRATOR_DATABASE_URL: postgresql://${ORCHESTRATOR_DB_USER:?set ORCHESTRATOR_DB_USER in .env}:${ORCHESTRATOR_DB_PASSWORD:?set ORCHESTRATOR_DB_PASSWORD in .env}@postgres:5432/${ORCHESTRATOR_DB_NAME:?set ORCHESTRATOR_DB_NAME in .env}
+      # Where it finds the tool servers and the n8n side lane.
+      MDEIS_MCP_URL: http://mdeis-mcp:8100/mcp
+      PG_MCP_URL: http://pg-mcp-ro:8200/sse
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:?set N8N_WEBHOOK_URL in .env}
+      N8N_WEBHOOK_KEY: ${N8N_WEBHOOK_KEY:?set N8N_WEBHOOK_KEY in .env}
+      # The model lives here and nowhere else. Not required to start the stack.
+      # `make check-env STRICT=1` requires them.
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
+      OPENROUTER_PROVIDER: ${OPENROUTER_PROVIDER:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_ALLOW_FALLBACKS: ${OPENROUTER_ALLOW_FALLBACKS:-false}
+      OPENROUTER_DATA_COLLECTION: ${OPENROUTER_DATA_COLLECTION:-deny}
+      # Optional second check. It can only hold a report.
+      JEV_MODE: ${JEV_MODE:-off}
+      JEV_MODEL: ${JEV_MODEL:-}
+      JEV_HOLD_THRESHOLD: ${JEV_HOLD_THRESHOLD:-}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-}
+    networks: [agent, data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mdeis-mcp:
+        condition: service_healthy
+      pg-mcp-ro:
+        condition: service_healthy
+    # No ports. Only the gateway, on the agent network, calls it at http://orchestrator:8300.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8300/healthz', timeout=4)"]
+      interval: 10s
+      timeout: 6s
+      retries: 10
+      start_period: 15s

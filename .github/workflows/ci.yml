@@ -1,0 +1,85 @@
+name: ci
+
+# Two jobs.
+#   checks          on every push and pull request: the secret scan, the structure check when
+#                   docs/STRUCTURE.md is present (it is local-only, so it is skipped here and the
+#                   job says so), and a syntax check of the scripts.
+#   stranger-test   by hand only (Run workflow). A clean runner, a fresh .env, `make demo`.
+#                   It needs two repository secrets and one variable (see the comment on the job).
+#
+# No third-party action is used and no first-party one either: the checkout is plain git, so there
+# is no action version to pin or to approve. A new action is a "Needs decision".
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+          git -c "http.extraheader=Authorization: Basic ${auth}" fetch -q --depth 1 origin "${GITHUB_SHA}"
+          git checkout -q FETCH_HEAD
+
+      - name: .env is not tracked, only .env.example
+        run: |
+          tracked="$(git ls-files | grep -E '(^|/)\.env($|\.)' | grep -v -x '\.env\.example' || true)"
+          if [ -n "$tracked" ]; then echo "FAIL: tracked file(s) that look like an env file:"; echo "$tracked"; exit 1; fi
+          echo "OK: only .env.example is tracked"
+
+      - name: Secret scan and structure check
+        run: make check
+
+      - name: Scripts compile
+        run: python3 -m py_compile scripts/*.py
+
+  # Needs, set under Settings, Secrets and variables, Actions:
+  #   secret   OPENROUTER_API_KEY   a throwaway key for the test, revoked afterwards
+  #   variable OPENROUTER_MODEL     the pinned model slug
+  # The key is passed to one step through the environment and is never printed. GitHub hides a
+  # secret in the log, but it only does so for exact matches, so nothing here echoes it.
+  # It runs only when someone starts it by hand, never for a pull request from a fork.
+  stranger-test:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out the repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+          git -c "http.extraheader=Authorization: Basic ${auth}" fetch -q --depth 1 origin "${GITHUB_SHA}"
+          git checkout -q FETCH_HEAD
+
+      - name: Make .env (random secrets, then the two values we supply)
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
+        run: |
+          make env-init
+          python3 scripts/set_env.py OPENROUTER_API_KEY OPENROUTER_MODEL
+
+      - name: make demo
+        run: time make demo
+
+      - name: make demo a second time (must succeed and change nothing)
+        run: time make demo
+
+      - name: Clean up
+        if: always()
+        run: make clean

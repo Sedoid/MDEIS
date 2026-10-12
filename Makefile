@@ -8,6 +8,9 @@
 #   make dev-config      check that the compose files merge and every variable is set
 #   make dev-up          download the model, build, start, wait until healthy
 #   make dev-health      prove the wiring and the safety properties
+# The one command for a newcomer, once .env is filled in:
+#   make demo            check .env and Docker, start, migrate, load data, check health, smoke test
+#   make clean           stop and delete the data volumes (then `make demo` starts from nothing)
 # See `make help` for everything else.
 
 SHELL := /bin/bash
@@ -27,9 +30,10 @@ SERVICE_FILES := $(filter-out %.dev.yml,$(SERVICE_FILES))
 endif
 COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yml $(addprefix -f ,$(SERVICE_FILES))
 
-.PHONY: help env-init check-env models dev-config dev-build dev-up dev-down up down dev-ps dev-logs \
-        dev-restart dev-psql dev-reset dev-health migrate test lint check \
-        probe-embed probe-mcp probe-pg-mcp probe-n8n
+.PHONY: help env-init env-sync check-env check-docker models dev-config dev-build dev-up dev-down up down dev-ps \
+        dev-logs dev-restart dev-psql dev-reset dev-health migrate test lint check \
+        demo demo-data smoke clean \
+        probe-embed probe-mcp probe-pg-mcp probe-n8n probe-orchestrator probe-portal
 
 help: ## Show this list
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -42,8 +46,14 @@ $(ENV_FILE):
 env-init: ## Create .env from .env.example with random secrets (never overwrites)
 	@python3 scripts/env_init.py
 
+env-sync: $(ENV_FILE) ## Add any variable that .env.example has and .env lacks (never changes existing lines)
+	@python3 scripts/env_sync.py
+
 check-env: $(ENV_FILE) ## Check .env is complete (STRICT=1 also requires your own values)
 	@python3 scripts/check_env.py $(if $(filter 1,$(STRICT)),--strict,)
+
+check-docker: ## Check Docker is installed and running, and the ports we publish are free
+	@python3 scripts/check_docker.py $(if $(filter 1,$(DEV_EDITOR)),--editor,)
 
 models: $(ENV_FILE) ## Download the embedding model and verify its SHA-256
 	@python3 scripts/fetch_model.py
@@ -56,7 +66,7 @@ dev-config: $(ENV_FILE) ## Validate the merged compose files (prints nothing whe
 dev-build: $(ENV_FILE) ## Build the images we own
 	$(COMPOSE) build
 
-dev-up: check-env models ## Build and start everything, wait until healthy
+dev-up: check-env check-docker models ## Build and start everything, wait until healthy
 	$(COMPOSE) up -d --build --remove-orphans $(UP_FLAGS)
 	@$(COMPOSE) ps
 
@@ -86,6 +96,48 @@ dev-reset: $(ENV_FILE) ## Stop and DELETE all data volumes (asks first; FORCE=1 
 dev-health: $(ENV_FILE) ## Prove the wiring: health, ports, secrets, roles, hops
 	@python3 scripts/check_network.py
 
+# ── The one command, and the way back ────────────────────────────────
+
+demo: ## Check .env and Docker, start, migrate, load data, health, smoke test, print addresses
+	@echo "== 1/8 Checking .env (every required variable, including your own keys)"
+	@python3 scripts/check_env.py --strict
+	@echo "== 2/8 Checking Docker and the ports"
+	@$(MAKE) --no-print-directory check-docker
+	@echo "== 3/8 Starting the stack (the first run downloads several GB of images and a model: allow a long time)"
+	@$(MAKE) --no-print-directory dev-up
+	@echo "== 4/8 Applying the database migrations"
+	@$(MAKE) --no-print-directory migrate
+	@echo "== 5/8 Loading the template, the methodology document and the demo sheets"
+	@$(MAKE) --no-print-directory demo-data
+	@echo "== 6/8 Checking every service from the inside"
+	@$(MAKE) --no-print-directory dev-health
+	@echo "== 7/8 Smoke test: one tool, one fixture learner"
+	@$(MAKE) --no-print-directory smoke
+	@echo "== 8/8 Done"
+	@python3 scripts/demo_banner.py
+
+# Step 5 of `make demo`. It calls only targets that exist. It must not load data by direct SQL, and
+# it must not pretend: if a target is missing it stops and says which one.
+demo-data:
+	@missing=""; for t in load-criteria ingest; do \
+	  $(MAKE) -n --no-print-directory $$t >/dev/null 2>&1 || missing="$$missing $$t"; done; \
+	if [ -n "$$missing" ]; then \
+	  echo "STOPPED: make demo cannot load the template and the demo documents yet." >&2; \
+	  echo "         These make targets are not built:$$missing" >&2; \
+	  echo "         The stack is running, but it has no data. Nothing was loaded." >&2; \
+	  exit 1; \
+	fi; \
+	echo "STOPPED: load-criteria and ingest exist, but make demo is not told which documents to load." >&2; \
+	echo "         Edit the demo-data target in the Makefile (document kinds and file paths)." >&2; \
+	exit 1
+
+smoke: $(ENV_FILE) ## Call one tool for one fixture learner, from inside the network
+	@$(COMPOSE) exec -T mdeis-mcp python - < scripts/smoke.py
+
+clean: $(ENV_FILE) ## Stop the stack and DELETE its data volumes, no question asked (the model file stays)
+	@python3 scripts/check_docker.py --no-ports
+	$(COMPOSE) down -v --remove-orphans
+
 # ── Database, tests, checks ──────────────────────────────────────────
 
 migrate: $(ENV_FILE) ## Apply database migrations (safe to run twice)
@@ -114,3 +166,9 @@ probe-pg-mcp: $(ENV_FILE) ## Borrowed Postgres MCP server: list its tools
 
 probe-n8n: $(ENV_FILE) ## n8n: POST to the echo webhook
 	@$(COMPOSE) exec -T mdeis-mcp python - < scripts/n8n_probe.py
+
+probe-orchestrator: $(ENV_FILE) ## Orchestrator: its health answer (database and mdeis-mcp checks)
+	@$(COMPOSE) exec -T mdeis-mcp python -c "import urllib.request; print(urllib.request.urlopen('http://orchestrator:8300/healthz', timeout=10).read().decode())"
+
+probe-portal: $(ENV_FILE) ## Portal: its health answer, from inside the network
+	@$(COMPOSE) exec -T gateway python -c "import urllib.request; print(urllib.request.urlopen('http://portal:8080/healthz', timeout=10).read().decode())"

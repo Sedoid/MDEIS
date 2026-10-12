@@ -45,7 +45,7 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    # No ports: n8n reaches it at http://mdeis-mcp:8100/mcp over the agent network.
+    # No ports: the orchestrator reaches it at http://mdeis-mcp:8100/mcp over the agent network.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/healthz', timeout=3)"]
       interval: 10s

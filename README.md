@@ -19,7 +19,7 @@ and the template clauses behind it. A **named human approver** must release ever
 | Synthetic data generator | Planned |
 | Database and migrations | Planned |
 | MCP server tools | Planned |
-| n8n workflow, Open WebUI, OpenRouter | Planned |
+| Orchestrator (LangGraph), Open WebUI, OpenRouter, n8n automations | Planned |
 | Evaluation results | None yet. `EVALS.md` will quote real runs only |
 
 **All data in this repository is synthetic.** There are no real learners, names, photos or
@@ -71,27 +71,23 @@ unchanged.
 ## Architecture
 
 Every part is a container, and they talk to each other over private Docker networks. Only the
-Open WebUI port is published to your machine.
+Open WebUI port and the upload page port are published to your machine, on the local address.
 
-```
-Approver (signed in) -> webui (Open WebUI) -> gateway (FastAPI) -> n8n agent workflow
-                                                                    |-> OpenRouter (pinned open-weights model)
-                                                                    |-> mdeis-mcp (ours)
-                                                                    |-> pg-mcp-ro (borrowed, read-only)
-mdeis-mcp -> Postgres + pgvector (records, template rules, clause index, action log)
-mdeis-mcp -> embedder (text to vectors for the clause index)
-Langfuse (optional): traces, tokens, cost per run
-```
+![MDEIS architecture: the foundation built first, and the full design with the optional parts marked](docs/img/architecture-full.svg)
 
-- **The gateway** knows who is signed in, signs the approver token and calls n8n. No calculation.
-- **n8n** runs the sequence and the ask-and-resolve loop. It does no calculation.
+The full picture, the smaller foundation built first, one request step by step and what each part
+is trusted with are in [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+- **The gateway** knows who is signed in, signs the approver token and calls the orchestrator. No calculation and no model code.
+- **The orchestrator** (LangGraph) runs the sequence and the ask-and-resolve loop. It does no calculation.
+- **n8n** runs automations outside the agent, such as an annotated explainer for a released report. It reads released content through views, writes drafts for review, and cannot release anything.
 - **The model** plans, calls tools and writes the summary text. It never produces a number that
   a tool did not return.
 - **The MDEIS server** does every calculation, check and release, and makes no model calls.
 - **Postgres** holds records, parsed template rules, a pgvector index of clause text, and the
   action log.
 
-Details: [`docs/SPEC.md`](docs/SPEC.md) and [`docs/CONTAINERS.md`](docs/CONTAINERS.md) (containers, networks, ports). Decisions and their reasons: [`docs/DECISIONS.md`](docs/DECISIONS.md).
+Details: [`ARCHITECTURE.md`](ARCHITECTURE.md), [`docs/SPEC.md`](docs/SPEC.md) and [`docs/CONTAINERS.md`](docs/CONTAINERS.md) (containers, networks, ports). Decisions and their reasons: [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 ## Setup/installation instructions
 
@@ -122,7 +118,9 @@ below are the plan. Each service's task adds its own and updates the file.
 | `DATABASE_URL` | yes | Built from the three values above |
 | `APPROVER_TOKEN_SECRET` | yes | A long random string you generate. It signs the approver token (D-003) |
 | `WEBUI_SECRET_KEY` | yes | A long random string for Open WebUI sessions |
-| `N8N_ENCRYPTION_KEY` | yes | A long random string for n8n credentials |
+| `N8N_ENCRYPTION_KEY`, `N8N_DB_PASSWORD`, `N8N_AUTO_DB_PASSWORD`, `N8N_OPENROUTER_API_KEY` | yes | Long random strings you generate for n8n, and a key for its model calls (may be the same value as `OPENROUTER_API_KEY`) |
+| `ORCHESTRATOR_DB_PASSWORD`, `ORCHESTRATOR_API_KEY` | yes | Long random strings you generate: the orchestrator's database password, and the key the gateway uses to call it |
+| `JEV_MODE` | no | `off` (default), `shadow` or `hold`. Turns on the optional Jev wording check (D-016) |
 | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` | no | Only if you want tracing |
 
 Generate a random string with `openssl rand -hex 32`.
@@ -165,7 +163,8 @@ data, with no code change. That is the proof that rules live in the template.
 | Layer | Choice |
 | --- | --- |
 | Interface | Open WebUI, behind a small FastAPI gateway |
-| Orchestration | n8n (agent workflow), open source |
+| Orchestration | LangGraph (Python, open source) runs the agent in its own `orchestrator` container. n8n (open source) runs automations beside it |
+| Optional second check | Jev (`typesafe/jev-1.13`) through OpenRouter. Third-party, not open-weights, off by default. It can only hold a draft |
 | Model | A pinned open-weights model through OpenRouter (provider order fixed, fallbacks off, data collection denied). The model slug is recorded in D-007 once chosen |
 | Our MCP server | Python 3.12 and the official MCP Python SDK, Streamable HTTP |
 | Borrowed MCP server | A read-only Postgres MCP server |
@@ -178,7 +177,7 @@ data, with no code change. That is the proof that rules live in the template.
 
 ## Agent architecture
 
-One agent loop, orchestrated by n8n, using tools. It is not a chatbot wrapper: the model cannot
+One agent loop, orchestrated by LangGraph, using tools. It is not a chatbot wrapper: the model cannot
 produce a finding except through a tool call, and the gate sits on the only irreversible action.
 
 - **Plan and call:** the model chooses which tools to call and in what order for the request.
@@ -223,6 +222,12 @@ be in `TOOLS.md` once the tools exist.
 
 **Borrowed.** A read-only Postgres MCP server, used for inspection queries. The exact server and
 the reason for choosing it will be recorded here and in `docs/DECISIONS.md` when wired in.
+
+**Reused code.** n8n runs the automation workflows. The orchestrator uses LangGraph, `langchain-openai` and `langchain-mcp-adapters`
+(open source, versions pinned in `pyproject.toml`, D-015). It does not use LangChain retrievers or
+agent executors. The optional Jev check (D-016) is a third-party model reached through
+OpenRouter. It is not open-weights, it is off by default, and it can only hold a draft. One more
+tool, `record_verification`, stores its result. It is not in the model's tool list.
 
 ## Human-in-the-loop workflow
 
@@ -286,7 +291,8 @@ Full detail in [`docs/STRUCTURE.md`](docs/STRUCTURE.md).
 ```
 src/mdeis/      MCP server (tools/) and deterministic core (core/)
 templates/      criteria templates
-workflows/      n8n workflow exports
+src/orchestrator/   the LangGraph agent service
+workflows/      n8n workflow exports (automations)
 synthetic/      synthetic data generator    data/synthetic/  its output
 tests/ evals/   deterministic tests, agent-layer evals and results
 deploy/         service config and scripts

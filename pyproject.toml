@@ -23,6 +23,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# LangGraph (D-015) is installed only in the orchestrator image, so the other images stay small.
+orchestrator = [
+    "langgraph",
+    "langgraph-checkpoint-postgres",
+]
 dev = [
     "pytest",
     "ruff",

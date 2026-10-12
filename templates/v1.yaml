@@ -1,0 +1,154 @@
+# MDEIS criteria template v1. Shape: docs/TEMPLATE.md. Loader: src/mdeis/core/template.py.
+#
+# Two kinds of value are marked in this file:
+#   # FROM SAMPLE CARD OCC 2022/23: teacher to confirm
+#       printed on data/synthetic/samples/amara_nfor_form1_2022-2023.pdf (a synthetic card)
+#   # PLACEHOLDER: teacher to confirm
+#       not printed on the card. Set here only so the system can run. These are NOT the school's
+#       values. H-1 replaces them with the teacher's real ones. No code change is needed.
+
+template_id: occ-demo                     # PLACEHOLDER: teacher to confirm
+version: 1                                # PLACEHOLDER: teacher to confirm
+language: en                              # PLACEHOLDER: teacher to confirm
+institution: {name: "Outliers Comprehensive College", code: OCC}  # FROM SAMPLE CARD OCC 2022/23: teacher to confirm
+
+scales:
+  - id: SC-1
+    type: out_of                          # FROM SAMPLE CARD OCC 2022/23: teacher to confirm
+    max: 20                               # FROM SAMPLE CARD OCC 2022/23: teacher to confirm
+    text: "Term scores are out of 20."
+  - id: SC-2
+    # FROM SAMPLE CARD OCC 2022/23: teacher to confirm (letters and lower edges, from the card's
+    # grading scale). The card also prints a word for each band. It is not stored here: WD-1
+    # bans one of those words, and reports quote the letter and the range, not the word.
+    grade_bands:                          # min is the lowest annual score in the band
+      - {grade: "A+", min: 18}
+      - {grade: "A",  min: 16}
+      - {grade: "B",  min: 14}
+      - {grade: "C",  min: 12}
+      - {grade: "D",  min: 10}
+      - {grade: "E",  min: 0}
+    text: "18 to 20 is grade A+, 16 to 17.99 is A, 14 to 15.99 is B, 12 to 13.99 is C, 10 to 11.99 is D, below 10 is E."
+
+coefficients:
+  - id: WT-1
+    # FROM SAMPLE CARD OCC 2022/23: teacher to confirm (14 subjects, coefficients total 30)
+    subjects:
+      Mathematics: 4
+      English: 4
+      French: 4
+      Biology: 2
+      Physics: 2
+      Chemistry: 2
+      Geography: 2
+      History: 2
+      Citizenship: 1
+      Literature in English: 2
+      Home Economics: 2
+      Logic: 1
+      Physical Education: 1
+      Manual Labor: 1
+    text: "Mathematics, English and French have coefficient 4. Biology, Physics, Chemistry, Geography, History, Literature in English and Home Economics have coefficient 2. Citizenship, Logic, Physical Education and Manual Labor have coefficient 1."
+
+foundation_areas: [literacy, numeracy]    # PLACEHOLDER: teacher to confirm
+
+areas:
+  # PLACEHOLDER: teacher to confirm. Which subjects make up each area is set by the T-001 brief,
+  # not printed on the card.
+  - id: SK-1
+    area: literacy
+    subjects: [English, French, "Literature in English"]
+    text: "English, French and Literature in English make up literacy."
+  - id: SK-2
+    area: numeracy
+    subjects: [Mathematics]
+    text: "Mathematics makes up numeracy."
+
+# PLACEHOLDER: teacher to confirm. Every range below is invented. The card does not print any.
+stage_expectations:
+  - id: ST-1
+    stage: "Form 1"
+    area: literacy
+    range: [10, 14]
+    text: "Form 1 literacy is expected between 10 and 14 out of 20."
+  - id: ST-2
+    stage: "Form 2"
+    area: literacy
+    range: [11, 15]
+    text: "Form 2 literacy is expected between 11 and 15 out of 20."
+  - id: ST-3
+    stage: "Form 3"
+    area: literacy
+    range: [12, 16]
+    text: "Form 3 literacy is expected between 12 and 16 out of 20."
+  - id: ST-4
+    stage: "Form 1"
+    area: numeracy
+    range: [10, 14]
+    text: "Form 1 numeracy is expected between 10 and 14 out of 20."
+  - id: ST-5
+    stage: "Form 2"
+    area: numeracy
+    range: [11, 15]
+    text: "Form 2 numeracy is expected between 11 and 15 out of 20."
+  - id: ST-6
+    stage: "Form 3"
+    area: numeracy
+    range: [12, 16]
+    text: "Form 3 numeracy is expected between 12 and 16 out of 20."
+
+# PLACEHOLDER: teacher to confirm. Level names and statements describe a result against the
+# stage range. They say nothing about the child.
+levels:
+  - id: LV-1
+    name: below_expected_range
+    statement: "The average of the last 3 term scores is below the expected range for the stage."
+    text: "A result is described as below the expected range when the average of the last 3 term scores is lower than the bottom of the range for the stage and area."
+  - id: LV-2
+    name: within_expected_range
+    statement: "The average of the last 3 term scores is within the expected range for the stage."
+    text: "A result is described as within the expected range when the average of the last 3 term scores is inside the range for the stage and area, bounds included."
+  - id: LV-3
+    name: above_expected_range
+    statement: "The average of the last 3 term scores is above the expected range for the stage."
+    text: "A result is described as above the expected range when the average of the last 3 term scores is higher than the top of the range for the stage and area."
+  - id: LV-4
+    name: insufficient_evidence
+    statement: "There are too few term scores to say where the result sits against the expected range."
+    text: "When the minimum evidence in TR-1 is not met, no statement is made about the expected range."
+
+# PLACEHOLDER: teacher to confirm every value in this section.
+# method_ref links a rule to the methodology section it implements.
+trend:
+  - id: TR-1
+    min_scores: 3
+    min_terms: 3
+    method_ref: "6.4"
+    text: "A trend is stated only with at least 3 term scores."
+  - id: TR-2
+    move_threshold: 1.0
+    method_ref: "6.3"
+    text: "A change of more than 1 point out of 20 between periods counts as a move."
+  - id: TR-3
+    missing_term: ask_approver
+    method_ref: "4"
+    text: "A missing term score blocks the subject until the approver resolves it. It is never treated as zero."
+  - id: TR-4
+    gap_direction_threshold: 0.5
+    text: "The gap to the stage range is widening, steady or closing by a change of more than 0.5 point."
+
+exceptions:
+  - id: EX-1
+    absences: context_only                # PLACEHOLDER: teacher to confirm
+    method_ref: "6.2"
+    text: "Absences are shown as context. They are never used to calculate a result."
+
+wording:
+  - id: WD-1
+    banned: [weak, remedial, gifted, lazy, slow, failing, brilliant]  # PLACEHOLDER: teacher to confirm
+    text: "Describe the data. Never attach a label to the child. Report the grade letter and the score range, not the school's grade label."
+
+group_minimum:
+  - id: GM-1
+    min_group_size: 10                    # PLACEHOLDER: teacher to confirm
+    text: "Groups smaller than 10 are never shown."

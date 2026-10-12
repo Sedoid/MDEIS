@@ -1,0 +1,35 @@
+services:
+  # The document worker. Same image as mdeis-mcp, different command. It claims pending documents,
+  # parses them and writes records with page references. No model key, no approver-token secret.
+  ingestd:
+    build:
+      context: .
+      dockerfile: deploy/docker/mdeis-mcp.Dockerfile
+      target: runtime
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?set PYTHON_IMAGE in .env}
+    image: mdeis-mcp:local
+    container_name: ingestd-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    restart: unless-stopped
+    command: ["python", "-m", "mdeis.ingest.worker"]
+    environment:
+      DATABASE_URL: postgresql://${MDEIS_APP_USER:?set MDEIS_APP_USER in .env}:${MDEIS_APP_PASSWORD:?set MDEIS_APP_PASSWORD in .env}@postgres:5432/${MDEIS_DB_NAME:?set MDEIS_DB_NAME in .env}
+      # Optional: without the embedder the worker skips vectors.
+      EMBEDDER_URL: http://embedder:8081
+      EMBED_DIM: ${EMBED_DIM:-768}
+      INBOX_DIR: /inbox
+    volumes:
+      - inbox:/inbox:ro
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # No ports. The worker writes /tmp/ingestd.heartbeat each time it can reach the database.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime('/tmp/ingestd.heartbeat')<60 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
