@@ -15,6 +15,8 @@ services:
     environment:
       DATABASE_URL: postgresql://${MDEIS_APP_USER}:${MDEIS_APP_PASSWORD}@postgres:5432/${MDEIS_DB_NAME}
       EMBED_DIM: ${EMBED_DIM:-768}
+      # Only the search-quality test uses this; it skips itself when the embedder is not up.
+      EMBEDDER_URL: http://embedder:8081
     volumes:
       - ./src:/app/src
       - ./tests:/app/tests

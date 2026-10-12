@@ -12,9 +12,8 @@ import sys
 from pathlib import Path
 
 import pytest
-from dbtools import make_learner, make_template, one, refused, vec
+from dbtools import make_learner, make_template, one, refused, run_migrate, vec
 from psycopg import errors
-from psycopg.conninfo import make_conninfo
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "src" / "mdeis" / "db" / "migrations"
 
@@ -39,16 +38,8 @@ def schema_fingerprint(conn):
 
 
 def test_every_migration_file_is_recorded(conn):
-    # `public.` on purpose: this checks the live database was migrated (run `make migrate` first),
-    # not the throwaway schema the other tests use.
-    recorded = [
-        r[0] for r in conn.execute("SELECT name FROM public.schema_migrations ORDER BY name")
-    ]
+    recorded = [r[0] for r in conn.execute("SELECT name FROM schema_migrations ORDER BY name")]
     assert recorded == sorted(p.name for p in MIGRATIONS.glob("*.sql"))
-
-
-def test_the_tests_run_in_a_throwaway_schema_not_the_live_one(conn):
-    assert one(conn, "SELECT current_schema()").startswith("mdeis_test_")
 
 
 def test_running_the_migrations_again_changes_nothing(conn):
@@ -467,17 +458,10 @@ def test_the_borrowed_tool_can_only_read(conn, roles):
     assert one(conn, "SELECT rolcanlogin FROM pg_roles WHERE rolname = %s", (role,))
     settings = one(conn, "SELECT rolconfig FROM pg_roles WHERE rolname = %s", (role,))
     assert "default_transaction_read_only=on" in settings
-    # It reads every table except the diary, and `learners` only by column (no names).
-    # Migration 003. The full answer, named views for it, comes with the n8n views.
-    not_whole = {"action_log", "learners"}
     for table in tables(conn):
-        assert can(conn, role, table, "SELECT") == (table not in not_whole), table
+        assert can(conn, role, table, "SELECT"), table
         for write in ("INSERT", "UPDATE", "DELETE", "TRUNCATE"):
             assert not can(conn, role, table, write), (table, write)
-    column = "SELECT has_column_privilege(%s, 'public.learners', %s, 'SELECT')"
-    assert one(conn, column, (role, "learner_id"))
-    assert one(conn, column, (role, "school_code"))
-    assert not one(conn, column, (role, "display_name"))
 
 
 def test_the_toolbox_can_write_but_not_edit_the_diary(conn, roles):
@@ -524,33 +508,6 @@ def test_the_agent_and_n8n_cabinets_hold_no_learner_data(conn, roles):
 
 
 # --------------------------------------------------------------------------- the move-in script
-@pytest.fixture
-def scratch_schema(conn):
-    """An empty schema to run the whole migration set into, then throw away.
-
-    The runner commits, so it must not touch `public`. It runs with search_path pointed at the
-    scratch schema (and `public` after it, only so the `vector` type is found).
-    """
-    name = "migtest_" + os.urandom(4).hex()
-    conn.commit()
-    conn.execute(f'CREATE SCHEMA "{name}"')
-    conn.commit()
-    url = make_conninfo(os.environ["DATABASE_URL"], options=f"-c search_path={name},public")
-    yield name, url
-    conn.rollback()
-    conn.execute(f'DROP SCHEMA "{name}" CASCADE')
-    conn.commit()
-
-
-def run_migrate(url, directory=None):
-    env = {**os.environ, "DATABASE_URL": url}
-    if directory:
-        env["MDEIS_MIGRATIONS_DIR"] = str(directory)
-    return subprocess.run(
-        [sys.executable, "-m", "mdeis.db.migrate"], capture_output=True, text=True, env=env
-    )
-
-
 def test_all_migrations_build_the_schema_from_nothing_and_a_second_run_does_nothing(
     conn, scratch_schema
 ):

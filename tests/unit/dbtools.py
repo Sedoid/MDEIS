@@ -1,5 +1,9 @@
 """Small helpers for the database tests."""
 
+import os
+import subprocess
+import sys
+
 import pytest
 
 
@@ -65,4 +69,14 @@ def make_document(conn, kind="results", active=False, status="pending", **extra)
         conn,
         f"INSERT INTO documents ({names}) VALUES ({marks}) RETURNING document_id",
         list(cols.values()),
+    )
+
+
+def run_migrate(url, directory=None):
+    """Run the migration runner as its own process against `url`."""
+    env = {**os.environ, "DATABASE_URL": url}
+    if directory:
+        env["MDEIS_MIGRATIONS_DIR"] = str(directory)
+    return subprocess.run(
+        [sys.executable, "-m", "mdeis.db.migrate"], capture_output=True, text=True, env=env
     )

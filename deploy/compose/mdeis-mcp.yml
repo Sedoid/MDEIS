@@ -19,6 +19,45 @@ services:
         condition: service_healthy
     restart: "no"
 
+  # One-shot tool: loads the rulebook versions in ./templates into the database, then makes the
+  # vectors for their rules. `make load-criteria` runs it. Profile "tools": `make dev-up` does not
+  # start it. Safe to run twice. It writes to the database as the app role, nothing else.
+  rules:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: deploy/docker/mdeis-mcp.Dockerfile
+      target: runtime
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?set PYTHON_IMAGE in .env}
+    image: mdeis-mcp:local
+    container_name: rules-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    # The strict version first, so that v1 (the last one loaded) is the active one.
+    command:
+      - python
+      - -m
+      - mdeis.rulebook
+      - load
+      - /templates/v2-strict.yaml
+      - /templates/v1.yaml
+      - --require-embeddings
+    environment:
+      DATABASE_URL: postgresql://${MDEIS_APP_USER:?set MDEIS_APP_USER in .env}:${MDEIS_APP_PASSWORD:?set MDEIS_APP_PASSWORD in .env}@postgres:5432/${MDEIS_DB_NAME:?set MDEIS_DB_NAME in .env}
+      EMBEDDER_URL: http://embedder:8081
+      EMBED_DIM: ${EMBED_DIM:-768}
+      EMBED_MODEL_FILE: ${EMBED_MODEL_FILE:?set EMBED_MODEL_FILE in .env}
+    volumes:
+      - ./templates:/templates:ro
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      embedder:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
   mdeis-mcp:
     build:
       context: .
