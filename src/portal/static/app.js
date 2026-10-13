@@ -1,5 +1,5 @@
 "use strict";
-// The upload page. Everything shown is put in with textContent, never as markup.
+// The portal page. Everything shown is put in with textContent, never as markup.
 
 const $ = (id) => document.getElementById(id);
 const PLAIN = {
@@ -20,6 +20,8 @@ let me = null;
 let csrf = null;
 let timer = null;
 let config = {};
+const VIEWS = ["upload", "files", "chat"];
+const TITLES = { upload: "Upload", files: "Your files", chat: "Chat" };
 
 async function get(path) {
   const reply = await fetch(path, { credentials: "same-origin" });
@@ -39,6 +41,47 @@ function say(message, bad) {
   line.className = bad ? "message bad" : "message";
 }
 
+function applyTheme(name) {
+  if (name) document.documentElement.dataset.theme = name;
+  else delete document.documentElement.dataset.theme;
+}
+
+function savedTheme() {
+  try {
+    return localStorage.getItem("mdeis-theme");
+  } catch (error) {
+    return null;
+  }
+}
+
+function toggleTheme() {
+  const dark = document.documentElement.dataset.theme
+    ? document.documentElement.dataset.theme === "dark"
+    : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const next = dark ? "light" : "dark";
+  applyTheme(next);
+  try {
+    localStorage.setItem("mdeis-theme", next);
+  } catch (error) {
+    // storage is blocked: the choice lasts until the page is closed
+  }
+}
+
+// One view at a time, chosen by the address (#/upload, #/files, #/chat), so Back and links work.
+function route() {
+  if (!me) return;
+  const wanted = location.hash.replace("#/", "");
+  const name = VIEWS.includes(wanted) ? wanted : "upload";
+  for (const view of VIEWS) $("view-" + view).hidden = view !== name;
+  for (const link of document.querySelectorAll(".nav a")) {
+    if (link.dataset.view === name) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  }
+  $("main").classList.toggle("is-chat", name === "chat");
+  document.title = TITLES[name] + " · MDEIS";
+  $("main").scrollTop = 0;
+}
+
 async function start() {
   config = (await get("api/config")).body;
   $("chat-link").href = config.chat_url;
@@ -46,18 +89,19 @@ async function start() {
   if (who.status !== 200) return showSignIn();
   me = who.body;
   $("signin").hidden = true;
+  $("shell").hidden = false;
   $("signout").hidden = false;
-  $("who").textContent = "Signed in as " + me.name + (me.admin ? " (administrator)" : "");
-  $("upload").hidden = false;
-  $("status").hidden = false;
-  $("chat").hidden = false;
+  $("who-name").textContent = me.name;
+  $("who-role").hidden = !me.admin;
   $("form-methodology").hidden = !me.admin;
+  route();
   csrf = (await get("api/csrf")).body.csrf;
   await handOverLogin();
   if (config.frame_chat) {
     $("chat-frame").src = config.chat_url;
     $("chat-frame").hidden = false;
   }
+  $("chat-fallback").hidden = Boolean(config.frame_chat);
   await refresh();
 }
 
@@ -81,9 +125,8 @@ async function handOverLogin() {
 function showSignIn() {
   me = null;
   clearTimeout(timer);
-  $("who").textContent = "Not signed in";
-  $("signout").hidden = true;
-  for (const id of ["upload", "status", "chat"]) $(id).hidden = true;
+  document.title = "Sign in · MDEIS";
+  $("shell").hidden = true;
   $("chat-frame").removeAttribute("src");
   $("rows").replaceChildren();
   $("signin").hidden = false;
@@ -93,8 +136,10 @@ async function signIn(event) {
   event.preventDefault();
   const message = $("signin-message");
   message.textContent = "";
-  const button = event.target.querySelector("button");
+  const button = $("signin-button");
   button.disabled = true;
+  button.textContent = "Signing in…";
+  for (const id of ["email", "password"]) $(id).removeAttribute("aria-invalid");
   const reply = await fetch("api/signin", {
     method: "POST",
     credentials: "same-origin",
@@ -104,8 +149,11 @@ async function signIn(event) {
   const body = await reply.json().catch(() => ({}));
   $("password").value = "";
   button.disabled = false;
+  button.textContent = "Sign in";
   if (!reply.ok) {
     message.textContent = body.error || "Sign-in did not work.";
+    for (const id of ["email", "password"]) $(id).setAttribute("aria-invalid", "true");
+    $("password").focus();
     return;
   }
   await start();
@@ -141,15 +189,18 @@ async function review(doc, cell) {
   const full = await get("api/documents/" + encodeURIComponent(doc.document_id));
   const issues = (full.body.issues || []).map((issue) =>
     [issue.kind, issue.clause_id, issue.detail].filter(Boolean).join(": "));
-  cell.appendChild(text("div", issues.join("\n") || "No changes listed.", "diff"));
+  const box = document.createElement("details");
+  box.appendChild(text("summary", "Show the changes"));
+  box.appendChild(text("div", issues.join("\n") || "No changes listed.", "diff"));
   const command = "make ack DOC=" + doc.document_id;
-  const copy = text("button", "Copy the acknowledge command", "plain");
+  const copy = text("button", "Copy the acknowledge command", "btn ghost");
   copy.type = "button";
   copy.addEventListener("click", () => {
     if (navigator.clipboard) navigator.clipboard.writeText(command);
     copy.textContent = "Copied: " + command;
   });
-  cell.appendChild(copy);
+  box.appendChild(copy);
+  cell.appendChild(box);
 }
 
 async function refresh() {
@@ -160,16 +211,24 @@ async function refresh() {
   let busy = false;
   for (const doc of body.documents) {
     const row = document.createElement("tr");
-    row.appendChild(text("td", doc.original_name));
-    row.appendChild(text("td", doc.kind === "results" ? "Report card" : "Methodology"));
-    row.appendChild(text("td", PLAIN[doc.status] || doc.status, "s-" + doc.status));
-    const detail = text("td", describe(doc));
-    row.appendChild(detail);
+    const cell = (label, content) => {
+      const td = document.createElement("td");
+      td.dataset.label = label;
+      if (typeof content === "string") td.textContent = content;
+      else td.appendChild(content);
+      row.appendChild(td);
+      return td;
+    };
+    cell("File", doc.original_name);
+    cell("Kind", doc.kind === "results" ? "Report card" : "Methodology");
+    cell("Status", text("span", PLAIN[doc.status] || doc.status, "pill s-" + doc.status));
+    const detail = cell("Detail", describe(doc));
     rows.appendChild(row);
     busy = busy || doc.status === "pending" || doc.status === "processing";
     if (doc.status === "needs_review" && me.admin) review(doc, detail);
   }
   $("empty").hidden = body.documents.length > 0;
+  document.querySelector("table").hidden = body.documents.length === 0;
   clearTimeout(timer);
   if (busy) timer = setTimeout(refresh, 2000);
 }
@@ -200,15 +259,59 @@ async function submit(event) {
       say(file.name + ": " + (result.message || "not accepted."), true);
     }
   }
-  if (!failed) say(files.length === 1 ? "Uploaded." : files.length + " files uploaded.", false);
+  if (!failed) say((files.length === 1 ? "Uploaded." : files.length + " files uploaded.") +
+    " Progress is under Files.", false);
   form.reset();
+  form.querySelector(".picked").textContent = "";
   button.disabled = false;
   await refresh();
 }
 
+function pickedNames(form) {
+  const files = Array.from(form.elements.file.files);
+  form.querySelector(".picked").textContent = files.length
+    ? files.length + (files.length === 1 ? " file chosen: " : " files chosen: ") +
+      files.map((file) => file.name).join(", ")
+    : "";
+}
+
+function wireDrop(form) {
+  const zone = form.querySelector(".drop");
+  form.elements.file.addEventListener("change", () => pickedNames(form));
+  for (const name of ["dragenter", "dragover"]) {
+    zone.addEventListener(name, (event) => {
+      event.preventDefault();
+      zone.classList.add("over");
+    });
+  }
+  for (const name of ["dragleave", "drop"]) {
+    zone.addEventListener(name, () => zone.classList.remove("over"));
+  }
+  zone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    form.elements.file.files = event.dataTransfer.files;
+    pickedNames(form);
+  });
+}
+
+function revealPassword() {
+  const field = $("password");
+  const show = field.type === "password";
+  field.type = show ? "text" : "password";
+  $("reveal").textContent = show ? "Hide" : "Show";
+  $("reveal").setAttribute("aria-pressed", String(show));
+}
+
 document.addEventListener("DOMContentLoaded", () => {
-  for (const form of document.querySelectorAll(".box")) form.addEventListener("submit", submit);
+  applyTheme(savedTheme());
+  for (const form of document.querySelectorAll(".box")) {
+    form.addEventListener("submit", submit);
+    wireDrop(form);
+  }
   $("signin-form").addEventListener("submit", signIn);
   $("signout").addEventListener("click", signOut);
+  $("theme").addEventListener("click", toggleTheme);
+  $("reveal").addEventListener("click", revealPassword);
+  window.addEventListener("hashchange", route);
   start();
 });

@@ -6,25 +6,37 @@
 <title>MDEIS: records, read with care</title>
 <meta name="description" content="MDEIS reads one learner's school records across terms and years and reports what the data shows against the school's own rules. A named person releases every report.">
 <style>
-  :root { --bg:#fbfaf7; --ink:#1d2430; --muted:#566070; --line:#d9d6cc; --accent:#1f3864; --note:#fff6dc; }
+  :root { color-scheme: light; --bg:#fff; --surface:#f7f7f8; --ink:#18181b; --muted:#62626b;
+          --line:#e4e4e7; --primary:#18181b; --on-primary:#fff; --note:#fef3c7; --note-ink:#92400e; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#14181f; --ink:#e8e6e0; --muted:#a3acb9; --line:#2b323d; --accent:#9db7e8; --note:#2a2616; }
+    :root { color-scheme: dark; --bg:#171717; --surface:#1f1f1f; --ink:#ececec; --muted:#a1a1aa;
+            --line:#333; --primary:#ececec; --on-primary:#171717; --note:#3a2c0d; --note-ink:#fbbf24; }
   }
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font:18px/1.6 Georgia, "Times New Roman", serif; }
-  main { max-width: 44rem; margin: 0 auto; padding: 2.5rem 1rem 4rem; }
-  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 .25rem; color: var(--accent); }
-  h2 { font-size: 1.25rem; margin: 2.5rem 0 .5rem; color: var(--accent); }
-  p, li { max-width: 40rem; }
-  .sub { color: var(--muted); margin: 0 0 1.5rem; }
-  .note { background: var(--note); border-left: 4px solid var(--accent); padding: .75rem 1rem; margin: 1.5rem 0; }
-  ol, ul { padding-left: 1.25rem; }
-  li { margin: .35rem 0; }
-  a { color: var(--accent); }
-  footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem; color: var(--muted); font-size: .9rem; }
+  body { margin:0; background:var(--bg); color:var(--ink); -webkit-font-smoothing: antialiased;
+         font:17px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  .top { border-bottom:1px solid var(--line); background:var(--surface); }
+  .top div { max-width:44rem; margin:0 auto; padding:.8rem 1rem; display:flex; align-items:center; gap:.6rem;
+             font-weight:700; letter-spacing:.01em; }
+  .mark { display:grid; place-items:center; width:1.75rem; height:1.75rem; border-radius:.5rem;
+          background:var(--primary); color:var(--on-primary); font-size:.95rem; }
+  main { max-width:44rem; margin:0 auto; padding:2.5rem 1rem 4rem; }
+  h1 { font-size:2.25rem; line-height:1.15; letter-spacing:-.02em; margin:0 0 .5rem; }
+  h2 { font-size:1.2rem; margin:2.5rem 0 .5rem; letter-spacing:-.01em; }
+  p, li { max-width:40rem; }
+  .sub { color:var(--muted); margin:0 0 1.5rem; }
+  .note { background:var(--note); color:var(--note-ink); border-radius:.75rem; padding:.85rem 1.1rem; margin:1.5rem 0; }
+  ol, ul { padding-left:1.25rem; }
+  li { margin:.4rem 0; }
+  a { color:var(--ink); text-underline-offset:3px; }
+  a:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
+  code { font:.9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background:var(--surface);
+         border:1px solid var(--line); border-radius:.35rem; padding:.05rem .35rem; }
+  footer { margin-top:3rem; border-top:1px solid var(--line); padding-top:1rem; color:var(--muted); font-size:.9rem; }
 </style>
 </head>
 <body>
+<header class="top"><div><span class="mark" aria-hidden="true">M</span>MDEIS</div></header>
 <main>
   <h1>MDEIS</h1>
   <p class="sub">Multidimensional Educational Intelligence System. An entry for the African Agentic AI Design Challenge, Education track, "The Long View".</p>
