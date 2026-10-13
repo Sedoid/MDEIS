@@ -27,12 +27,13 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from . import security
-from .auth import OpenWebUIAuth, User
+from .auth import OpenWebUIAuth, Unavailable, User
 from .settings import MB, Settings, load_settings
 from .store import PgStore
 
 log = logging.getLogger("portal")
 STATIC = Path(__file__).parent / "static"
+SESSION_SECONDS = 7 * 24 * 3600  # how long the browser keeps the login cookie
 KINDS = {"results": (".pdf",), "methodology": (".pdf", ".md")}
 PDF_START = b"%PDF-"
 DOCUMENT_ID = re.compile(r"^D-[0-9]{6,}$")
@@ -102,6 +103,60 @@ def create_app(settings: Settings | None = None, auth=None, store=None) -> FastA
             "max_mb": config.max_bytes // MB,
             "max_markdown_mb": config.max_markdown_bytes // MB,
         }
+
+    throttle = security.Throttle()
+    secure_cookie = config.portal_public_url.startswith("https://")
+
+    @app.post("/api/signin")
+    async def signin(request: Request):
+        """The page's own sign-in form. Open WebUI checks the password; we keep nothing of it."""
+        if not own_origin(request):
+            return _say(403, "This request did not come from the page. Reload the page.")
+        try:
+            body = await request.json()
+        except ValueError:
+            body = None
+        email = body.get("email") if isinstance(body, dict) else None
+        password = body.get("password") if isinstance(body, dict) else None
+        if not (isinstance(email, str) and isinstance(password, str) and email and password):
+            return _say(400, "Enter your email and password.")
+        if throttle.blocked(email):
+            return _say(429, "Too many tries. Wait a minute and try again.")
+        try:
+            token = await auth.sign_in(email, password)
+        except Unavailable:
+            return _say(503, "Sign-in is not available right now. Try again in a moment.")
+        user = await auth.user_for(token) if token else None
+        if token is None:
+            throttle.failed(email)
+            return _say(401, "That email and password were not accepted.")
+        if user is None:
+            return _say(403, "This account is not active yet. Ask an administrator.")
+        response = JSONResponse({"id": user.id, "name": user.name, "admin": user.is_admin})
+        # The same cookie Open WebUI sets, on the same address, so the chat opens signed in.
+        response.set_cookie(
+            config.cookie_name, token, max_age=SESSION_SECONDS, path="/", httponly=True,
+            samesite="lax",
+            secure=secure_cookie or request.headers.get("x-forwarded-proto") == "https",
+        )
+        log.info("signed in user %s", user.id)
+        return response
+
+    @app.post("/api/signout")
+    async def signout(request: Request):
+        user = await who(request)
+        if user is None:
+            return _say(401, "You are not signed in.")
+        if not own_origin(request) or not security.csrf_ok(
+            config.session_secret, user.id, request.headers.get("x-csrf-token")
+        ):
+            return _say(403, "This request did not come from the page. Reload the page.")
+        token = request.cookies.get(config.cookie_name)
+        if token:
+            await auth.sign_out(token)
+        response = JSONResponse({"signed_out": True})
+        response.delete_cookie(config.cookie_name, path="/")
+        return response
 
     @app.get("/api/me")
     async def me(request: Request):

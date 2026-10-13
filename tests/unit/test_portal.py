@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from portal import app as portal  # noqa: E402
 from portal import security  # noqa: E402
-from portal.auth import OpenWebUIAuth, User  # noqa: E402
+from portal.auth import OpenWebUIAuth, Unavailable, User  # noqa: E402
 from portal.settings import MB, Settings  # noqa: E402
 
 SECRET = "portal-secret-not-real"
@@ -29,13 +29,23 @@ ORIGIN = {"Origin": "http://testserver"}
 
 
 class FakeAuth:
-    """Knows two tokens. Anything else is nobody."""
+    """Knows two tokens. Anything else is nobody. Two people can sign in."""
 
-    def __init__(self):
+    def __init__(self, down=False):
         self.users = {"ada-token": ADA, "ben-token": BEN}
+        self.logins = {("ada@example.org", "right"): "ada-token"}
+        self.down, self.signed_out = down, []
 
     async def user_for(self, token):
         return self.users.get(token)
+
+    async def sign_in(self, email, password):
+        if self.down:
+            raise Unavailable
+        return self.logins.get((email, password))
+
+    async def sign_out(self, token):
+        self.signed_out.append(token)
 
 
 class FakeStore:
@@ -118,6 +128,95 @@ def test_me_says_who_and_whether_admin(world):
 def test_the_bearer_header_also_works_for_the_cookie_name(world):
     client, _, _ = world
     assert client.get("/api/me", headers={"Authorization": "Bearer ada-token"}).status_code == 200
+
+
+# -- signing in through the portal ----------------------------------------------------------
+
+
+def sign_in(client, email="ada@example.org", password="right", **headers):
+    return client.post("/api/signin", json={"email": email, "password": password},
+                       headers={**ORIGIN, **headers})
+
+
+def test_signing_in_sets_the_login_cookie_and_gives_back_no_token(world):
+    client, _, _ = world
+    reply = sign_in(client)
+    assert reply.status_code == 200
+    assert reply.json() == {"id": "u-ada", "name": "Ada Teacher", "admin": True}
+    assert "ada-token" not in reply.text
+    cookie = reply.headers["set-cookie"].lower()
+    assert "token=ada-token" in cookie and "httponly" in cookie
+    assert "samesite=lax" in cookie and "path=/" in cookie and "max-age=" in cookie
+    assert "secure" not in cookie.replace("samesite", "")  # plain http in this test
+    assert client.get("/api/me").json()["name"] == "Ada Teacher"  # the jar now holds the cookie
+
+
+def test_the_cookie_is_secure_when_the_public_address_is_https(tmp_path):
+    app = portal.create_app(
+        settings(tmp_path, portal_public_url="https://school.example.org"),
+        auth=FakeAuth(), store=FakeStore())
+    reply = TestClient(app).post(
+        "/api/signin", json={"email": "ada@example.org", "password": "right"},
+        headers={"Origin": "https://school.example.org"})
+    assert reply.status_code == 200 and "secure" in reply.headers["set-cookie"].lower()
+
+
+def test_a_wrong_password_is_401_with_no_cookie_and_no_hint(world):
+    client, _, _ = world
+    reply = sign_in(client, password="wrong")
+    assert reply.status_code == 401
+    assert "set-cookie" not in reply.headers
+    assert "wrong" not in reply.text and "ada@example.org" not in reply.text
+    assert client.get("/api/me").status_code == 401
+
+
+def test_sign_in_with_webui_down_is_503(tmp_path):
+    app = portal.create_app(settings(tmp_path), auth=FakeAuth(down=True), store=FakeStore())
+    assert sign_in(TestClient(app)).status_code == 503
+
+
+@pytest.mark.parametrize("body", [{}, {"email": "a@b.c"}, {"email": "", "password": "x"},
+                                  {"email": 5, "password": "x"}, [], "text"])
+def test_a_bad_sign_in_body_is_400(world, body):
+    client, _, _ = world
+    assert client.post("/api/signin", json=body, headers=ORIGIN).status_code == 400
+    assert client.post("/api/signin", content=b"not json", headers=ORIGIN).status_code == 400
+
+
+def test_sign_in_from_another_origin_is_403(world):
+    client, _, _ = world
+    assert sign_in(client, Origin="https://evil.example").status_code == 403
+    assert client.post("/api/signin", json={"email": "ada@example.org", "password": "right"}
+                       ).status_code == 403
+
+
+def test_repeated_failures_are_slowed_down(world):
+    client, _, _ = world
+    codes = [sign_in(client, password=f"bad{i}").status_code for i in range(security.TRIES + 2)]
+    assert codes[: security.TRIES] == [401] * security.TRIES
+    assert codes[-1] == 429
+    assert sign_in(client).status_code == 429  # even the right password waits
+    assert sign_in(client, email="ben@example.org", password="x").status_code == 401  # others don't
+
+
+def test_the_password_is_never_logged(world, caplog):
+    client, _, _ = world
+    with caplog.at_level("DEBUG"):
+        sign_in(client, password="hunter2-not-real")
+        sign_in(client)
+    assert "hunter2-not-real" not in caplog.text and "ada-token" not in caplog.text
+
+
+def test_signing_out_needs_the_csrf_token_and_clears_the_cookie(world):
+    client, _, _ = world
+    sign_in(client)
+    assert client.post("/api/signout", headers=ORIGIN).status_code == 403
+    token = client.get("/api/csrf").json()["csrf"]
+    reply = client.post("/api/signout", headers={"X-CSRF-Token": token, **ORIGIN})
+    assert reply.status_code == 200
+    assert 'token=""' in reply.headers["set-cookie"] or "max-age=0" in reply.headers[
+        "set-cookie"].lower()
+    assert client.get("/api/me").status_code == 401
 
 
 # -- uploads ---------------------------------------------------------------------------------
@@ -302,6 +401,7 @@ def test_config_names_the_chat_address(world):
 def test_the_page_files_have_no_inline_script_or_style():
     folder = Path(portal.__file__).parent / "static"
     page = (folder / "index.html").read_text()
+    assert 'type="password"' in page and 'autocomplete="current-password"' in page
     assert "<script src=" in page and "<link" in page
     for bad in ("<style", "onclick=", "onload=", "javascript:", "http://", "https://"):
         assert bad not in page

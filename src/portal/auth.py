@@ -18,6 +18,9 @@ from typing import Protocol
 import httpx
 
 SESSION_PATH = "/api/v1/auths/"
+SIGNIN_PATH = "/api/v1/auths/signin"
+SIGNOUT_PATH = "/api/v1/auths/signout"
+REFUSED = (400, 401, 403)  # Open WebUI saying "not these credentials"
 CACHE_SECONDS = 30
 TIMEOUT_SECONDS = 5
 ROLES = ("admin", "user")
@@ -34,8 +37,14 @@ class User:
         return self.role == "admin"
 
 
+class Unavailable(Exception):
+    """Open WebUI could not be asked, or answered something unexpected."""
+
+
 class AuthBackend(Protocol):
     async def user_for(self, token: str | None) -> User | None: ...
+    async def sign_in(self, email: str, password: str) -> str | None: ...
+    async def sign_out(self, token: str) -> None: ...
 
 
 class OpenWebUIAuth:
@@ -68,6 +77,42 @@ class OpenWebUIAuth:
         if user:
             self._seen[key] = (self._clock(), user)
         return user
+
+    async def sign_in(self, email: str, password: str) -> str | None:
+        """Open WebUI checks the password. Returns its login token, or None if it said no."""
+        client = self._client or httpx.AsyncClient(timeout=TIMEOUT_SECONDS)
+        try:
+            reply = await client.post(
+                self.base_url + SIGNIN_PATH, json={"email": email, "password": password}
+            )
+        except httpx.HTTPError:
+            raise Unavailable from None
+        finally:
+            if self._client is None:
+                await client.aclose()
+        if reply.status_code in REFUSED:
+            return None
+        try:
+            token = reply.json()["token"]
+        except (ValueError, KeyError, TypeError):
+            raise Unavailable from None
+        if reply.status_code != httpx.codes.OK or not isinstance(token, str) or not token:
+            raise Unavailable
+        return token
+
+    async def sign_out(self, token: str) -> None:
+        """Ends the session at Open WebUI as well. Best effort: the cookie is cleared anyway."""
+        self._seen.pop(hashlib.sha256(token.encode("utf-8")).hexdigest(), None)
+        client = self._client or httpx.AsyncClient(timeout=TIMEOUT_SECONDS)
+        try:
+            await client.get(
+                self.base_url + SIGNOUT_PATH, headers={"Authorization": f"Bearer {token}"}
+            )
+        except httpx.HTTPError:
+            pass
+        finally:
+            if self._client is None:
+                await client.aclose()
 
 
 def read_user(reply: httpx.Response) -> User | None:

@@ -10,15 +10,22 @@
 <body>
   <header>
     <h1>MDEIS</h1>
-    <p id="who" class="who">Checking who is signed in…</p>
+    <p class="who"><span id="who">Checking who is signed in…</span>
+      <button id="signout" type="button" class="plain" hidden>Sign out</button></p>
   </header>
   <p class="banner">Practice data only. Do not upload real learner records.</p>
 
   <main>
-    <section id="signin" class="card" hidden>
-      <h2>Sign in first</h2>
-      <p>This page uses your Open WebUI sign-in. Open the chat, sign in, then come back and reload this page.</p>
-      <p><a id="signin-link" href="#" target="_blank" rel="noopener">Open the chat to sign in</a></p>
+    <section id="signin" class="card narrow" hidden>
+      <h2>Sign in</h2>
+      <form id="signin-form">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="username" required>
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button type="submit">Sign in</button>
+      </form>
+      <p id="signin-message" class="message bad" role="alert"></p>
     </section>
 
     <section id="upload" class="card" hidden>

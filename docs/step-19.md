@@ -135,3 +135,38 @@ CADDYFILE=Caddyfile.ip WEBUI_PUBLIC_URL=http://13.140.150.214:8088 \
 make dev-up
 make prod-down && make prod-up
 ```
+
+## Sign-in on the portal's own page (added after the first browser look)
+
+Nobody should meet the chat before the upload page. The portal now has its own sign-in form
+(`/portal/`), and the chat is only shown inside the page once you are in.
+
+- The form posts the email and password to the portal (`POST /api/signin`). The portal passes them
+  straight to Open WebUI's sign-in (`/api/v1/auths/signin`) from inside the network. Open WebUI is the
+  one that checks them. The portal stores no password, logs none, and returns no token to the page.
+- On success the portal sets the same login cookie that Open WebUI would have set (`token`, HttpOnly,
+  SameSite=Lax, Path=/, seven days; Secure when the public address is https). Because the chat and the
+  portal share one address (the Caddy port), the chat in the frame opens already signed in.
+- Wrong password: 401 with a plain message and no hint which half was wrong. Five wrong tries for one
+  email in a minute (50 for everyone) get 429. The request must come from the page's own address.
+- "Sign out" (needs the CSRF token) clears the cookie and ends the session at Open WebUI as well.
+- Accounts are still Open WebUI's. Create them there as before; nothing new to manage.
+
+**Unverified until you look:** that Open WebUI's page accepts a login that exists only as the cookie
+(its own page may expect a copy in the browser's storage). If the chat inside the page shows
+Open WebUI's sign-in screen after you signed in on the portal, tell me. The fix is small, because the
+two share an address and the portal page can hand the same login to it, but it means the page
+handles the token, so I would rather you confirm it is needed first.
+
+Server run sheet:
+
+```
+git pull
+make lint
+make test ARGS="tests/unit/test_portal.py tests/unit/test_site.py -q"
+make dev-up
+```
+
+Then open `http://13.140.150.214:8088/portal/` in a private window: you should see only a sign-in
+form. Sign in with the Open WebUI administrator login from `.env`. Check: your name appears, the
+upload boxes appear, the chat in the frame is already signed in. Try a wrong password. Try Sign out.

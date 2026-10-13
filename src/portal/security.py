@@ -6,8 +6,12 @@ import hashlib
 import hmac
 import re
 import time
+from collections import defaultdict, deque
 
 CSRF_SECONDS = 3600
+TRIES = 5  # wrong passwords allowed for one address in WINDOW seconds
+GLOBAL_TRIES = 50  # and for everyone together
+WINDOW = 60
 NAME_LIMIT = 200
 CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
@@ -57,3 +61,26 @@ def clean_name(raw: str | None) -> str:
     name = (raw or "").replace("\\", "/").rsplit("/", 1)[-1]
     name = CONTROL.sub("", name).strip()
     return name[:NAME_LIMIT] or "unnamed"
+
+
+class Throttle:
+    """Counts wrong passwords, so a guessing script is slowed down. Kept in memory only."""
+
+    def __init__(self, clock=time.monotonic):
+        self._clock = clock
+        self._by_name: dict[str, deque] = defaultdict(deque)
+        self._all: deque = deque()
+
+    def _recent(self, line: deque) -> int:
+        while line and self._clock() - line[0] > WINDOW:
+            line.popleft()
+        return len(line)
+
+    def blocked(self, name: str) -> bool:
+        key = name.strip().lower()
+        return self._recent(self._by_name[key]) >= TRIES or self._recent(self._all) >= GLOBAL_TRIES
+
+    def failed(self, name: str) -> None:
+        now = self._clock()
+        self._by_name[name.strip().lower()].append(now)
+        self._all.append(now)

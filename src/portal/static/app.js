@@ -41,15 +41,12 @@ function say(message, bad) {
 
 async function start() {
   config = (await get("api/config")).body;
-  $("signin-link").href = config.chat_url;
   $("chat-link").href = config.chat_url;
   const who = await get("api/me");
-  if (who.status !== 200) {
-    $("who").textContent = "Not signed in";
-    $("signin").hidden = false;
-    return;
-  }
+  if (who.status !== 200) return showSignIn();
   me = who.body;
+  $("signin").hidden = true;
+  $("signout").hidden = false;
   $("who").textContent = "Signed in as " + me.name + (me.admin ? " (administrator)" : "");
   $("upload").hidden = false;
   $("status").hidden = false;
@@ -61,6 +58,49 @@ async function start() {
   }
   csrf = (await get("api/csrf")).body.csrf;
   await refresh();
+}
+
+function showSignIn() {
+  me = null;
+  clearTimeout(timer);
+  $("who").textContent = "Not signed in";
+  $("signout").hidden = true;
+  for (const id of ["upload", "status", "chat"]) $(id).hidden = true;
+  $("chat-frame").removeAttribute("src");
+  $("rows").replaceChildren();
+  $("signin").hidden = false;
+}
+
+async function signIn(event) {
+  event.preventDefault();
+  const message = $("signin-message");
+  message.textContent = "";
+  const button = event.target.querySelector("button");
+  button.disabled = true;
+  const reply = await fetch("api/signin", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: $("email").value, password: $("password").value }),
+  });
+  const body = await reply.json().catch(() => ({}));
+  $("password").value = "";
+  button.disabled = false;
+  if (!reply.ok) {
+    message.textContent = body.error || "Sign-in did not work.";
+    return;
+  }
+  await start();
+}
+
+async function signOut() {
+  await fetch("api/signout", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "X-CSRF-Token": csrf },
+  });
+  csrf = null;
+  showSignIn();
 }
 
 function describe(doc) {
@@ -144,6 +184,8 @@ async function submit(event) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  for (const form of document.querySelectorAll("form")) form.addEventListener("submit", submit);
+  for (const form of document.querySelectorAll(".box")) form.addEventListener("submit", submit);
+  $("signin-form").addEventListener("submit", signIn);
+  $("signout").addEventListener("click", signOut);
   start();
 });
