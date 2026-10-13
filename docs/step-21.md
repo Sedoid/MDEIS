@@ -56,8 +56,8 @@ Check and paste back (a screenshot is best):
    history with a picture in it is accepted.)
 5. In the portal's Chat view (the frame), and on a phone width: does the picture fit?
 
-When done: `CHART_SPIKE= python3 scripts/set_env.py CHART_SPIKE` is not needed; to switch it off, set
-`CHART_SPIKE=` (empty) in `.env` and `make dev-up`. The hook is deleted in part 2.
+To switch the spike off, set `CHART_SPIKE=` (empty) in `.env` and run `make dev-up`. The hook is
+deleted in part 2.
 
 ## Part 2 (after the spike says SVG renders; not started)
 
