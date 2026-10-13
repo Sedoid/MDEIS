@@ -55,7 +55,9 @@ def test_an_areas_chart_has_the_range_the_trend_names(make_ctx, fx):
     assert drawn["terms"][-1]["band"] == trend["stage_gap"]["range"]
     window = trend["window"]
     assert drawn["series"][0]["values"][-len(window):] == [w["skill_value"] for w in window]
-    assert set(trend["clause_ids"]) >= set(drawn["band_clauses"])
+    # the chart shows every term, so it names the range rule of each stage it draws; the trend names
+    # only the stages of its window. The last stage's range rule is in both.
+    assert drawn["band_clauses"][-1] in trend["clause_ids"]
     assert drawn["band_legend"].startswith("Expected range for the stage (")
 
 
