@@ -23,6 +23,9 @@ services:
       - ./data:/app/data:ro
       - ./templates:/app/templates:ro
       - ./synthetic:/app/synthetic:ro
+      - ./site:/app/site:ro
+      - ./deploy/compose:/app/deploy/compose:ro
+      - ./deploy/caddy:/app/deploy/caddy:ro
       - ./pyproject.toml:/app/pyproject.toml:ro
     networks: [data]
     depends_on:
