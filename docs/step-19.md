@@ -152,7 +152,15 @@ Nobody should meet the chat before the upload page. The portal now has its own s
 - "Sign out" (needs the CSRF token) clears the cookie and ends the session at Open WebUI as well.
 - Accounts are still Open WebUI's. Create them there as before; nothing new to manage.
 
-**Unverified until you look:** that Open WebUI's page accepts a login that exists only as the cookie
+**Found on the first try (the guess below was right):** the cookie alone is not enough. Open WebUI's
+page keeps its own copy of the login in the browser's storage, so after the portal sign-in the chat
+still asked for a sign-in. Fixed: after sign-in the page asks the portal for the user's own token
+(`POST /api/chat-session`, needs the CSRF token and the page's origin) and puts it in the storage of
+this address, where Open WebUI reads it. Sign out removes it. The token never goes anywhere but the
+signed-in user's own browser, and the portal's strict content policy (no inline script, no outside
+script) is what protects it there.
+
+**Original note, kept for the record:** that Open WebUI's page accepts a login that exists only as the cookie
 (its own page may expect a copy in the browser's storage). If the chat inside the page shows
 Open WebUI's sign-in screen after you signed in on the portal, tell me. The fix is small, because the
 two share an address and the portal page can hand the same login to it, but it means the page

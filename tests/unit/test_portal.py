@@ -199,6 +199,20 @@ def test_repeated_failures_are_slowed_down(world):
     assert sign_in(client, email="ben@example.org", password="x").status_code == 401  # others don't
 
 
+def test_the_chat_hand_over_gives_the_users_own_login_only_with_the_csrf_token(world):
+    client, _, _ = world
+    assert client.post("/api/chat-session", headers=ORIGIN).status_code == 401
+    sign_in(client)
+    assert client.post("/api/chat-session", headers=ORIGIN).status_code == 403
+    token = client.get("/api/csrf").json()["csrf"]
+    other = {"Origin": "https://evil.example", "X-CSRF-Token": token}
+    assert client.post("/api/chat-session", headers=other).status_code == 403
+    reply = client.post("/api/chat-session", headers={"X-CSRF-Token": token, **ORIGIN})
+    assert reply.status_code == 200 and reply.json() == {"token": "ada-token"}
+    assert reply.headers["cache-control"] == "no-store"
+    assert client.get("/api/me").text.count("ada-token") == 0
+
+
 def test_the_password_is_never_logged(world, caplog):
     client, _, _ = world
     with caplog.at_level("DEBUG"):

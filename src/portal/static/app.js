@@ -52,12 +52,30 @@ async function start() {
   $("status").hidden = false;
   $("chat").hidden = false;
   $("form-methodology").hidden = !me.admin;
+  csrf = (await get("api/csrf")).body.csrf;
+  await handOverLogin();
   if (config.frame_chat) {
     $("chat-frame").src = config.chat_url;
     $("chat-frame").hidden = false;
   }
-  csrf = (await get("api/csrf")).body.csrf;
   await refresh();
+}
+
+// Open WebUI keeps its own copy of the login in this browser's storage and trusts that over the
+// cookie. The chat is on this same address, so the copy is put there before the chat is opened.
+async function handOverLogin() {
+  const reply = await fetch("api/chat-session", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "X-CSRF-Token": csrf },
+  });
+  if (!reply.ok) return;
+  const body = await reply.json().catch(() => ({}));
+  try {
+    if (body.token) localStorage.setItem("token", body.token);
+  } catch (error) {
+    // storage is blocked: the chat will ask for its own sign-in
+  }
 }
 
 function showSignIn() {
@@ -100,6 +118,11 @@ async function signOut() {
     headers: { "X-CSRF-Token": csrf },
   });
   csrf = null;
+  try {
+    localStorage.removeItem("token");
+  } catch (error) {
+    // nothing to remove
+  }
   showSignIn();
 }
 

@@ -142,6 +142,26 @@ def create_app(settings: Settings | None = None, auth=None, store=None) -> FastA
         log.info("signed in user %s", user.id)
         return response
 
+    @app.post("/api/chat-session")
+    async def chat_session(request: Request):
+        """Hands the user's own login to the page so it can give it to the chat on this address.
+
+        Open WebUI's page keeps a copy of its login in the browser's storage and trusts that over
+        the cookie. The page and the chat share one address, so the page can put it there. Only the
+        signed-in user gets their own token, and only from a request that carries the CSRF token.
+        """
+        user = await who(request)
+        if user is None:
+            return _say(401, "You are not signed in.")
+        if not own_origin(request) or not security.csrf_ok(
+            config.session_secret, user.id, request.headers.get("x-csrf-token")
+        ):
+            return _say(403, "This request did not come from the page. Reload the page.")
+        token = request.cookies.get(config.cookie_name)
+        if not token:  # signed in by a bearer header, not by the cookie: nothing to hand over
+            return _say(404, "There is no browser login to hand over.")
+        return {"token": token}
+
     @app.post("/api/signout")
     async def signout(request: Request):
         user = await who(request)
