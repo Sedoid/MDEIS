@@ -51,3 +51,28 @@ dependency change. Nothing here has been run in a browser or on the server yet.
 ## Open
 
 - Needs docs-keeper: add `docs/step-20.md` to the map if the structure check lists it.
+
+## Open WebUI: fewer buttons (added later)
+
+`deploy/compose/webui.yml` now switches off, for the "user" role: attaching files, the Controls panel
+(system prompt, parameters), temporary and shared chats, export, the workspace pages (models,
+knowledge, prompts, tools) and the extra features (web search, images, code, notes, folders, API keys).
+It also switches off, for everyone, code execution and interpreter, image generation, API keys,
+memories, folders, message rating, analytics, user status, calendar and automations. The names are
+from the Open WebUI environment reference. A file attached in the chat would reach the model without
+the tools and the citation check, which is the reason files go through the upload page.
+
+**Limits, said plainly:**
+- Open WebUI shows an **administrator** more of the screen whatever these say. I could not confirm
+  from the documentation which buttons an admin keeps; the attach button is the likely one. Check it
+  with the administrator login and with a second account made with the "user" role (Admin Panel →
+  Users). If the admin still sees it, tell me: the choices are to use a "user"-role account for the
+  chat, or to hide it in the portal's chat frame, which is fragile.
+- The Admin Panel and Settings screens are the product's own; there is no switch to hide individual
+  items. Switching off a feature removes its entry.
+- This is tidying, not a safety control. What keeps numbers and citations honest is the tool path,
+  not which buttons are visible.
+
+Server run sheet: `git pull`, `make test ARGS="tests/unit/test_webui_settings.py -q"`, then
+`make dev-up` (the webui container is recreated), and sign in as the administrator and as a "user"
+account. Paste what the message box and the "+" menu show for each.
