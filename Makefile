@@ -31,7 +31,7 @@ endif
 COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yml $(addprefix -f ,$(SERVICE_FILES))
 
 .PHONY: help env-init env-sync check-env check-docker models dev-config dev-build dev-up dev-down up down dev-ps \
-        dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules ingest ack \
+        dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules ingest ack token ask \
         test test-contract lint check practice-data \
         demo demo-data smoke clean \
         probe-embed probe-mcp probe-pg-mcp probe-n8n probe-orchestrator probe-portal
@@ -195,6 +195,14 @@ probe-n8n: $(ENV_FILE) ## n8n: POST to the echo webhook
 
 probe-orchestrator: $(ENV_FILE) ## Orchestrator: its health answer (database and mdeis-mcp checks)
 	@$(COMPOSE) exec -T mdeis-mcp python -c "import urllib.request; print(urllib.request.urlopen('http://orchestrator:8300/healthz', timeout=10).read().decode())"
+
+token: $(ENV_FILE) ## A five-minute approver token for testing by hand:  make token ID=u-ada NAME="Ada Teacher"
+	@test -n "$(ID)" -a -n "$(NAME)" || { echo 'usage: make token ID=u-ada NAME="Ada Teacher"' >&2; exit 1; }
+	@$(COMPOSE) exec -T mdeis-mcp python - "$(ID)" "$(NAME)" < scripts/mint_token.py
+
+ask: $(ENV_FILE) ## Ask the orchestrator directly, no gateway:  make ask Q="How is L-0001 doing in English?" [TOKEN=...]
+	@test -n "$(Q)" || { echo 'usage: make ask Q="your question" [TOKEN=from make token]' >&2; exit 1; }
+	@$(COMPOSE) exec -T orchestrator python - "$(Q)" "$(TOKEN)" < scripts/ask_orchestrator.py
 
 probe-portal: $(ENV_FILE) ## Portal: its health answer, from inside the network
 	@$(COMPOSE) exec -T gateway python -c "import urllib.request; print(urllib.request.urlopen('http://portal:8080/healthz', timeout=10).read().decode())"

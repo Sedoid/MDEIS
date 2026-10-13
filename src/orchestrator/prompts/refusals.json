@@ -1,0 +1,20 @@
+[
+  {
+    "reason": "I do not rank learners or compare one learner with others. I can describe one learner's records against the stage standard.",
+    "patterns": [
+      "\\b(who|which (student|learner|pupil))\\b.{0,30}\\b(best|worst|top|bottom|weakest|strongest|smartest)\\b",
+      "\\b(best|worst|top|bottom|weakest|strongest)\\s+(student|learner|pupil|performer)s?\\b",
+      "\\b(rank|ranks|ranking|ranked)\\b|\\bleague table\\b",
+      "\\bcompare\\b.{0,60}\\b(to|with|against)\\b.{0,40}\\b(classmates?|others?|other (students|learners|pupils)|peers?)\\b",
+      "\\b(who is|who's|which (student|learner|pupil) is)\\b.{0,20}\\b(better|ahead|behind)\\b"
+    ]
+  },
+  {
+    "reason": "I do not suggest pathways, subject choices or careers. A teacher can discuss those with the family using the records I describe.",
+    "patterns": [
+      "\\b(which|what)\\b.{0,30}\\b(subjects?|stream|track|pathway|career|course)\\b.{0,30}\\b(should|ought|choose|pick|take)\\b",
+      "\\b(career|pathway|stream) (advice|suggestion|recommendation)",
+      "\\bshould (he|she|they|the (student|learner|pupil))\\b.{0,30}\\b(do|study|take|choose|become)\\b"
+    ]
+  }
+]
