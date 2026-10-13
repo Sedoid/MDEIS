@@ -7,19 +7,21 @@ MDEIS reads one learner's school records across subjects, terms and years, and r
 data shows against a **criteria template the school supplies**. Every finding cites the records
 and the template clauses behind it. A **named human approver** must release every report.
 
-> **Status: build in progress (window closes 15 Oct 2026).** Sections marked **Planned** describe
-> the design in `docs/SPEC.md`. They are not delivered features until the status table below says
-> so. Nothing here claims a test passed that has not been run. Results are committed under
+> **Status: build in progress (window closes 15 Oct 2026).** This README says what exists and what has
+> been run, and nothing more. "Run" means run on the author's server with the output kept; "written"
+> means the code and its tests exist but have not been run yet. Results are committed under
 > `evals/results/` once they exist.
 
 | Part | Status |
 | --- | --- |
 | Design, tool contracts, test plan | Written (`docs/`) |
-| Criteria templates and loader | Planned |
-| Synthetic data generator | Planned |
-| Database and migrations | Planned |
-| MCP server tools | Planned |
-| Orchestrator (LangGraph), Open WebUI, OpenRouter, n8n automations | Planned |
+| Criteria templates (a normal and a stricter one) and their loader, database and migrations, the diary, the synthetic practice school and its answer key | Built and run on the author's server |
+| The seven tools and the MCP server, with the contract tests that define them | Written, awaiting a server run |
+| Report-card and methodology readers, the document worker, version pins | Written, awaiting a server run |
+| Orchestrator (a plain tool loop, and the LangGraph agent), the gateway | Written, awaiting a server run |
+| Class view (counts only) | Written and **locked**: off, and not listed, unless switched on |
+| Public page and reverse proxy | Written, not deployed |
+| `make demo` (the one command) | **Planned** until it has passed from a fresh clone on a clean machine |
 | Evaluation results | None yet. `EVALS.md` will quote real runs only |
 
 **All data in this repository is synthetic.** There are no real learners, names, photos or
@@ -91,53 +93,36 @@ Details: [`ARCHITECTURE.md`](ARCHITECTURE.md), [`docs/SPEC.md`](docs/SPEC.md) an
 
 ## Setup/installation instructions
 
-**Planned.** Prerequisites: Docker with Compose, and `make`. You supply
-your own keys; **no key or secret is ever committed**.
+You need a server or computer with Docker (with the Compose plugin), `make`, `python3` and `git`, and
+your own OpenRouter key. **No key or secret is ever committed.** Everything runs in containers.
 
 ```bash
-git clone <this repo> && cd MDEIS
-cp .env.example .env     # then fill in the values in the table below
-make demo                # the one command
+git clone https://github.com/Sedoid/MDEIS && cd MDEIS
+make env-init            # makes .env with random secrets; then edit the lines marked for you
+make dev-config          # checks that every variable is set
+make dev-up              # downloads the embedding model, builds and starts everything
+make demo-data           # loads the rulebook, the methodology and the practice report cards
 ```
 
-`make demo` is designed to: check that `.env` is complete (and say exactly which variables are
-missing), start the services, apply the database migrations, load the template and the synthetic
-data, wait until everything reports healthy, run a smoke test, and print the address to open. It
-is safe to run twice. `make clean` removes the containers and data volumes.
+Then open `http://127.0.0.1:3000` and sign in with the administrator account named in `.env`.
+`make demo` is meant to do all of this in one command and to check each step; **it is Planned**
+and this README will not call it done until it has passed from a fresh clone with only `.env`
+edited. `make clean` removes the containers and the data volumes. `make help` lists every command.
 
-### Values you provide
-
-`.env.example` is the source of truth and has a one-line comment for every variable. The names
-below are the plan. Each service's task adds its own and updates the file.
-
-| Variable | Needed | What it is and where it comes from |
-| --- | --- | --- |
-| `OPENROUTER_API_KEY` | yes | Your key from openrouter.ai |
-| `OPENROUTER_MODEL` | yes | The pinned open-weights model slug (see D-007) |
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | yes | Any values you choose for the local database |
-| `DATABASE_URL` | yes | Built from the three values above |
-| `APPROVER_TOKEN_SECRET` | yes | A long random string you generate. It signs the approver token (D-003) |
-| `WEBUI_SECRET_KEY` | yes | A long random string for Open WebUI sessions |
-| `N8N_ENCRYPTION_KEY`, `N8N_DB_PASSWORD`, `N8N_AUTO_DB_PASSWORD`, `N8N_OPENROUTER_API_KEY` | yes | Long random strings you generate for n8n, and a key for its model calls (may be the same value as `OPENROUTER_API_KEY`) |
-| `ORCHESTRATOR_DB_PASSWORD`, `ORCHESTRATOR_API_KEY` | yes | Long random strings you generate: the orchestrator's database password, and the key the gateway uses to call it |
-| `JEV_MODE` | no | `off` (default), `shadow` or `hold`. Turns on the optional Jev wording check (D-016) |
-| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` | no | Only if you want tracing |
-
-Generate a random string with `openssl rand -hex 32`.
+The values you provide are the ones `make env-init` marks for you: your OpenRouter key and the
+open-weights model name (`OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and optionally
+`OPENROUTER_PROVIDER`), and the administrator's email and password for Open WebUI.
+`.env.example` is the source of truth and has a comment for every variable.
 
 For development:
 
 ```bash
-make dev-up      # build and start every container, wait until healthy
-make dev-down    # stop everything, keep the data
-make dev-ps      # state and health of each container
-make migrate     # apply database migrations
-make test        # unit and acceptance tests
+make test        # unit and acceptance tests, in a container
+make test-contract   # only the tool contract tests
+make lint        # ruff
 make check       # structure check and secret scan
+make dev-health  # proves the wiring and the safety properties of the running stack
 ```
-
-Until these commands land, this section is a plan. We will not call the one-command run done
-until it has been run from a fresh clone on a clean machine with only `.env` edited.
 
 ## Usage instructions
 
@@ -163,7 +148,7 @@ data, with no code change. That is the proof that rules live in the template.
 | Layer | Choice |
 | --- | --- |
 | Interface | Open WebUI, behind a small FastAPI gateway |
-| Orchestration | LangGraph (Python, open source) runs the agent in its own `orchestrator` container. n8n (open source) runs automations beside it |
+| Orchestration | LangGraph (Python, open source) runs the agent in its own `orchestrator` container, with a plain tool loop as the fallback. n8n (open source) runs automations beside it |
 | Optional second check | Jev (`typesafe/jev-1.13`) through OpenRouter. Third-party, not open-weights, off by default. It can only hold a draft |
 | Model | A pinned open-weights model through OpenRouter (provider order fixed, fallbacks off, data collection denied). The model slug is recorded in D-007 once chosen |
 | Our MCP server | Python 3.12 and the official MCP Python SDK, Streamable HTTP |
@@ -207,7 +192,7 @@ be in `TOOLS.md` once the tools exist.
 
 ## MCP tools/servers
 
-**Ours (the MDEIS server). Planned.**
+**Ours (the MDEIS server). Written, awaiting a server run.**
 
 | Tool | Kind | What it does |
 | --- | --- | --- |
@@ -218,16 +203,23 @@ be in `TOOLS.md` once the tools exist.
 | `draft_summary` | write | Stores the model's text as a pending report |
 | `check_citations` | read | Rejects uncited, unsourced or banned-word text |
 | `release_report` | **acting, the gate** | Releases a checked report. Needs a valid approver |
-| `stage_gap_counts` | read, **locked** | Counts only, no names, one school. Not built until the safety tests pass |
+| `stage_gap_counts` | read, **locked** | Counts only, no names, one school, groups below the template's minimum hidden. Written but off: not listed unless switched on by a named person |
 
-**Borrowed.** A read-only Postgres MCP server, used for inspection queries. The exact server and
-the reason for choosing it will be recorded here and in `docs/DECISIONS.md` when wired in.
+**Borrowed.** [crystaldba/postgres-mcp](https://github.com/crystaldba/postgres-mcp) (MIT licence), in
+its restricted read-only mode and connected with a database role that can only SELECT, so a write is
+refused twice. The model may use four of its lookups (`list_schemas`, `list_objects`,
+`get_object_details`, `execute_sql`). Numbers the model gets from it are not findings: the citation
+check only accepts numbers that the school's own tools returned.
 
-**Reused code.** n8n runs the automation workflows. The orchestrator uses LangGraph, `langchain-openai` and `langchain-mcp-adapters`
-(open source, versions pinned in `pyproject.toml`, D-015). It does not use LangChain retrievers or
-agent executors. The optional Jev check (D-016) is a third-party model reached through
-OpenRouter. It is not open-weights, it is off by default, and it can only hold a draft. One more
-tool, `record_verification`, stores its result. It is not in the model's tool list.
+**Reused open-source software.** Nothing here is hidden: Open WebUI (the interface), Postgres and
+pgvector, llama.cpp with the nomic-embed-text-v1.5 embedding model, n8n (automations beside the
+agent), LangGraph (the agent graph), the official MCP Python SDK, FastAPI and uvicorn, psycopg,
+pydantic, PyYAML, httpx, pdfplumber (reads the report cards), Caddy (the optional public proxy),
+and for development pytest, ruff and fpdf2 (draws the practice report cards). The optional Jev
+check (D-016) is a third-party model reached through OpenRouter. It is not open-weights, it is off by
+default, and it can only hold a draft. One more tool, `record_verification`, stores its result. It is
+not in the model's tool list. The orchestrator calls the model with plain HTTP and the MCP SDK; it
+does not use LangChain's model or MCP adapters.
 
 ## Human-in-the-loop workflow
 
@@ -259,7 +251,7 @@ agent layer that runs five times each and reports the spread. Results will be co
 
 ## Limitations
 
-- **Not built yet.** See the status table. This README will say what works and what was tested,
+- **Mostly not yet run.** See the status table. This README says what works and what was tested,
   and nothing more.
 - **Synthetic data only.** Real-world messiness, real handwriting and real school records are
   untested. The template values in `v1` are placeholders until a teacher confirms them.
@@ -268,8 +260,10 @@ agent layer that runs five times each and reports the spread. Results will be co
 - **Small-model risk.** An open-weights model can write a poor sentence. The citation checker
   catches missing sources and banned words, but not every poor phrasing, which is why a person
   approves.
-- **Class view is locked.** It is built only after the safety tests pass and an approver is
-  named. When built: counts only, no names, a minimum group size from the template, one school.
+- **Class view is locked.** The code exists but is off. It is switched on only after the safety
+  tests pass and an approver is named. Counts only, no names, a minimum group size from the
+  template, one school. A shown group can still point at one child ("below: 1"); that is a known
+  weakness.
 - **The diary is protected from edits, but not from its own owner.** The action log refuses
   UPDATE, DELETE and TRUNCATE three ways: the tools' database role has no such rights, a trigger
   refuses them, and each line is chained to the one before it, so `verify_action_log()` shows a

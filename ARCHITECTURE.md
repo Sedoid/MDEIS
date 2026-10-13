@@ -5,8 +5,9 @@ supplies. It never decides, ranks or recommends for a person. A named human appr
 that leaves the system.
 
 **Status: design, with the build in progress.** The two diagrams below show what is being set up.
-Parts that are optional are marked as such. What has actually been run, and the results, are in
-`EVALS.md` once real runs exist (planned). This page does not claim a test has passed.
+Parts that are optional are marked as such. The README has a table of what is built, what has been
+run and what is still planned; the results are in `EVALS.md` once real runs exist. This page does
+not claim a test has passed.
 
 The diagrams are SVG files in [`docs/img/`](docs/img/). Open them on their own to read the small
 text at full size.
@@ -40,10 +41,15 @@ refuse without a valid approver. See [`docs/SPEC.md`](docs/SPEC.md) section 5.
 
 The full design adds four things to the foundation. None of them can release a report.
 
-- **The LangGraph graph** replaces the plain loop in the orchestrator. The order is fixed
-  (ingest, trend, draft, check, verify, release) and the loop for open issues sits inside it.
-  State is checkpointed in the orchestrator's own database, so a question to the approver can be
-  answered in a later turn. If the graph slips, the plain loop stays (`ORCHESTRATOR_MODE=linear`).
+- **The LangGraph graph** replaces the plain loop in the orchestrator (`ORCHESTRATOR_MODE=graph`).
+  The model still chooses tools and writes the words; the graph decides in code what must not
+  depend on it: a request to rank or advise is refused before the model is called, a problem that
+  blocks a subject ends the turn with a plain question to the approver, `check_citations` runs
+  after every draft (at most two redrafts, then a plain stop), and `release_report` is offered
+  only for a draft that passed the check and was shown in an earlier turn. The conversation is the
+  state: the question and the "passed the check" line are messages that Open WebUI keeps, so a
+  question can be answered in a later turn without a checkpoint. The plain loop stays as the
+  fallback (`ORCHESTRATOR_MODE=linear`, the default until the graph has run on the server).
 - **A borrowed MCP server** (`pg-mcp-ro`): a read-only Postgres server, run with a role that can
   only `SELECT`. It is the borrowed server the challenge asks for.
 - **Jev, a second check (optional, D-016).** A small decision model, reached through OpenRouter,
@@ -81,7 +87,7 @@ The full design adds four things to the foundation. None of them can release a r
 
 ## 4. How documents come in
 
-The upload path has no model in it. The portal saves the file and records a row. `ingestd` claims
+The upload path has no model in it. The portal (or `make ingest`) saves the file and records a row. `ingestd` claims
 the row, parses the report card with word positions from the page (a fixed layout, checked
 against the totals printed on the card), parses the school's methodology document into numbered
 sections, writes the records with page references, and compares a new methodology with the
@@ -94,7 +100,7 @@ under, so a later change makes an old draft stale instead of silently different.
 
 | Secret or power | Held by | Not held by |
 | --- | --- | --- |
-| Approver-signing secret | `gateway` | Every other container. The gateway is not reachable from the host |
+| Approver-signing secret | `gateway` signs; `mdeis-mcp` only checks | Every other container. The gateway is not reachable from the host |
 | Model key for the agent | `orchestrator` | `gateway`, `mdeis-mcp`, `ingestd`, `portal` |
 | Model key for annotations | `n8n`, its own key | The agent path |
 | Write access to learner records | `mdeis-mcp` and `ingestd` (role `mdeis_app`) | `orchestrator`, `n8n`, `pg-mcp-ro`. `portal` can only add and read document rows |
@@ -102,7 +108,8 @@ under, so a later change makes an old draft stale instead of silently different.
 
 Three Docker networks separate the browser-facing containers, the agent path and the data. The
 data network is internal. Only Open WebUI and the portal are published, and only on the local
-address by default. Ports, roles, networks and the start order are in
+address by default. An optional reverse proxy (`make prod-up`, off by default) is the only part
+meant to be public: it forwards to Open WebUI and serves one static page. Ports, roles, networks and the start order are in
 [`docs/CONTAINERS.md`](docs/CONTAINERS.md).
 
 ## 6. What the design guarantees, and what enforces it

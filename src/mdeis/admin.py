@@ -2,6 +2,7 @@
 
     python -m mdeis.admin load-criteria templates/v2-strict.yaml templates/v1.yaml --by "Ada"
     python -m mdeis.admin ingest --kind results --file card.pdf --as "Ada Teacher"
+    python -m mdeis.admin ingest-dir --kind results --dir data/synthetic/cards --as "Demo loader"
     python -m mdeis.admin ack-methodology D-000012 --by "Ada Teacher" --note "checked 6.4"
 
 `load-criteria` does what `python -m mdeis.rulebook load` does, and takes the same options. The
@@ -34,6 +35,7 @@ USAGE = (
     "usage:\n"
     "  python -m mdeis.admin load-criteria FILE [FILE ...] [--by NAME] [--no-activate]\n"
     '  python -m mdeis.admin ingest --kind results|methodology --file PATH --as "Name"\n'
+    '  python -m mdeis.admin ingest-dir --kind results --dir FOLDER --as "Name"\n'
     '  python -m mdeis.admin ack-methodology D-000012 --by "Name" [--note "..."]'
 )
 
@@ -50,43 +52,83 @@ def copy_into_inbox(source: Path, inbox: Path) -> tuple[str, str, int]:
     return stored, digest.hexdigest(), size
 
 
+def ingest_file(url: str, inbox: Path, kind: str, source: Path, name: str) -> tuple[str, dict]:
+    """Store one file as a document and read it now. Returns (document id, what happened)."""
+    stored, digest, size = copy_into_inbox(source, inbox)
+    with psycopg.connect(url) as conn:
+        document_id = conn.execute(
+            "INSERT INTO documents (kind, original_name, stored_name, sha256, size_bytes, "
+            "uploader_id, uploader_name) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING document_id",
+            (kind, source.name, stored, digest, size, f"cli:{name}", name),
+        ).fetchone()[0]
+        conn.commit()
+    diary.write(
+        "admin_ingest",
+        inputs={"document_id": document_id, "kind": kind, "sha256": digest, "by": name},
+        outputs={"stored": True},
+        outcome="ok",
+        url=url,
+    )
+    return document_id, worker.run_once(url, inbox, only=document_id) or {}
+
+
+def describe(document_id: str, kind: str, summary: dict) -> list[str]:
+    where = ""
+    if summary.get("page"):
+        row = f", row {summary['row']}" if summary.get("row") else ""
+        where = f" (page {summary['page']}{row})"
+    first = f"{document_id}: {kind} {summary.get('status', 'not processed')}"
+    lines = [f"{first} {summary.get('failure_kind', '')}{where}".rstrip()]
+    if summary.get("duplicate_of"):
+        lines.append(f"  the same file as {summary['duplicate_of']}: nothing added")
+    for key in ("records", "subjects", "sections", "issues"):
+        if key in summary:
+            lines.append(f"  {key}: {summary[key]}")
+    return lines
+
+
+def worked(summary: dict) -> bool:
+    return summary.get("status") in ("done", "needs_review")
+
+
 def ingest(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="python -m mdeis.admin ingest")
     parser.add_argument("--kind", choices=("results", "methodology"), required=True)
     parser.add_argument("--file", required=True)
     parser.add_argument("--as", dest="name", required=True, help="who is uploading it")
     args = parser.parse_args(argv)
-    source, url = Path(args.file), os.environ["DATABASE_URL"]
+    source = Path(args.file)
     if not source.is_file():
         print(f"There is no file at {source}.", file=sys.stderr)
         return 1
-    inbox = worker.inbox_dir()
-    stored, digest, size = copy_into_inbox(source, inbox)
-    with psycopg.connect(url) as conn:
-        document_id = conn.execute(
-            "INSERT INTO documents (kind, original_name, stored_name, sha256, size_bytes, "
-            "uploader_id, uploader_name) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING document_id",
-            (args.kind, source.name, stored, digest, size, f"cli:{args.name}", args.name),
-        ).fetchone()[0]
-        conn.commit()
-    diary.write(
-        "admin_ingest",
-        inputs={"document_id": document_id, "kind": args.kind, "sha256": digest, "by": args.name},
-        outputs={"stored": True},
-        outcome="ok",
-        url=url,
-    )
-    summary = worker.run_once(url, inbox, only=document_id) or {}
-    where = ""
-    if summary.get("page"):
-        row = f", row {summary['row']}" if summary.get("row") else ""
-        where = f" (page {summary['page']}{row})"
-    print(f"{document_id}: {args.kind} {summary.get('status', 'not processed')}", end="")
-    print(f" {summary.get('failure_kind', '')}{where}".rstrip())
-    for key in ("records", "subjects", "sections", "issues"):
-        if key in summary:
-            print(f"  {key}: {summary[key]}")
-    return 0 if summary.get("status") in ("done", "needs_review") else 1
+    url, inbox = os.environ["DATABASE_URL"], worker.inbox_dir()
+    document_id, summary = ingest_file(url, inbox, args.kind, source, args.name)
+    print("\n".join(describe(document_id, args.kind, summary)))
+    return 0 if worked(summary) else 1
+
+
+def ingest_dir(argv: list[str]) -> int:
+    """Read every PDF in a folder, in name order. One line for each, then a count."""
+    parser = argparse.ArgumentParser(prog="python -m mdeis.admin ingest-dir")
+    parser.add_argument("--kind", choices=("results", "methodology"), required=True)
+    parser.add_argument("--dir", required=True)
+    parser.add_argument("--as", dest="name", required=True, help="who is uploading them")
+    args = parser.parse_args(argv)
+    folder = Path(args.dir)
+    files = sorted(folder.glob("*.pdf")) if folder.is_dir() else []
+    if not files:
+        print(f"There are no PDF files in {folder}.", file=sys.stderr)
+        return 1
+    url, inbox = os.environ["DATABASE_URL"], worker.inbox_dir()
+    failed = 0
+    for source in files:
+        document_id, summary = ingest_file(url, inbox, args.kind, source, args.name)
+        ok = worked(summary)
+        failed += not ok
+        note = "" if ok else f"  <-- {summary.get('failure_kind', 'not processed')}"
+        print(f"{'ok  ' if ok else 'FAIL'}  {source.name}: {summary.get('status')}{note}")
+    print(f"\n{len(files) - failed} of {len(files)} read; {failed} failed")
+    return 0 if not failed else 1
 
 
 def ack_methodology(argv: list[str]) -> int:
@@ -118,6 +160,8 @@ def main(argv: list[str] | None = None) -> int:
         return rulebook.main([COMMANDS[command], *rest])
     if command == "ingest":
         return ingest(rest)
+    if command == "ingest-dir":
+        return ingest_dir(rest)
     if command == "ack-methodology":
         return ack_methodology(rest)
     print(USAGE, file=sys.stderr)

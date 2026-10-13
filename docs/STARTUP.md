@@ -1,7 +1,10 @@
 # STARTUP: the starting folder, the environment variables, and the first run
 
-Status on 2026-10-11: **written, not yet run.** The commands below are untested until the first
-run on the server. The result of that run goes in `docs/log/T-004.md`.
+Status on 2026-10-13: the start-up commands (`make env-init`, `make dev-config`, `make dev-up`,
+`make migrate`, `make load-criteria`, `make dev-health`) have been run on the author's server. The
+document and agent commands added since (`make demo-data`, `make ingest`, `make ack`, `make ask`,
+`make prod-up`) are written and not yet run. `make demo`, the one command, is **planned** until it
+passes from a fresh clone.
 
 Everything runs on the server. Nothing needs to be installed on your own machine except `git`.
 The server needs Docker with the Compose plugin, `make`, `python3` and `curl`.
@@ -27,7 +30,7 @@ MDEIS/
 ├── scripts/                  helpers the Makefile calls (env, model download, health, probes)
 ├── src/
 │   ├── mdeis/                our MCP server: core/ (calculations), tools/, db/ (migrations)
-│   └── gateway/              the FastAPI gateway between Open WebUI and n8n
+│   └── gateway/              the FastAPI gateway between Open WebUI and the orchestrator
 ├── templates/                criteria templates (empty until T-001)
 ├── workflows/                n8n workflow exports (empty until T-011)
 ├── synthetic/  data/         synthetic data generator and its output (empty until T-002)

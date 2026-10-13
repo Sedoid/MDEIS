@@ -31,7 +31,7 @@ endif
 COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yml $(addprefix -f ,$(SERVICE_FILES))
 
 .PHONY: help env-init env-sync check-env check-docker models dev-config dev-build dev-up dev-down up down dev-ps \
-        dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules ingest ack token ask probe-gateway prod-config prod-up prod-down prod-check \
+        dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules ingest ingest-dir ack token ask probe-gateway prod-config prod-up prod-down prod-check \
         test test-contract lint check practice-data \
         demo demo-data smoke clean \
         probe-embed probe-mcp probe-pg-mcp probe-n8n probe-orchestrator probe-portal
@@ -117,20 +117,20 @@ demo: ## Check .env and Docker, start, migrate, load data, health, smoke test, p
 	@echo "== 8/8 Done"
 	@python3 scripts/demo_banner.py
 
-# Step 5 of `make demo`. It calls only targets that exist. It must not load data by direct SQL, and
-# it must not pretend: if a target is missing it stops and says which one.
-demo-data:
-	@missing=""; for t in load-criteria ingest; do \
-	  $(MAKE) -n --no-print-directory $$t >/dev/null 2>&1 || missing="$$missing $$t"; done; \
-	if [ -n "$$missing" ]; then \
-	  echo "STOPPED: make demo cannot load the template and the demo documents yet." >&2; \
-	  echo "         These make targets are not built:$$missing" >&2; \
-	  echo "         The stack is running, but it has no data. Nothing was loaded." >&2; \
-	  exit 1; \
-	fi; \
-	echo "STOPPED: load-criteria and ingest exist, but make demo is not told which documents to load." >&2; \
-	echo "         Edit the demo-data target in the Makefile (document kinds and file paths)." >&2; \
-	exit 1
+# Step 5 of `make demo`: the rulebook, the methodology, and the practice school's report cards. Every
+# part is safe to run twice (the same file again adds nothing). It loads through the same admin
+# commands a person would run, never by direct SQL.
+DEMO_METHODOLOGY ?= data/synthetic/methodology/methodology-v2.0.md
+DEMO_CARDS       ?= data/synthetic/cards
+DEMO_BY          ?= Demo loader
+
+demo-data: $(ENV_FILE) ## Load the rulebook, the methodology and the practice cards (what make demo does in step 5)
+	@echo "-- rulebook"
+	@$(MAKE) --no-print-directory load-criteria
+	@echo "-- methodology: $(DEMO_METHODOLOGY)"
+	@$(MAKE) --no-print-directory ingest KIND=methodology FILE="$(DEMO_METHODOLOGY)" AS="$(DEMO_BY)"
+	@echo "-- report cards: $(DEMO_CARDS)"
+	@$(MAKE) --no-print-directory ingest-dir KIND=results DIR="$(DEMO_CARDS)" AS="$(DEMO_BY)"
 
 smoke: $(ENV_FILE) ## Call one tool for one fixture learner, from inside the network
 	@$(COMPOSE) exec -T mdeis-mcp python - < scripts/smoke.py
@@ -158,6 +158,11 @@ ingest: $(ENV_FILE) ## Read one document:  make ingest KIND=results FILE=data/sy
 	@test -n "$(FILE)" -a -n "$(AS)" || { echo 'usage: make ingest KIND=results|methodology FILE=path AS="Your Name"' >&2; exit 1; }
 	@test -f "$(FILE)" || { echo "There is no file at $(FILE)." >&2; exit 1; }
 	@$(COMPOSE) --profile tools run --rm --build -v "$(abspath $(FILE)):/upload/$(notdir $(FILE)):ro" admin ingest --kind "$(or $(KIND),results)" --file "/upload/$(notdir $(FILE))" --as "$(AS)"
+
+ingest-dir: $(ENV_FILE) ## Read every PDF in a folder:  make ingest-dir KIND=results DIR=data/synthetic/cards AS="Ada Teacher"
+	@test -n "$(DIR)" -a -n "$(AS)" || { echo 'usage: make ingest-dir KIND=results DIR=folder AS="Your Name"' >&2; exit 1; }
+	@test -d "$(DIR)" || { echo "There is no folder at $(DIR)." >&2; exit 1; }
+	@$(COMPOSE) --profile tools run --rm --build -v "$(abspath $(DIR)):/upload:ro" admin ingest-dir --kind "$(or $(KIND),results)" --dir /upload --as "$(AS)"
 
 ack: $(ENV_FILE) ## Put a methodology that needs review in force:  make ack DOC=D-000012 BY="Ada Teacher" NOTE="checked 6.4"
 	@test -n "$(DOC)" -a -n "$(BY)" || { echo 'usage: make ack DOC=D-000012 BY="Your Name" [NOTE="..."]' >&2; exit 1; }
