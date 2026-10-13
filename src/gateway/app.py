@@ -246,16 +246,14 @@ async def orchestrator_events(make_client, settings: Settings, run: dict):
 
 
 async def whole_answer(events) -> str:
-    """The finished answer of a run, or the plain error."""
-    pieces, answer = [], None
+    """The finished answer of a run, the plain error, or a note that it stopped without one."""
+    answer = None
     async for name, data in events:
-        if name == "token":
-            pieces.append(data["text"])
-        elif name == "final":
+        if name == "final":
             answer = data["answer"]
         elif name == "error":
             return data["text"]
-    return answer if answer is not None else (UNAVAILABLE if not pieces else INTERRUPTED)
+    return answer if answer is not None else INTERRUPTED
 
 
 async def stream_events(request_id: str, events):
