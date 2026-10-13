@@ -50,11 +50,8 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 markers = [
     "integration: needs a running Postgres with pgvector (DATABASE_URL); skipped otherwise",
-    "contract: tests of the tools, written before the tools (Step 7). They fail until Step 8 builds them",
+    "contract: tests of the tools, written before the tools (Step 7). Step 8 built the tools to pass them",
 ]
-# The contract tests are left out of a normal run until the tools exist. `make test-contract` runs
-# them (its own -m overrides this). When Step 8 is done, delete the next line.
-addopts = "-m 'not contract'"
 
 [tool.ruff]
 line-length = 100

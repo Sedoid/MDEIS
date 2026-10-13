@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke test: call a tool end to end for one fixture learner. Standard library only.
+"""Smoke test: call a real tool end to end through the MCP server. Standard library only.
 
 Runs inside the network, through a container that has python (`make smoke` does this):
     docker compose exec -T mdeis-mcp python - < scripts/smoke.py
@@ -9,23 +9,23 @@ Steps, each printed as PASS or FAIL:
   1. the gateway answers its health check
   2. the MCP server answers its health check
   3. the MCP server lists its tools
-  4. the learner tool exists and is not the stub
-  5. the learner tool returns a result for the fixture learner, with no error
+  4. the tool exists and is not the stub
+  5. the tool returns a result, with no error
   6. the same call a second time returns the same result (numbers come from code, so they repeat)
 
 Exit 1 on the first failure, with a plain sentence. It prints no secret and does not need one.
 
-UNCONFIRMED: LEARNER_TOOL and LEARNER_ARGS below are my best reading of the planned tool and the
-README example learner. They have not been checked against the real tool, because the real tools
-are not built yet. Confirm both against the tool contract when the first learner tool lands.
+The tool called is get_criterion with the rule ID TR-2: it needs the rulebook loaded (`make
+load-criteria`) but no learner data, so the smoke test works on a clean stack before any card is
+uploaded. Step 8 replaced the placeholder `ping` tool with the seven real tools.
 """
 import json
 import sys
 import urllib.error
 import urllib.request
 
-LEARNER_TOOL = "compute_trend"
-LEARNER_ARGS = {"learner_id": "L-0007"}
+LEARNER_TOOL = "get_criterion"
+LEARNER_ARGS = {"query": "TR-2"}
 STUB_TOOLS = {"ping"}  # placeholder tools that do not count
 
 MCP_URL = sys.argv[1] if len(sys.argv) > 1 else "http://mdeis-mcp:8100/mcp"
@@ -111,9 +111,9 @@ def main() -> int:
 
         real = [n for n in names if n not in STUB_TOOLS]
         step(LEARNER_TOOL in names,
-             f"learner tool '{LEARNER_TOOL}' is offered",
+             f"tool '{LEARNER_TOOL}' is offered",
              f"the tool '{LEARNER_TOOL}' is not offered. The server offers: {', '.join(names)}. "
-             + ("Only a placeholder tool is built so far, so the smoke test cannot check a learner yet."
+             + ("Only a placeholder tool is built so far, so the smoke test cannot check a tool yet."
                 if not real else "Check LEARNER_TOOL in scripts/smoke.py."))
 
         results = []
@@ -127,7 +127,7 @@ def main() -> int:
             results.append(json.dumps(result, sort_keys=True))
             if len(results) == 1:
                 step(bool(result.get("content") or result.get("structuredContent")),
-                     f"'{LEARNER_TOOL}' returned a result for the fixture learner",
+                     f"'{LEARNER_TOOL}' returned a result",
                      "the tool returned an empty result")
         step(results[0] == results[1], "a second identical call returns the same result",
              "two identical calls returned different results")

@@ -157,7 +157,7 @@ search-rules: $(ENV_FILE) ## Find rules by meaning:  make search-rules Q="expect
 test: $(ENV_FILE) ## Run pytest in a container (ARGS="-m integration" to pass options)
 	$(COMPOSE) --profile test run --rm --build test pytest $(ARGS)
 
-test-contract: $(ENV_FILE) ## Run the tool contract tests (Step 7). They fail until the tools exist (Step 8), then must pass
+test-contract: $(ENV_FILE) ## Run only the tool contract tests (Steps 7 and 8). They all must pass; `make test` runs them too
 	$(COMPOSE) --profile test run --rm --build test pytest -m contract tests/acceptance/test_tools_contract.py $(ARGS)
 
 lint: $(ENV_FILE) ## Run ruff in a container

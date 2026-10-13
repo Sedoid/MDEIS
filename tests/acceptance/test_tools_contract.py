@@ -297,11 +297,12 @@ def test_a_clear_decline_cites_its_records_and_its_rules(make_ctx, fx):
 
 def test_a_score_out_of_100_gives_the_same_trend_as_the_same_score_out_of_20(make_ctx, fx):
     """E-03. FX-03b's marks are out of 100: converted with a warning, the same result as FX-03a."""
-    out_of_20 = trend(make_ctx(), fx["FX-03a"]["gen_id"], "Mathematics")
-    out_of_100 = trend(make_ctx(), fx["FX-03b"]["gen_id"], "Mathematics")
+    ctx = make_ctx()  # one context: two open ones would wait on each other's uncommitted problem rows
+    out_of_20 = trend(ctx, fx["FX-03a"]["gen_id"], "Mathematics")
+    out_of_100 = trend(ctx, fx["FX-03b"]["gen_id"], "Mathematics")
     for field in ("trend", "change", "level"):
         assert out_of_20[field] == out_of_100[field], field
-    ingest = tool("ingest_assessments")(make_ctx(), learner_id=fx["FX-03b"]["gen_id"])
+    ingest = tool("ingest_assessments")(ctx, learner_id=fx["FX-03b"]["gen_id"])
     assert any(i["kind"] == "denominator_unexpected" for i in ingest["issues"])
     converted = [r["score"] for r in ingest["records"] if r["subject"] == "Mathematics"]
     assert converted == ["10.00", "12.00", "14.00"]
