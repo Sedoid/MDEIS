@@ -15,4 +15,5 @@ def healthz() -> dict:
 
 @app.get("/v1/models")
 def models() -> dict:
-    return {"object": "list", "data": [{"id": "mdeis-assistant", "object": "model", "owned_by": "mdeis"}]}
+    model = {"id": "mdeis-assistant", "object": "model", "owned_by": "mdeis"}
+    return {"object": "list", "data": [model]}
