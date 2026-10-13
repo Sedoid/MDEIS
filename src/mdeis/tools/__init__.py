@@ -1,9 +1,10 @@
-"""The seven tools. Each is a plain function `tool(ctx, **arguments)`. The server wraps them.
+"""The eight tools. Each is a plain function `tool(ctx, **arguments)`. The server wraps them.
 
 The approver is in `ctx`, set from the verified token. No tool takes one as an argument.
 """
 
 from .citations import check_citations
+from .chart import make_chart
 from .class_view import stage_gap_counts
 from .criterion import get_criterion
 from .draft import draft_summary
@@ -18,6 +19,7 @@ __all__ = [
     "draft_summary",
     "get_criterion",
     "ingest_assessments",
+    "make_chart",
     "release_report",
     "resolve_issue",
     "stage_gap_counts",

@@ -209,6 +209,21 @@ def test_message_parts_from_open_webui_are_read_as_text(make):
     assert json.loads(orchestrator.runs()[0].content)["messages"][0]["content"] == "How is Amina?"
 
 
+def test_a_chart_picture_in_the_history_is_not_sent_on(make):
+    orchestrator = Orchestrator()
+    picture = "![Chart: Mathematics](data:image/svg+xml;base64," + "QUJD" * 5000 + ")"
+    body = {"messages": [
+        {"role": "user", "content": "Show Mathematics"},
+        {"role": "assistant", "content": f"It rose.\n\n{picture}\n\nRecords: [A-000001]."},
+        {"role": "user", "content": "And English?"},
+    ]}
+    post(make(orchestrator), body)
+    sent = json.loads(orchestrator.runs()[0].content)["messages"]
+    assert "base64" not in json.dumps(sent) and len(json.dumps(sent)) < 1000
+    assert "[a chart was shown here]" in sent[1]["content"]
+    assert "Records: [A-000001]" in sent[1]["content"]
+
+
 def test_the_chat_id_open_webui_sends_is_the_conversation_id(make):
     orchestrator = Orchestrator()
     post(make(orchestrator), headers={**SIGNED_IN, "X-OpenWebUI-Chat-Id": "chat-77"})

@@ -47,6 +47,7 @@ TOOL_NAMES = [
     "get_criterion",
     "draft_summary",
     "check_citations",
+    "make_chart",
     "release_report",
 ]
 HANDLES = [

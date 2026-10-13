@@ -16,9 +16,6 @@ services:
       ORCHESTRATOR_URL: http://orchestrator:8300
       ORCHESTRATOR_API_KEY: ${ORCHESTRATOR_API_KEY:?set ORCHESTRATOR_API_KEY in .env}
       MDEIS_MCP_URL: http://mdeis-mcp:8100/mcp
-      # TEMPORARY, for the chart spike: set CHART_SPIKE=1 in .env, and the message "chart test"
-      # answers with one fixed sample chart. Leave it unset otherwise.
-      CHART_SPIKE: ${CHART_SPIKE:-}
     networks: [edge, agent]
     depends_on:
       orchestrator:

@@ -15,6 +15,7 @@ MDEIS_TOOLS = (
     "get_criterion",
     "draft_summary",
     "check_citations",
+    "make_chart",
     "release_report",
 )
 APPROVER_LIKE = {"approver", "approver_id", "approver_name", "user", "user_id", "by"}

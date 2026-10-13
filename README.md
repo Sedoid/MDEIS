@@ -16,7 +16,7 @@ and the template clauses behind it. A **named human approver** must release ever
 | --- | --- |
 | Design, tool contracts, test plan | Written (`docs/`) |
 | Criteria templates (a normal and a stricter one) and their loader, database and migrations, the diary, the synthetic practice school and its answer key | Built and run on the author's server |
-| The seven tools and the MCP server, with the contract tests that define them | Written, awaiting a server run |
+| The eight tools and the MCP server, with the contract tests that define them | Written, awaiting a server run |
 | Report-card and methodology readers, the document worker, version pins | Written, awaiting a server run |
 | Orchestrator (a plain tool loop, and the LangGraph agent), the gateway | Written, awaiting a server run |
 | Class view (counts only) | Written and **locked**: off, and not listed, unless switched on |

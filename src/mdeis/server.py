@@ -1,4 +1,4 @@
-"""The MDEIS MCP server (Streamable HTTP): seven tools, no model, no model key.
+"""The MDEIS MCP server (Streamable HTTP): eight tools, no model, no model key.
 
 Each tool here only translates an MCP call into a call of the plain function in `mdeis.tools`.
 The two things the model must not control are read from the HTTP headers the orchestrator sets,
@@ -144,6 +144,19 @@ def draft_summary(
 @mcp.tool(description=_about(tools.check_citations))
 def check_citations(request: Context, report_id: str) -> dict:
     return _run(request, tools.check_citations, report_id=report_id)
+
+
+@mcp.tool(description=_about(tools.make_chart))
+def make_chart(
+    request: Context, learner_id: str, skills: list[str], template_version: str | None = None
+) -> dict:
+    return _run(
+        request,
+        tools.make_chart,
+        learner_id=learner_id,
+        skills=skills,
+        template_version=template_version,
+    )
 
 
 @mcp.tool(description=_about(tools.release_report))

@@ -81,7 +81,7 @@ def test_the_server_lists_it_only_when_it_is_switched_on(monkeypatch):
 
     try:
         listed = {t.name for t in asyncio.run(server.mcp.list_tools())}
-        assert "stage_gap_counts" not in listed and len(listed) == 7
+        assert "stage_gap_counts" not in listed and len(listed) == 8
         monkeypatch.setenv("CLASS_VIEW_ENABLED", "true")
         server = importlib.reload(server)
         assert "stage_gap_counts" in {t.name for t in asyncio.run(server.mcp.list_tools())}

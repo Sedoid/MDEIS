@@ -32,7 +32,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Annotated, Any, TypedDict
 
-from . import guards, loop, tools
+from . import chart_reply, guards, loop, tools
 from .model import ModelError, ToolCall
 
 END = "__end__"
@@ -61,6 +61,7 @@ class State(TypedDict, total=False):
     questions: list  # blocking problems found by the last tools, to ask about
     report: str  # a draft that still has to be checked
     draft_text: str  # the words of the draft that was saved, exactly as saved
+    charts: list  # make_chart results to draw under the answer
     ready: str  # a draft that passed the check in this run
     steps: int
     redrafts: int
@@ -233,6 +234,7 @@ def build(deps: Deps) -> Machine:
     async def act(state: State) -> dict:
         conversation, called = list(state["conversation"]), list(state["called"])
         drafted, events = set(state["drafted"]), []
+        charts = list(state.get("charts", []))
         asked_now = set(state["asked"]) | deps.earlier_asked
         questions, seen, report, draft_text = [], set(), None, ""
         for call in state["pending"]:
@@ -241,6 +243,8 @@ def build(deps: Deps) -> Machine:
             content = guards.scrub(json.dumps(result, default=str), deps.token)
             conversation.append({"role": "tool", "tool_call_id": call.id, "content": content})
             events.append(event("status", text=f"Used {call.name}."))
+            if chart_reply.is_chart(call.name, result):
+                charts.append(result)
             if call.name in ("ingest_assessments", "compute_trend"):
                 for q in questions_from(result, asked_now):
                     if q["issue_id"] not in seen:
@@ -257,6 +261,7 @@ def build(deps: Deps) -> Machine:
             "questions": questions,
             "report": report or "",
             "draft_text": draft_text or state["draft_text"],
+            "charts": charts,
             "events": events,
         }
 
@@ -322,7 +327,7 @@ def build(deps: Deps) -> Machine:
         outcome = state.get("outcome", "answer")
         if outcome == "error":
             return {"events": []}
-        text = state.get("answer", "")
+        text = chart_reply.compose(state.get("answer", ""), state.get("charts", []))
         if state.get("ready"):
             text += saved_text(state["ready"], state.get("draft_text", ""))
             text += ready_footer(state["ready"])
@@ -379,6 +384,7 @@ def initial_state(conversation: list) -> State:
         questions=[],
         report="",
         draft_text="",
+        charts=[],
         ready="",
         steps=0,
         redrafts=0,

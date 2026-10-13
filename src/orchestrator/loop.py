@@ -20,7 +20,7 @@ import json
 import re
 from pathlib import Path
 
-from . import guards, tools
+from . import chart_reply, guards, tools
 from .model import ModelError
 
 PROMPT_FILE = Path(__file__).parent / "prompts" / "system.md"
@@ -42,7 +42,10 @@ def event(name: str, **data) -> dict:
 def conversation_from(messages: list, token: str | None) -> list:
     """The model's view of the conversation: user and assistant text, the token taken out."""
     kept = [m for m in messages if m["role"] in KEPT_ROLES]
-    return [{"role": m["role"], "content": guards.scrub(m["content"], token)} for m in kept]
+    return [
+        {"role": m["role"], "content": chart_reply.strip_images(guards.scrub(m["content"], token))}
+        for m in kept
+    ]
 
 
 def latest_user_text(messages: list) -> str:
@@ -104,7 +107,7 @@ async def run(*, messages: list, token: str | None, run_id: str, settings, model
     definitions, owner, _dropped = tools.bind(listed, settings.pg_tools, settings.class_view)
     conversation = [{"role": "system", "content": system_prompt()}]
     conversation += conversation_from(messages, token)
-    called, drafted = [], set()
+    called, drafted, charts = [], set(), []
     for step in range(settings.max_steps):
         yield event("status", text="Thinking." if not step else "Working on it.")
         try:
@@ -113,7 +116,8 @@ async def run(*, messages: list, token: str | None, run_id: str, settings, model
             yield event("error", text=str(error))
             return
         if not reply.calls:
-            for item in final_events(guards.scrub(reply.text, token), called, run_id):
+            answer = chart_reply.compose(guards.scrub(reply.text, token), charts)
+            for item in final_events(answer, called, run_id):
                 yield item
             return
         conversation.append(
@@ -133,6 +137,8 @@ async def run(*, messages: list, token: str | None, run_id: str, settings, model
         for call in reply.calls:
             result = await execute(call, owner, servers, last_user, drafted)
             called.append(call.name)
+            if chart_reply.is_chart(call.name, result):
+                charts.append(result)
             content = guards.scrub(json.dumps(result, default=str), token)
             conversation.append({"role": "tool", "tool_call_id": call.id, "content": content})
             yield event("status", text=f"Used {call.name}.")
@@ -140,5 +146,5 @@ async def run(*, messages: list, token: str | None, run_id: str, settings, model
         "I reached my step limit before I finished. "
         "Ask me to carry on, or ask a narrower question."
     )
-    for item in final_events(note, called, run_id, incomplete=True):
+    for item in final_events(chart_reply.compose(note, charts), called, run_id, incomplete=True):
         yield item

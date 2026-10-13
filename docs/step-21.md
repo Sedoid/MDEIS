@@ -68,20 +68,87 @@ between the axis labels, the legend rows and the source line.
 Not yet checked: the light theme, click-to-enlarge, a second message in the same chat (history with a
 picture in it), and the portal's frame at phone width.
 
-## Part 2 (SVG renders; not started)
+## Part 2: charts from real records (built, not yet run on the server)
 
-1. Tests first: the chart's numbers equal the `compute_trend` window for that run; blocked or thin
-   data gives no chart and a stated reason; another learner's data is refused; the gateway strips
-   images from the history; a model-written image is removed.
-2. A read-only tool `make_chart(learner_id, skill, template_version)` in `mdeis-mcp`. It recomputes
-   with the same functions as `compute_trend` (so its `result_hash` matches that call), reads the scale
-   and ranges from the rulebook, and returns a chart id, the caption (record ids, clause ids) and the
-   picture. Logged like every call. **This adds a tool: it needs your approval**, and the contract doc
-   `SPEC.md` needs a section for it, which I cannot edit.
-3. The orchestrator keeps the picture out of the model's context and appends it, with the caption, to
-   the final reply; it asks for a chart only when the person asked for one (chart, graph, plot).
-4. Fallback if SVG does not render: a markdown table with a text sparkline; or a mermaid chart.
+**Approved by you:** a new tool, `make_chart` (the tool count goes from seven to eight). The contract
+docs `SPEC.md` and `TESTS.md` need a section for it and for E-23; I cannot edit them. Three existing
+tests were changed because the count changed, and each change is only the new name or number:
+`TOOL_NAMES` in `tests/acceptance/test_tools_contract.py`, the `== 7` in
+`tests/acceptance/test_class_view.py`, and the names of two unit tests. No test was weakened.
+
+### What a teacher can ask for
+- "Show Amina's Mathematics over the years": one line, every stored score, term by term.
+- "Show Mathematics, Chemistry and Physics together": up to six lines on one axis, told apart by
+  colour, marker shape and dash, each named at its end and in the legend.
+- "Show literacy" (a learning area): one line with the expected range of each stage shaded, labelled
+  with its clause, and the distance of the last score from the nearest edge of the range.
+- One learner only. No chart of one learner against another, and none of a group.
+
+### How it works
+1. The model calls `make_chart(learner_id, skills[])`. The tool (`src/mdeis/tools/chart.py`,
+   `src/mdeis/core/chartdata.py`) reads the same records and rulebook as `compute_trend` and returns
+   the scores (two places, as the other tools give them), the records, the rules, the rulebook
+   version and a `result_hash`. A subject with an unanswered problem, or with fewer scores than the
+   rulebook asks for, is left off and listed in `excluded` with the reason. A term without a score is
+   a gap in the line, never a zero. The result is small and goes to the diary like every call.
+2. The model never receives a picture. After it has written its answer, the orchestrator
+   (`src/orchestrator/chart_reply.py`) draws the picture from the tool result with plain code
+   (`src/mdeis/chart_image.py`: no model, no script, no outside address, same input same bytes) and
+   adds it under the model's words, with a caption: the records `[A-…]`, the rules `[TR-1]`, and any
+   subject that was not drawn and why.
+3. Anything image-like in the model's own words is removed, so the model cannot draw or link a picture.
+4. Pictures in earlier turns are taken out of the conversation before it reaches the model (in the
+   gateway and again in the orchestrator), so a picture is never sent again with later questions.
+5. The scale and the ranges come from the rulebook, never from the drawing code. The spike hook
+   (`chart test`) and the `CHART_SPIKE` switch are deleted. (Your `.env` still has `CHART_SPIKE=1`; it
+   is no longer read. Remove the line if you like.)
+
+### Files
+| Path | What |
+| --- | --- |
+| `src/mdeis/core/chartdata.py` | what to draw, from records and rules (pure) |
+| `src/mdeis/chart_image.py` | the drawing (pure). Outside `core/` because it holds layout numbers, not school numbers |
+| `src/mdeis/tools/chart.py`, `server.py`, `tools/__init__.py` | the tool |
+| `src/orchestrator/chart_reply.py`, `loop.py`, `graph.py`, `tools.py`, `prompts/system.md` | draw, attach, strip, allow-list, instructions |
+| `src/gateway/app.py` | picture taken out of the history |
+| `tests/unit/test_chartdata.py`, `test_charts.py`, `test_orchestrator_chart.py`, `test_gateway.py` | unit tests (written first for the data and the drawing) |
+| `tests/acceptance/test_chart_tool.py` | the tool on the practice cohort: chart scores equal `compute_trend`'s, range equals its range, blocked subject left off with its question, same input same hash, refusals, diary line |
+
+### Static checks run here (not a pytest run)
+The chart data and chart drawing functions were called directly with Python against a stand-in
+rulebook and all drawing tests passed; the orchestrator's `compose` and `strip_images` were called
+directly and gave the expected text; all files compile. A twelve-term, three-subject chart and a
+one-area chart with its range were drawn to a picture and looked right. The database and loop tests
+were not run (they need the server).
+
+### Server run sheet
+```
+git fetch && git checkout step-21-charts && git pull
+make lint
+make test ARGS="tests/unit -q"
+make test-contract
+make dev-up
+```
+Expect lint clean, the unit tests passing, and `make test-contract` passing with 8 tools. Paste the output.
+
+Then in the chat (a learner with at least three terms, for example the one from your earlier runs):
+1. "Show a chart of <learner>'s English over the terms." One line, scores listed under the picture.
+2. "Show Mathematics, English and Chemistry together for <learner>." Three lines, a legend, names at the
+   ends of the lines.
+3. "Show a chart of literacy for <learner>." The shaded range and the distance bracket.
+4. Ask for a subject with an open problem in the records: it should be left off, with the reason, and
+   the others drawn.
+5. Send a follow-up question in the same chat: it should answer normally and the picture should not
+   be repeated or quoted.
+Paste screenshots or the answers. Check the numbers on the picture against `make ask` or the
+learner's card.
 
 ## Cut order if time runs short
 The two-version comparison chart (not planned for the first cut), then the shaded range, then the
 gap bracket. The table with the numbers is the floor.
+
+## Not done
+- A keyword check that forces a chart when the person writes "chart" (the model decides from its
+  instructions; a miss is possible).
+- Light-theme and phone-width checks of the picture; click-to-enlarge.
+- The comparison of the same learner under two rulebook versions.
