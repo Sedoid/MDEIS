@@ -1,12 +1,12 @@
 """Set-up for the tool contract tests (docs/step-07.md).
 
-It builds a throwaway schema from the migrations, loads both rulebook versions, and loads the practice
-cohort the way the card reader will eventually load it: one `documents` row per printed card, one
-`report_cards` and `card_subjects` set with the values the card printed, and one `assessments` row per
-term score, each with its card, page and row.
+It builds a throwaway schema from the migrations, loads both rulebook versions, and loads the
+practice cohort the way the card reader will eventually load it: one `documents` row per printed
+card, one `report_cards` and `card_subjects` set with the values the card printed, and one
+`assessments` row per term score, each with its card, page and row.
 
-Nothing here is a tool. It is the stage the tools are tested on. A score is stored as printed (`score`,
-`raw_score`, `denominator`): converting to the template's scale is the tools' job.
+Nothing here is a tool. It is the stage the tools are tested on. A score is stored as printed
+(`score`, `raw_score`, `denominator`): converting to the template's scale is the tools' job.
 """
 
 import hashlib
@@ -27,7 +27,7 @@ def database_url():
 
 
 def build_schema(url):
-    """Create a throwaway schema, apply every migration in it. Returns (name, url pointing at it)."""
+    """Create a throwaway schema and apply every migration in it. Returns (name, its url)."""
     name = "mdeis_tools_" + os.urandom(4).hex()
     with psycopg.connect(url, autocommit=True) as admin:
         admin.execute(f'CREATE SCHEMA "{name}"')
@@ -124,8 +124,8 @@ def load_cohort(scoped_url, learners, cards):
                     )
                 for term, raw in enumerate(subject["terms"], start=1):
                     conn.execute(
-                        "INSERT INTO assessments (learner_id, subject, score, academic_year, stage, "
-                        "term, coefficient, denominator, raw_score, source_document_id, "
+                        "INSERT INTO assessments (learner_id, subject, score, academic_year, "
+                        "stage, term, coefficient, denominator, raw_score, source_document_id, "
                         "source_page, source_row) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                         (
                             learner_id,
