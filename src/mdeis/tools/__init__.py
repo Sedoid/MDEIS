@@ -4,6 +4,7 @@ The approver is in `ctx`, set from the verified token. No tool takes one as an a
 """
 
 from .citations import check_citations
+from .class_view import stage_gap_counts
 from .criterion import get_criterion
 from .draft import draft_summary
 from .ingest import ingest_assessments
@@ -19,4 +20,5 @@ __all__ = [
     "ingest_assessments",
     "release_report",
     "resolve_issue",
+    "stage_gap_counts",
 ]

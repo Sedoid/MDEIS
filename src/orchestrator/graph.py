@@ -408,7 +408,7 @@ async def run(
 ):
     """The events of one run. `engine` is `langgraph`, `plain`, or None for LangGraph if present."""
     listed = {name: await server.list_tools() for name, server in servers.items()}
-    definitions, owner, _dropped = tools.bind(listed, settings.pg_tools)
+    definitions, owner, _dropped = tools.bind(listed, settings.pg_tools, settings.class_view)
     conversation = [{"role": "system", "content": loop.system_prompt(graph=True)}]
     conversation += loop.conversation_from(messages, token)
     visible = [m for m in messages if m["role"] in loop.KEPT_ROLES]

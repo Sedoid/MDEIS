@@ -17,6 +17,8 @@ services:
       ORCHESTRATOR_MODE: ${ORCHESTRATOR_MODE:-linear}
       ORCHESTRATOR_MAX_STEPS: ${ORCHESTRATOR_MAX_STEPS:-8}
       ORCHESTRATOR_MAX_REDRAFTS: ${ORCHESTRATOR_MAX_REDRAFTS:-2}
+      # Offer the class view to the model only when it is switched on (it is locked by default).
+      CLASS_VIEW_ENABLED: ${CLASS_VIEW_ENABLED:-false}
       ORCHESTRATOR_DATABASE_URL: postgresql://${ORCHESTRATOR_DB_USER:?set ORCHESTRATOR_DB_USER in .env}:${ORCHESTRATOR_DB_PASSWORD:?set ORCHESTRATOR_DB_PASSWORD in .env}@postgres:5432/${ORCHESTRATOR_DB_NAME:?set ORCHESTRATOR_DB_NAME in .env}
       # Where it finds the tool servers and the n8n side lane.
       MDEIS_MCP_URL: http://mdeis-mcp:8100/mcp

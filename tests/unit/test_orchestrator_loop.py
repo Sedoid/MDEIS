@@ -84,6 +84,16 @@ def test_a_tool_with_an_approver_or_user_parameter_is_dropped():
         assert tools.approver_like({"properties": {name: {}}}) == {name}
 
 
+def test_the_class_view_is_offered_to_the_model_only_when_it_is_switched_on():
+    listing = [spec("stage_gap_counts"), spec("get_criterion")]
+    off, _, _ = tools.bind({tools.MDEIS: listing}, ())
+    on, _, _ = tools.bind({tools.MDEIS: listing}, (), True)
+    assert [d["function"]["name"] for d in off] == ["get_criterion"]
+    assert {d["function"]["name"] for d in on} == {"get_criterion", "stage_gap_counts"}
+    assert load_settings({}).class_view is False
+    assert load_settings({"CLASS_VIEW_ENABLED": "true"}).class_view is True
+
+
 def test_the_model_is_never_offered_a_tool_that_takes_an_approver_in_the_real_server_listing():
     """The seven tools of mdeis-mcp take no approver or user argument (checked in Step 8)."""
     source = (ROOT / "src" / "mdeis" / "server.py").read_text(encoding="utf-8")

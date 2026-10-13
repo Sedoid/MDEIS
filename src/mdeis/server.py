@@ -22,6 +22,7 @@ from starlette.responses import JSONResponse
 from . import tools
 from .core import approver_token
 from .tools.context import Approver, ToolContext
+from .tools import class_view
 from .tools.criterion import DEFAULT_RESULTS
 
 APPROVER_HEADER = "x-approver-token"
@@ -148,6 +149,28 @@ def check_citations(request: Context, report_id: str) -> dict:
 @mcp.tool(description=_about(tools.release_report))
 def release_report(request: Context, report_id: str) -> dict:
     return _run(request, tools.release_report, report_id=report_id)
+
+
+if class_view.enabled():  # locked unless CLASS_VIEW_ENABLED is switched on (docs/SPEC.md 5.8)
+
+    @mcp.tool(description=_about(tools.stage_gap_counts))
+    def stage_gap_counts(
+        request: Context,
+        school_id: str,
+        stage: str,
+        skill: str,
+        term: int,
+        template_version: str | None = None,
+    ) -> dict:
+        return _run(
+            request,
+            tools.stage_gap_counts,
+            school_id=school_id,
+            stage=stage,
+            skill=skill,
+            term=term,
+            template_version=template_version,
+        )
 
 
 def main() -> None:

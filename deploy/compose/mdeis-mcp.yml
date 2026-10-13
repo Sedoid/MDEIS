@@ -105,6 +105,8 @@ services:
       EMBEDDER_URL: http://embedder:8081
       EMBED_DIM: ${EMBED_DIM:-768}
       APPROVER_TOKEN_SECRET: ${APPROVER_TOKEN_SECRET:?set APPROVER_TOKEN_SECRET in .env}
+      # The class view (stage_gap_counts) is locked. Only a named person switches it on.
+      CLASS_VIEW_ENABLED: ${CLASS_VIEW_ENABLED:-false}
       MCP_HOST: 0.0.0.0
       MCP_PORT: "8100"
     networks: [agent, data]

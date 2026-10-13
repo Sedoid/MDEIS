@@ -29,6 +29,7 @@ def _flag(value: str) -> bool:
 class Settings:
     api_key: str
     mode: str
+    class_view: bool
     max_steps: int
     max_redrafts: int
     mdeis_url: str
@@ -56,6 +57,7 @@ def load_settings(env=None) -> Settings:
     return Settings(
         api_key=env.get("ORCHESTRATOR_API_KEY", ""),
         mode=mode if mode in MODES else "linear",
+        class_view=_flag(env.get("CLASS_VIEW_ENABLED", "false")),
         max_steps=int(env.get("ORCHESTRATOR_MAX_STEPS") or DEFAULT_MAX_STEPS),
         max_redrafts=int(env.get("ORCHESTRATOR_MAX_REDRAFTS") or DEFAULT_MAX_REDRAFTS),
         mdeis_url=env.get("MDEIS_MCP_URL") or DEFAULT_MDEIS_URL,

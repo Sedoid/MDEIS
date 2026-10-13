@@ -35,7 +35,8 @@ class Rules:
     gap_threshold: Fraction
     banned_words: list
     clause: dict  # purpose -> clause id: evidence, move, missing, gap_direction, stage_weights,
-    #               window_average, skill_value, gap
+    #               window_average, skill_value, gap, and group_minimum when the rulebook has one
+    min_group: int | None = None  # the smallest group a class view may show (GM-1), if set
 
 
 def _find(rules, field):
@@ -67,6 +68,7 @@ def rules_from_content(content: dict, version: str, sha256: str) -> Rules:
         banned = _find(content["wording"], "banned")
     except (KeyError, IndexError) as e:
         raise RulebookProblem(f"the rulebook {version} lacks a section: {e}") from e
+    group = next((r for r in content.get("group_minimum") or [] if r.get("min_group_size")), None)
     return Rules(
         version=version,
         sha256=sha256,
@@ -95,7 +97,9 @@ def rules_from_content(content: dict, version: str, sha256: str) -> Rules:
             "window_average": window_average["id"],
             "skill_value": skill_value["id"],
             "gap": gap["id"],
+            **({"group_minimum": group["id"]} if group else {}),
         },
+        min_group=int(group["min_group_size"]) if group else None,
     )
 
 

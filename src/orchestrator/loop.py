@@ -101,7 +101,7 @@ async def run(*, messages: list, token: str | None, run_id: str, settings, model
             yield item
         return
     listed = {name: await server.list_tools() for name, server in servers.items()}
-    definitions, owner, _dropped = tools.bind(listed, settings.pg_tools)
+    definitions, owner, _dropped = tools.bind(listed, settings.pg_tools, settings.class_view)
     conversation = [{"role": "system", "content": system_prompt()}]
     conversation += conversation_from(messages, token)
     called, drafted = [], set()

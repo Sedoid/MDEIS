@@ -18,6 +18,7 @@ MDEIS_TOOLS = (
     "release_report",
 )
 APPROVER_LIKE = {"approver", "approver_id", "approver_name", "user", "user_id", "by"}
+CLASS_VIEW_TOOL = "stage_gap_counts"  # offered only when the class view is switched on
 MDEIS = "mdeis"
 PG = "pg"
 
@@ -27,13 +28,15 @@ def approver_like(schema: dict) -> set:
     return APPROVER_LIKE & set((schema or {}).get("properties", {}))
 
 
-def bind(listed: dict, pg_allowed: tuple) -> tuple:
+def bind(listed: dict, pg_allowed: tuple, class_view: bool = False) -> tuple:
     """Choose the tools to offer.
 
     `listed` maps a server (`mdeis`, `pg`) to its tools, each a dict with name, description and
     inputSchema. Returns (definitions in the model's format, {tool name: server}, dropped names).
     """
     allowed = {MDEIS: set(MDEIS_TOOLS), PG: set(pg_allowed)}
+    if class_view:
+        allowed[MDEIS].add(CLASS_VIEW_TOOL)
     definitions, owner, dropped = [], {}, []
     for server in (MDEIS, PG):
         for tool in listed.get(server, []):
