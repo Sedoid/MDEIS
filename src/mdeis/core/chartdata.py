@@ -13,6 +13,8 @@ subject has none.
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 from .numbers import distance_to_range, two_places
 from .records import year_start
 from .trend import on_scale, skill_values, when
@@ -20,6 +22,20 @@ from .trend import on_scale, skill_values, when
 LINE_CAP = 6  # a drawing limit: more lines than this cannot be told apart. Not a rule.
 SHORT = 2  # digits kept of the second year in "2025/26"
 SOURCE = "Report-card scores only. Not a prediction."
+
+
+class Point(NamedTuple):
+    """One term of one line: the score on the rulebook's scale, its stage and its records."""
+
+    value: object  # a Fraction
+    stage: str
+    ids: list
+
+
+class Line(NamedTuple):
+    name: str
+    is_area: bool
+    points: dict  # (year, term) -> Point
 
 
 class UnknownSkill(ValueError):
@@ -45,13 +61,13 @@ def _subject_points(records, subject, rules):
     points = {}
     for r in sorted((r for r in records if r["subject"] == subject), key=when):
         if r["score"] is not None:
-            points[(r["year"], r["term"])] = (on_scale(r, rules), r["stage"], [r["record_id"]])
+            points[(r["year"], r["term"])] = Point(on_scale(r, rules), r["stage"], [r["record_id"]])
     return points
 
 
 def _area_points(records, area, rules):
     return {
-        (v.year, v.term): (v.value, v.stage, list(v.record_ids))
+        (v.year, v.term): Point(v.value, v.stage, list(v.record_ids))
         for v in skill_values(records, area, rules)
         if v.value is not None
     }
@@ -80,13 +96,13 @@ def chart_data(records: list, rules, skills: list, blocked: set) -> dict:
             excluded.append({"skill": name, "reason": "not_enough_evidence",
                              "scores_available": len(points), "scores_needed": rules.min_scores})
         else:
-            lines.append((name, name in rules.areas, points))
+            lines.append(Line(name, name in rules.areas, points))
 
     keys = sorted(
-        {k for _, _, points in lines for k in points}, key=lambda k: (year_start(k[0]), k[1])
+        {k for line in lines for k in line.points}, key=lambda k: (year_start(k[0]), k[1])
     )
-    stage_of = {k: points[k][1] for _, _, points in lines for k in points}
-    only_area = lines[0][0] if len(lines) == 1 and lines[0][1] else None
+    stage_of = {k: line.points[k].stage for line in lines for k in line.points}
+    only_area = lines[0].name if len(lines) == 1 and lines[0].is_area else None
     terms = []
     for key in keys:
         year, term = key
@@ -98,17 +114,19 @@ def chart_data(records: list, rules, skills: list, blocked: set) -> dict:
                       "band": band})
     series = [
         {
-            "name": name,
-            "kind": "area" if is_area else "subject",
-            "values": [two_places(points[k][0]) if k in points else None for k in keys],
-            "record_ids": [points[k][2] if k in points else [] for k in keys],
+            "name": line.name,
+            "kind": "area" if line.is_area else "subject",
+            "values": [
+                two_places(line.points[k].value) if k in line.points else None for k in keys
+            ],
+            "record_ids": [line.points[k].ids if k in line.points else [] for k in keys],
         }
-        for name, is_area, points in lines
+        for line in lines
     ]
     clauses = [rules.clause["evidence"]] if lines else []
-    for name, is_area, _ in lines:
-        if is_area:
-            clauses.append(rules.area_clause[name])
+    for line in lines:
+        if line.is_area:
+            clauses.append(rules.area_clause[line.name])
     band_clauses = []
     if only_area:
         band_clauses = list(dict.fromkeys(
@@ -136,7 +154,7 @@ def _last_gap(lines, keys, stage_of, only_area, rules):
     last = keys[-1]
     if (stage_of[last], only_area) not in rules.ranges:
         return None
-    value = lines[0][2][last][0]
+    value = lines[0].points[last].value
     low, high = rules.ranges[(stage_of[last], only_area)]
     gap = distance_to_range(value, low, high)
     if gap == 0:
