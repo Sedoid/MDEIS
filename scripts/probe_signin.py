@@ -6,7 +6,8 @@ Standard library only. It signs in as WEBUI_ADMIN_EMAIL from .env, then prints:
   1. the cookie Open WebUI sets (name and flags, never the value),
   2. what Open WebUI's session endpoint returns (field names, role; no token),
   3. whether Open WebUI allows being framed (the headers that decide it),
-  4. what the portal says when that cookie is sent to it, and with no cookie.
+  4. what Open WebUI says an ordinary "user" may do (the permission settings in webui.yml),
+  5. what the portal says when that cookie is sent to it, and with no cookie.
 It prints no password and no token. Paste the whole output back.
 """
 import json
@@ -68,9 +69,16 @@ def main() -> int:
     csp = headers.get("Content-Security-Policy") or ""
     print("   frame-ancestors in CSP:", [p.strip() for p in csp.split(";") if "frame-anc" in p])
 
+    status, _, body = call(chat + "/api/v1/users/default/permissions",
+                           {"Authorization": f"Bearer {token}"})
+    print(f"4. what a 'user' may do, from Open WebUI: HTTP {status}")
+    if status == 200:
+        for group, items in json.loads(body).items():
+            print(f"   {group}: " + ", ".join(f"{k}={v}" for k, v in items.items()))
+
     cookie_name = (cookies[0].partition("=")[0] if cookies else "token")
     status, _, body = call(portal + "/api/me", {"Cookie": f"{cookie_name}={token}"})
-    print(f"4. portal {portal}/api/me with the cookie -> HTTP {status} {body.decode()[:200]}")
+    print(f"5. portal {portal}/api/me with the cookie -> HTTP {status} {body.decode()[:200]}")
     status, _, _ = call(portal + "/api/me")
     print(f"   portal /api/me with no cookie -> HTTP {status} (expect 401)")
     return 0

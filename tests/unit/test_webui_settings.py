@@ -29,6 +29,13 @@ def test_workspace_pages_and_extra_features_are_off():
         assert ENV[name] == "false", name
 
 
+def test_the_start_screen_suggests_nothing_and_voice_is_off_for_users():
+    assert ENV["DEFAULT_PROMPT_SUGGESTIONS"] == "[]"
+    for name in ("USER_PERMISSIONS_CHAT_STT", "USER_PERMISSIONS_CHAT_TTS",
+                 "USER_PERMISSIONS_CHAT_CALL"):
+        assert ENV[name] == "false", name
+
+
 def test_no_other_model_source_and_no_signup():
     assert ENV["ENABLE_OLLAMA_API"] == "false" and ENV["ENABLE_DIRECT_CONNECTIONS"] == "false"
     assert ENV["ENABLE_SIGNUP"] == "false"

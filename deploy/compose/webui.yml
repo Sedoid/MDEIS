@@ -65,12 +65,18 @@ services:
       ENABLE_AUTOMATIONS: "false"
       ENABLE_EASTER_EGGS: "false"
 
+      # The start screen suggests things like "Explain options trading". None of it is ours: show none.
+      DEFAULT_PROMPT_SUGGESTIONS: "[]"
+
       # What a signed-in user may do. The chat is for asking about the records. A file attached to a
       # chat would reach the model without the tools and the citation check (docs/INGEST.md: files
       # go through the upload page), so attaching, the controls panel, workspace pages and the
       # extra features are off. Variable names are from the Open WebUI environment reference.
       # These apply to the "user" role. The "admin" role can still see more of the screen.
       USER_PERMISSIONS_CHAT_FILE_UPLOAD: "false"
+      USER_PERMISSIONS_CHAT_STT: "false"
+      USER_PERMISSIONS_CHAT_TTS: "false"
+      USER_PERMISSIONS_CHAT_CALL: "false"
       USER_PERMISSIONS_CHAT_CONTROLS: "false"
       USER_PERMISSIONS_CHAT_SYSTEM_PROMPT: "false"
       USER_PERMISSIONS_CHAT_PARAMS: "false"
