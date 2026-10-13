@@ -1,11 +1,11 @@
 """Draws a progression chart as an SVG. A pure function: numbers in, text out, no database or model.
 
 Every value on the chart is passed in (see `chartdata.chart_data` in `mdeis.core`). Nothing here
-works out a score, a range or a gap, and no scale is fixed here: the top of the axis is `scale_max` from the rulebook.
-The same input gives the same bytes. The picture holds no script and no outside address. Its legend
-is drawn inside it, so the two cannot be separated, and it carries its own light background so it
-reads in a dark theme too. Lines differ by colour, marker shape and dash, so they can be told apart
-in greyscale.
+works out a score, a range or a gap, and no scale is fixed here: the top of the axis is `scale_max`
+from the rulebook. The same input gives the same bytes. The picture holds no script and no outside
+address. Its legend is drawn inside it, so the two cannot be separated, and it carries its own
+light background so it reads in a dark theme too. Lines differ by colour, marker shape and dash, so
+they can be told apart in greyscale.
 
 `chart` is a dict:
     title, subtitle   text shown at the top
