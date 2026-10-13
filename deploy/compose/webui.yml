@@ -74,6 +74,10 @@ services:
       # extra features are off. Variable names are from the Open WebUI environment reference.
       # These apply to the "user" role. The "admin" role can still see more of the screen.
       USER_PERMISSIONS_CHAT_FILE_UPLOAD: "false"
+      USER_PERMISSIONS_CHAT_WEB_UPLOAD: "false"
+      USER_PERMISSIONS_CHAT_VALVES: "false"
+      USER_PERMISSIONS_CHAT_IMPORT: "false"
+      USER_PERMISSIONS_CHAT_MULTIPLE_MODELS: "false"
       USER_PERMISSIONS_CHAT_STT: "false"
       USER_PERMISSIONS_CHAT_TTS: "false"
       USER_PERMISSIONS_CHAT_CALL: "false"
@@ -94,6 +98,11 @@ services:
       USER_PERMISSIONS_FEATURES_NOTES: "false"
       USER_PERMISSIONS_FEATURES_API_KEYS: "false"
       USER_PERMISSIONS_FEATURES_FOLDERS: "false"
+      USER_PERMISSIONS_FEATURES_CHANNELS: "false"
+      USER_PERMISSIONS_FEATURES_MEMORIES: "false"
+      USER_PERMISSIONS_FEATURES_CALENDAR: "false"
+      USER_PERMISSIONS_FEATURES_AUTOMATIONS: "false"
+      USER_PERMISSIONS_SETTINGS_INTERFACE: "false"
       OFFLINE_MODE: "true"
       ANONYMIZED_TELEMETRY: "false"
       DO_NOT_TRACK: "true"

@@ -29,6 +29,13 @@ def test_workspace_pages_and_extra_features_are_off():
         assert ENV[name] == "false", name
 
 
+def test_attaching_a_webpage_and_the_other_extras_the_probe_listed_are_off():
+    for name in ("USER_PERMISSIONS_CHAT_WEB_UPLOAD", "USER_PERMISSIONS_CHAT_VALVES",
+                 "USER_PERMISSIONS_CHAT_IMPORT", "USER_PERMISSIONS_CHAT_MULTIPLE_MODELS",
+                 "USER_PERMISSIONS_FEATURES_CHANNELS", "USER_PERMISSIONS_FEATURES_MEMORIES"):
+        assert ENV[name] == "false", name
+
+
 def test_the_start_screen_suggests_nothing_and_voice_is_off_for_users():
     assert ENV["DEFAULT_PROMPT_SUGGESTIONS"] == "[]"
     for name in ("USER_PERMISSIONS_CHAT_STT", "USER_PERMISSIONS_CHAT_TTS",
