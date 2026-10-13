@@ -58,6 +58,8 @@ minio-data/
 # Synthetic fixtures are small and committed (data/synthetic/).
 # Scratch output from generators and eval runs is not.
 data/tmp/
+# The whole practice school, every card (make class-data). Made on demand, never committed.
+data/full-class/
 .claude/hooks/debug.log
 evals/tmp/
 # Committed eval results live in evals/results/ and are NOT ignored:
