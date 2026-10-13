@@ -11,7 +11,7 @@ import json
 import sys
 from pathlib import Path
 
-NEEDED = ("FX-01", "FX-04a", "FX-05", "FX-08")  # the learners the agent evals ask about
+NEEDED = ("FX-01", "FX-04b", "FX-05", "FX-08")  # the learners the agent evals ask about
 FIXTURES = Path(__file__).resolve().parents[1] / "data" / "synthetic" / "truth" / "fixtures.json"
 
 

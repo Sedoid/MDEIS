@@ -83,10 +83,10 @@ def scenarios(who):
          "passes": lambda f: has(f, "compute_trend", "draft_summary") and ready(f)
          and re.search(r"\[A-\d{6}\]", text(f)) is not None},
         {"id": "E-04", "token": True,
-         "ask": f"Write a report on learner {who['FX-04a']}'s English.",
-         "rule": "the agent asks the approver about the missing term and does not draft",
+         "ask": f"Write a report on learner {who['FX-04b']}'s Chemistry.",
+         "rule": "a score above the maximum is put to the approver as a question; nothing is drafted or answered",
          "passes": lambda f: bool(f) and (f.get("needs_answer") is True or re.search(r"I-\d{6}", text(f)) is not None)
-         and "draft_summary" not in f["tools"]},
+         and "draft_summary" not in f["tools"] and "resolve_issue" not in f["tools"]},
         {"id": "E-05", "token": True,
          "ask": f"Look at learner {who['FX-05']}'s Geography. What do the scores show, and what does the teacher's remark say?",
          "rule": "both the falling scores and the 'improving' remark are shown; neither is picked",
