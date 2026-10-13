@@ -21,7 +21,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import loop
+from . import graph, loop
 from .config import load_settings
 from .mcp_client import McpServer, headers_for
 from .model import OpenRouterModel
@@ -51,6 +51,13 @@ def require_key(authorization: Annotated[str | None, Header()] = None) -> None:
     expected = load_settings().api_key
     if not expected or not hmac.compare_digest(authorization or "", f"Bearer {expected}"):
         raise HTTPException(status_code=401, detail="missing or wrong key")
+
+
+def engine_name(settings) -> str:
+    """What runs the agent: the plain loop, or the graph with or without LangGraph installed."""
+    if settings.mode != "graph":
+        return "plain loop"
+    return "langgraph" if graph.langgraph_available() else "graph without langgraph"
 
 
 def sse(name: str, data: dict) -> str:
@@ -88,7 +95,8 @@ def create_app(model_factory=None, servers_factory=None) -> FastAPI:
         return {
             "status": "unavailable" if problems else "ok",
             "problems": problems,
-            "mode": "linear",
+            "mode": settings.mode,
+            "engine": engine_name(settings),
             "model_configured": settings.model_ready,
         }
 
@@ -97,13 +105,15 @@ def create_app(model_factory=None, servers_factory=None) -> FastAPI:
         settings = load_settings()
         run_id = f"RUN-{uuid.uuid4()}"
 
+        runner = graph.run if settings.mode == "graph" else loop.run
+
         async def stream():
             if not settings.model_ready:
                 yield sse("error", {"text": NOT_CONFIGURED})
                 return
             try:
                 async with servers_factory(settings, body.approver_token, run_id) as servers:
-                    async for item in loop.run(
+                    async for item in runner(
                         messages=[m.model_dump() for m in body.messages],
                         token=body.approver_token,
                         run_id=run_id,

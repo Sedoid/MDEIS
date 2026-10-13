@@ -200,9 +200,9 @@ token: $(ENV_FILE) ## A five-minute approver token for testing by hand:  make to
 	@test -n "$(ID)" -a -n "$(NAME)" || { echo 'usage: make token ID=u-ada NAME="Ada Teacher"' >&2; exit 1; }
 	@$(COMPOSE) exec -T mdeis-mcp python - "$(ID)" "$(NAME)" < scripts/mint_token.py
 
-ask: $(ENV_FILE) ## Ask the orchestrator directly, no gateway:  make ask Q="How is L-0001 doing in English?" [TOKEN=...]
-	@test -n "$(Q)" || { echo 'usage: make ask Q="your question" [TOKEN=from make token]' >&2; exit 1; }
-	@$(COMPOSE) exec -T orchestrator python - "$(Q)" "$(TOKEN)" < scripts/ask_orchestrator.py
+ask: $(ENV_FILE) ## Ask the orchestrator directly, no gateway:  make ask Q="How is L-0001 doing in English?" [TOKEN=...] [NEW=1]
+	@test -n "$(Q)" || { echo 'usage: make ask Q="your question" [TOKEN=from make token] [NEW=1 for a new conversation]' >&2; exit 1; }
+	@$(COMPOSE) exec -T orchestrator python - "$(Q)" "$(TOKEN)" "$(NEW)" < scripts/ask_orchestrator.py
 
 probe-gateway: $(ENV_FILE) ## Gateway: no key and no user are refused, a signed-in user gets an answer
 	@$(COMPOSE) exec -T gateway python - < scripts/probe_gateway.py

@@ -11,6 +11,7 @@ import os
 from dataclasses import dataclass
 
 DEFAULT_MAX_STEPS = 8  # model calls in one run before the loop stops
+DEFAULT_MAX_REDRAFTS = 2  # times a draft that fails the citation check is written again
 DEFAULT_MDEIS_URL = "http://mdeis-mcp:8100/mcp"
 DEFAULT_PG_URL = "http://pg-mcp-ro:8200/sse"
 DEFAULT_OPENROUTER_URL = "https://openrouter.ai/api/v1"
@@ -29,6 +30,7 @@ class Settings:
     api_key: str
     mode: str
     max_steps: int
+    max_redrafts: int
     mdeis_url: str
     pg_url: str
     pg_tools: tuple
@@ -55,6 +57,7 @@ def load_settings(env=None) -> Settings:
         api_key=env.get("ORCHESTRATOR_API_KEY", ""),
         mode=mode if mode in MODES else "linear",
         max_steps=int(env.get("ORCHESTRATOR_MAX_STEPS") or DEFAULT_MAX_STEPS),
+        max_redrafts=int(env.get("ORCHESTRATOR_MAX_REDRAFTS") or DEFAULT_MAX_REDRAFTS),
         mdeis_url=env.get("MDEIS_MCP_URL") or DEFAULT_MDEIS_URL,
         pg_url=env.get("PG_MCP_URL") or DEFAULT_PG_URL,
         pg_tools=names("PG_MCP_ALLOWED_TOOLS", DEFAULT_PG_TOOLS),

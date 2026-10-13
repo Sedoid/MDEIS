@@ -3,12 +3,12 @@ tool servers (no network, no key). Written before the code, for docs/step-10.md.
 """
 
 import asyncio
-import copy
 import json
 import re
 from pathlib import Path
 
 import pytest
+from orchestrator_fakes import MDEIS_LISTING, PG_LISTING, FakeModel, FakeServer, ask, say, spec
 
 from orchestrator import guards, loop, tools
 from orchestrator.config import load_settings
@@ -24,52 +24,6 @@ ENV = {
     "OPENROUTER_PROVIDER": "Alpha, Beta",
 }
 SETTINGS = load_settings(ENV)
-
-
-def spec(name, properties=None):
-    return {"name": name, "description": name, "inputSchema": {"properties": properties or {}}}
-
-
-MDEIS_LISTING = [
-    spec(n) for n in (*tools.MDEIS_TOOLS, "record_verification", "check_annotation")
-]
-PG_LISTING = [spec("execute_sql"), spec("list_schemas"), spec("analyze_workload_indexes")]
-
-
-class FakeServer:
-    """A tool server that records the calls it gets and answers from a table."""
-
-    def __init__(self, listing, results=None):
-        self.listing, self.results, self.calls = listing, results or {}, []
-
-    async def list_tools(self):
-        return self.listing
-
-    async def call(self, name, arguments):
-        self.calls.append((name, arguments))
-        return self.results.get(name, {"status": "ok"})
-
-
-class FakeModel:
-    """A model that answers from a script and keeps a copy of everything it was shown."""
-
-    def __init__(self, *script):
-        self.script, self.seen = list(script), []
-
-    async def complete(self, messages, definitions):
-        self.seen.append((copy.deepcopy(messages), copy.deepcopy(definitions)))
-        item = self.script.pop(0)
-        if isinstance(item, Exception):
-            raise item
-        return item
-
-
-def ask(name, arguments=None, id="c1"):
-    return Reply("", (ToolCall(id, name, json.dumps(arguments or {})),))
-
-
-def say(text):
-    return Reply(text)
 
 
 def run(messages, model, mdeis=None, pg=None, token=TOKEN, run_id="RUN-1", settings=SETTINGS):

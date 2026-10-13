@@ -173,3 +173,18 @@ def test_the_real_server_opener_sends_the_token_to_mdeis_mcp_only(monkeypatch):
     assert by_name[tools.MDEIS] == {"X-Run-Id": "RUN-7", "X-Approver-Token": TOKEN}
     assert by_name[tools.PG] == {"X-Run-Id": "RUN-7"}
     assert [sse for _, _, _, sse in opened] == [False, True]
+
+
+def test_graph_mode_runs_the_graph_and_health_says_which_mode_is_running(monkeypatch):
+    started = []
+    client = make_client(monkeypatch, started)
+    monkeypatch.setenv("ORCHESTRATOR_MODE", "graph")
+    response = client.post("/run", json=BODY, headers={"Authorization": f"Bearer {KEY}"})
+    pairs = events(response)
+    assert [n for n, _ in pairs][-1] == "final"
+    assert pairs[-1][1]["answer"] == "The records show a steady trend [A-000001]."
+    health = client.get("/healthz").json()  # no database in a unit test: it still answers
+    assert health["mode"] == "graph"
+    assert health["engine"] in ("langgraph", "graph without langgraph")
+    monkeypatch.setenv("ORCHESTRATOR_MODE", "linear")
+    assert client.get("/healthz").json()["engine"] == "plain loop"

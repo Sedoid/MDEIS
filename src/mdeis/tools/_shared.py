@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass
 
 from ..core import store
-from ..core.effective import blocked_subjects, effective_records
+from ..core.effective import allowed_answers, blocked_subjects, effective_records
 from ..core.issues import detect
 from ..core.numbers import two_places
 from ..core.records import load_cards
@@ -61,6 +61,7 @@ def public_issue(issue: dict, answers: dict) -> dict:
     out = {k: v for k, v in issue.items() if k not in INTERNAL_ISSUE_KEYS}
     answer = answers.get(issue["issue_id"])
     out["answered"] = answer["resolution"] if answer else None
+    out["possible_answers"] = sorted(allowed_answers(issue["kind"]))
     return out
 
 

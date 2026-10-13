@@ -24,12 +24,15 @@ from . import guards, tools
 from .model import ModelError
 
 PROMPT_FILE = Path(__file__).parent / "prompts" / "system.md"
+GRAPH_NOTE = Path(__file__).parent / "prompts" / "graph_note.md"
 CHUNK_WORDS = 8  # words to a `token` event
 KEPT_ROLES = ("user", "assistant")  # the service writes its own system prompt
 
 
-def system_prompt() -> str:
-    return PROMPT_FILE.read_text(encoding="utf-8")
+def system_prompt(graph: bool = False) -> str:
+    """Our system prompt. In graph mode a short note says which steps the system does itself."""
+    text = PROMPT_FILE.read_text(encoding="utf-8")
+    return text + GRAPH_NOTE.read_text(encoding="utf-8") if graph else text
 
 
 def event(name: str, **data) -> dict:
@@ -58,8 +61,13 @@ def final_events(text: str, called: list, run_id: str, **extra):
     yield event("final", answer=text, tools=called, run_id=run_id, **extra)
 
 
-async def execute(call, owner: dict, servers: dict, last_user: str, drafted: set) -> dict:
-    """Run one tool call the model asked for, or say why it did not run. Never raises."""
+async def execute(
+    call, owner: dict, servers: dict, last_user: str, drafted: set, releasable: set | None = None
+) -> dict:
+    """Run one tool call the model asked for, or say why it did not run. Never raises.
+
+    `releasable`, when given, is the set of report numbers that may be released now.
+    """
     try:
         arguments = json.loads(call.arguments or "{}")
         if not isinstance(arguments, dict):
@@ -70,6 +78,8 @@ async def execute(call, owner: dict, servers: dict, last_user: str, drafted: set
         return {"status": "refused", "reason": "that tool is not available"}
     if call.name == "release_report":
         why = guards.release_blocked(arguments, last_user, drafted)
+        if not why and releasable is not None and arguments.get("report_id") not in releasable:
+            why = "no draft with that number has passed the check and been shown to the approver"
         if why:
             return {"status": "refused", "reason": why}
     try:
