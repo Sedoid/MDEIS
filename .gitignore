@@ -69,3 +69,7 @@ evals/tmp/
 .vscode/
 *.swp
 Thumbs.db
+
+# Third-party skill installs, kept off the repo
+.agents/
+skills-lock.json
