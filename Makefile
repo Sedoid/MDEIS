@@ -31,7 +31,7 @@ endif
 COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yml $(addprefix -f ,$(SERVICE_FILES))
 
 .PHONY: help env-init env-sync check-env check-docker models dev-config dev-build dev-up dev-down up down dev-ps \
-        dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules ingest ingest-dir ack token ask probe-gateway prod-config prod-up prod-down prod-check \
+        dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules ingest ingest-dir ack token ask evals probe-gateway prod-config prod-up prod-down prod-check \
         test test-contract lint check practice-data \
         demo demo-data smoke clean \
         probe-embed probe-mcp probe-pg-mcp probe-n8n probe-orchestrator probe-portal
@@ -204,6 +204,16 @@ probe-orchestrator: $(ENV_FILE) ## Orchestrator: its health answer (database and
 token: $(ENV_FILE) ## A five-minute approver token for testing by hand:  make token ID=u-ada NAME="Ada Teacher"
 	@test -n "$(ID)" -a -n "$(NAME)" || { echo 'usage: make token ID=u-ada NAME="Ada Teacher"' >&2; exit 1; }
 	@$(COMPOSE) exec -T mdeis-mcp python - "$(ID)" "$(NAME)" < scripts/mint_token.py
+
+evals: $(ENV_FILE) ## Run the agent evals (5 runs each) against the live stack; saves the real result in evals/results/
+	@REFS=$$($(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$MDEIS_DB_NAME" -At -c "SELECT json_object_agg(school_ref, learner_id) FROM learners"') || exit 1; \
+	 MAP=$$(python3 scripts/eval_map.py "$$REFS") || exit 1; \
+	 TOKEN=$$($(COMPOSE) exec -T mdeis-mcp python - u-eval "Eval Approver" 7200 < scripts/mint_token.py) || exit 1; \
+	 OUT=evals/results/agent-$$(date -u +%Y-%m-%d-%H%M).json; \
+	 $(COMPOSE) exec -T orchestrator python - "$$MAP" "$$TOKEN" "$$(git rev-parse --short HEAD)" < evals/run_agent_evals.py > "$$OUT" || exit 1; \
+	 echo "saved $$OUT"; python3 scripts/summarise_evals.py "$$OUT"; \
+	 echo "reports released during the run (expect 0):"; \
+	 $(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$MDEIS_DB_NAME" -At -c "SELECT count(*) FROM reports WHERE status = '"'"'released'"'"'"'
 
 ask: $(ENV_FILE) ## Ask the orchestrator directly, no gateway:  make ask Q="How is L-0001 doing in English?" [TOKEN=...] [NEW=1]
 	@test -n "$(Q)" || { echo 'usage: make ask Q="your question" [TOKEN=from make token] [NEW=1 for a new conversation]' >&2; exit 1; }

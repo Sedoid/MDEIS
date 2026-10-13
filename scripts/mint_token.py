@@ -5,7 +5,7 @@ Runs inside the mdeis-mcp container, which holds the signing secret (the orchest
 
     make token ID=u-ada NAME="Ada Teacher"
 
-The token lasts five minutes. It is what the gateway will sign for a signed-in user (Step 11); this
+The token lasts five minutes (a fourth argument gives other seconds, for a long test run). It is what the gateway will sign for a signed-in user (Step 11); this
 stands in for it in a test. Print it, pass it to `make ask TOKEN=...`, and do not keep it.
 """
 import os
@@ -15,12 +15,13 @@ from mdeis.core import approver_token
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 3:
-        print('usage: mint_token.py ID "Display Name"', file=sys.stderr)
+    if len(argv) not in (3, 4):
+        print('usage: mint_token.py ID "Display Name" [seconds]', file=sys.stderr)
         return 2
+    lifetime = int(argv[3]) if len(argv) == 4 else approver_token.TOKEN_LIFETIME_SECONDS
     secret = os.environ.get("APPROVER_TOKEN_SECRET", "")
     try:
-        print(approver_token.sign(secret, argv[1], argv[2]))
+        print(approver_token.sign(secret, argv[1], argv[2], lifetime=lifetime))
     except approver_token.TokenError as e:
         print(f"Could not make a token: {e}", file=sys.stderr)
         return 1
