@@ -297,7 +297,7 @@ def test_a_clear_decline_cites_its_records_and_its_rules(make_ctx, fx):
 
 def test_a_score_out_of_100_gives_the_same_trend_as_the_same_score_out_of_20(make_ctx, fx):
     """E-03. FX-03b's marks are out of 100: converted with a warning, the same result as FX-03a."""
-    ctx = make_ctx()  # one context: two open ones would wait on each other's uncommitted problem rows
+    ctx = make_ctx()  # one context: two open ones would wait on each other's uncommitted rows
     out_of_20 = trend(ctx, fx["FX-03a"]["gen_id"], "Mathematics")
     out_of_100 = trend(ctx, fx["FX-03b"]["gen_id"], "Mathematics")
     for field in ("trend", "change", "level"):
