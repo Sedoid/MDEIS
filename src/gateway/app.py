@@ -28,7 +28,7 @@ import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from mdeis.core import approver_token
+from mdeis.core import approver_token, charts
 
 MODEL_ID = "mdeis-assistant"
 USER_ID_HEADER = "X-OpenWebUI-User-Id"
@@ -188,6 +188,10 @@ def create_app(client_factory=None) -> FastAPI:
             return bad_request()
         if is_background(messages):
             return reply_whole(request_id, "") if not stream else stream_text(request_id, "")
+        asked = messages[-1]["content"].strip().lower()
+        if os.environ.get("CHART_SPIKE") and asked == "chart test":
+            spike = spike_chart_reply()  # a layout check only, removed after the chart spike
+            return reply_whole(request_id, spike) if not stream else stream_text(request_id, spike)
         try:
             token = approver_token.sign(settings.secret, user_id, user_name)
         except approver_token.TokenError:
@@ -208,6 +212,27 @@ def create_app(client_factory=None) -> FastAPI:
         return reply_whole(request_id, await whole_answer(events))
 
     return app
+
+
+def spike_chart_reply() -> str:
+    """TEMPORARY (chart spike): one fixed sample chart, to see how Open WebUI shows it."""
+    chart = {
+        "title": "Reading · L-0000",
+        "subtitle": "Rulebook v1 · SAMPLE DATA for a layout check, not a real learner",
+        "scale_max": 20,
+        "points": [
+            {"label": "2025/26 T1", "sub": "Form 1", "value": 11.5, "band": [12, 15]},
+            {"label": "2025/26 T2", "sub": "Form 1", "value": 12.25, "band": [12, 15]},
+            {"label": "2025/26 T3", "sub": "Form 1", "value": 11.75, "band": [12, 15]},
+            {"label": "2026/27 T1", "sub": "Form 2", "value": 13, "band": [13, 16]},
+            {"label": "2026/27 T2", "sub": "Form 2", "value": 11.5, "band": [13, 16]},
+        ],
+        "band_legend": "Expected range for the stage (ST-3, v1)",
+        "gap": {"index": 4, "from_value": 11.5, "to_value": 13, "text": "1.5 below"},
+        "source": "Report-card scores only. Not a prediction.",
+    }
+    image = charts.markdown_image(charts.trend_svg(chart), "Sample trend chart")
+    return f"Layout check with made-up numbers.\n\n{image}\n\nThis is a sample, not a learner."
 
 
 def bad_request() -> JSONResponse:
