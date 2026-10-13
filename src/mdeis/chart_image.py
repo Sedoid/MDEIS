@@ -35,7 +35,7 @@ PAD = 24  # space at the left and right of the text blocks
 SIZE = {"title": 21, "subtitle": 13, "tick": 12.5, "value": 14, "term": 13, "stage": 12,
         "legend": 13.5, "gap": 14, "source": 12, "end": 12.5}
 ROW = 26  # distance between legend rows
-LABEL_LIMIT = 8  # more terms than this: values are not printed on the line, only on the axis
+LABEL_LIMIT = 12  # more terms than this: values are not printed on the line, only on the axis
 END_GAP = 15  # least distance between two line names at the right edge
 GAP_LEGEND = "Distance from the last score to the nearest range edge"
 
