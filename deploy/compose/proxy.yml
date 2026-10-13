@@ -1,0 +1,28 @@
+services:
+  # The public reverse proxy. Off unless the "prod" profile is asked for (`make prod-up`). It is the
+  # only container meant to be reachable from the internet, and it only forwards to Open WebUI and
+  # serves the static page. By default it binds to 127.0.0.1 so that nothing becomes public by
+  # accident: set PROXY_BIND=0.0.0.0 on the server on purpose (docs/step-16.md).
+  proxy:
+    profiles: ["prod"]
+    image: ${CADDY_IMAGE:-caddy:2.8.4-alpine}
+    container_name: proxy-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    restart: unless-stopped
+    ports:
+      - "${PROXY_BIND:-127.0.0.1}:${PROXY_HTTP_PORT:-80}:80"
+      - "${PROXY_BIND:-127.0.0.1}:${PROXY_HTTPS_PORT:-443}:443"
+    environment:
+      APP_HOST: ${APP_HOST:-localhost}
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./site:/srv/site:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge]
+    depends_on:
+      webui:
+        condition: service_healthy
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}

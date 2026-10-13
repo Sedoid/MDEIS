@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MDEIS: records, read with care</title>
+<meta name="description" content="MDEIS reads one learner's school records across terms and years and reports what the data shows against the school's own rules. A named person releases every report.">
+<style>
+  :root { --bg:#fbfaf7; --ink:#1d2430; --muted:#566070; --line:#d9d6cc; --accent:#1f3864; --note:#fff6dc; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14181f; --ink:#e8e6e0; --muted:#a3acb9; --line:#2b323d; --accent:#9db7e8; --note:#2a2616; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:18px/1.6 Georgia, "Times New Roman", serif; }
+  main { max-width: 44rem; margin: 0 auto; padding: 2.5rem 1rem 4rem; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 .25rem; color: var(--accent); }
+  h2 { font-size: 1.25rem; margin: 2.5rem 0 .5rem; color: var(--accent); }
+  p, li { max-width: 40rem; }
+  .sub { color: var(--muted); margin: 0 0 1.5rem; }
+  .note { background: var(--note); border-left: 4px solid var(--accent); padding: .75rem 1rem; margin: 1.5rem 0; }
+  ol, ul { padding-left: 1.25rem; }
+  li { margin: .35rem 0; }
+  a { color: var(--accent); }
+  footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem; color: var(--muted); font-size: .9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>MDEIS</h1>
+  <p class="sub">Multidimensional Educational Intelligence System. An entry for the African Agentic AI Design Challenge, Education track, "The Long View".</p>
+
+  <p class="note"><strong>Everything on this site and in the demo uses made-up data.</strong> There are no real learners, names, photos or schools.</p>
+
+  <h2>What it does</h2>
+  <p>A learner can move up a class without having the basics of the class below. The evidence is in marks and teacher notes spread over terms and years, on different scales, and nobody reads it as one story until it is late.</p>
+  <p>MDEIS reads one learner's records across subjects, terms and years. It reports what the data shows against the standard for the learner's stage, using a <strong>criteria template that the school supplies</strong>. Every statement points to the records and the rule behind it.</p>
+
+  <h2>What it will not do</h2>
+  <ul>
+    <li>It does not put a label on a child. It says "reading in the Form 1 range for three terms", never "weak" or "gifted".</li>
+    <li>It does not rank learners or compare one learner with another. The comparison is always with the stage standard.</li>
+    <li>It does not suggest pathways, subject choices or careers.</li>
+    <li>It does not let a language model produce a number. Numbers come from ordinary code and SQL, and the same input gives the same answer every time.</li>
+  </ul>
+
+  <h2>How a person stays in charge</h2>
+  <p>The assistant drafts. A named school approver, signed in, reads the draft and releases it. The assistant cannot name, choose or change the approver, and every action it takes is written to a log that cannot be edited afterwards. When the records are untidy (a missing term, a mark above the maximum, a note that disagrees with the marks) the system asks the approver. It never guesses and never fixes a record in silence.</p>
+
+  <h2>The eight promises</h2>
+  <ol>
+    <li>Numbers come from code and the database, never from the model.</li>
+    <li>The rules live in the school's template, not in the program.</li>
+    <li>Every sentence cites the records and rules it relies on, and a mechanical check enforces it.</li>
+    <li>Only the signed-in approver can release a report.</li>
+    <li>No labels, no rankings, no pathway advice.</li>
+    <li>Only made-up learners.</li>
+    <li>A tamper-evident diary of every action.</li>
+    <li>No secrets stored in the repository.</li>
+  </ol>
+
+  <h2>Read the work</h2>
+  <ul>
+    <li>The code, the design documents, the tests and the results: <a href="https://github.com/Sedoid/MDEIS">github.com/Sedoid/MDEIS</a> (open source, Apache-2.0).</li>
+    <li>What was tested, how, and what failed: <code>EVALS.md</code> in the repository. This page does not repeat test results; the file holds the real runs.</li>
+    <li>The live demo address is in the challenge submission.</li>
+  </ul>
+
+  <footer>MDEIS is a challenge entry and a prototype. It is not for use with real learners' records.</footer>
+</main>
+</body>
+</html>

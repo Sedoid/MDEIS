@@ -24,6 +24,10 @@ services:
       # Send the signed-in user's name, id, email and role to the gateway as X-OpenWebUI-User-* headers.
       ENABLE_FORWARD_USER_INFO_HEADERS: "true"
 
+      # Behind the public proxy the site is https: set WEBUI_SESSION_COOKIE_SECURE=true in .env then.
+      # (Name taken from the Open WebUI environment reference; re-check it when the tag changes.)
+      WEBUI_SESSION_COOKIE_SECURE: ${WEBUI_SESSION_COOKIE_SECURE:-false}
+
       # First administrator, created on first start. Sign-up is then closed automatically.
       WEBUI_ADMIN_EMAIL: ${WEBUI_ADMIN_EMAIL:?set WEBUI_ADMIN_EMAIL in .env}
       WEBUI_ADMIN_NAME: ${WEBUI_ADMIN_NAME:-Approver}

@@ -1,0 +1,38 @@
+# The public front door (profile "prod"). One host name, from the environment, with a certificate from
+# Let's Encrypt (or Caddy's own local certificate when the name is `localhost`).
+#
+#   https://APP_HOST/               Open WebUI (the assistant), the only application that is public
+#   https://APP_HOST/mdeis-about/   the static page in ./site, with no scripts and no outside requests
+#
+# Nothing else is public: the gateway, the orchestrator, the toolbox, n8n and the database have no
+# published port and are not named here. Caddy hides its own name and redacts cookies and keys in logs.
+
+{$APP_HOST:localhost} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	redir /mdeis-about /mdeis-about/ permanent
+
+	handle_path /mdeis-about/* {
+		header Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'"
+		root * /srv/site
+		file_server
+	}
+
+	handle {
+		reverse_proxy webui:8080 {
+			flush_interval -1
+		}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

@@ -31,7 +31,7 @@ endif
 COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yml $(addprefix -f ,$(SERVICE_FILES))
 
 .PHONY: help env-init env-sync check-env check-docker models dev-config dev-build dev-up dev-down up down dev-ps \
-        dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules ingest ack token ask probe-gateway \
+        dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules ingest ack token ask probe-gateway prod-config prod-up prod-down prod-check \
         test test-contract lint check practice-data \
         demo demo-data smoke clean \
         probe-embed probe-mcp probe-pg-mcp probe-n8n probe-orchestrator probe-portal
@@ -206,6 +206,22 @@ ask: $(ENV_FILE) ## Ask the orchestrator directly, no gateway:  make ask Q="How 
 
 probe-gateway: $(ENV_FILE) ## Gateway: no key and no user are refused, a signed-in user gets an answer
 	@$(COMPOSE) exec -T gateway python - < scripts/probe_gateway.py
+
+prod-config: $(ENV_FILE) ## Check the public proxy: the merged compose files and the Caddyfile
+	@$(COMPOSE) --profile prod config --quiet && echo "OK: compose files merge with the prod profile"
+	@$(COMPOSE) --profile prod run --rm --no-deps proxy caddy validate --config /etc/caddy/Caddyfile
+
+prod-up: $(ENV_FILE) ## Start the public reverse proxy (needs APP_HOST in .env; PROXY_BIND=0.0.0.0 makes it public)
+	@$(COMPOSE) --profile prod up -d proxy
+	@$(COMPOSE) --profile prod ps proxy
+
+prod-down: $(ENV_FILE) ## Stop the public reverse proxy (the rest of the stack keeps running)
+	@$(COMPOSE) --profile prod stop proxy
+	@$(COMPOSE) --profile prod rm -f proxy
+
+prod-check: ## From ANOTHER machine: check the public address:  make prod-check HOST=demo.example.org
+	@test -n "$(HOST)" || { echo 'usage: make prod-check HOST=demo.example.org' >&2; exit 1; }
+	@python3 scripts/check_public.py "$(HOST)"
 
 probe-portal: $(ENV_FILE) ## Portal: its health answer, from inside the network
 	@$(COMPOSE) exec -T gateway python -c "import urllib.request; print(urllib.request.urlopen('http://portal:8080/healthz', timeout=10).read().decode())"
