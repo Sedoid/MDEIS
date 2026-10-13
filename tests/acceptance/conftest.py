@@ -83,10 +83,11 @@ def tool_schema(files, templates_dir):
 
 @pytest.fixture
 def make_ctx(tool_schema):
-    """Make a tool context: `make_ctx()` has no approver, `make_ctx(("u-1", "Ada Teacher"))` has one.
+    """Make a tool context.
 
-    The approver is part of the context, set here the way the verified token will set it. It is never
-    a tool argument. The context does not commit, so each test is rolled back.
+    `make_ctx()` has no approver; `make_ctx(("u-1", "Ada Teacher"))` has one. The approver is part
+    of the context, set here the way the verified token will set it. It is never a tool argument.
+    The context does not commit, so each test is rolled back.
     """
     import uuid
 
