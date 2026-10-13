@@ -256,6 +256,16 @@ def test_the_step_limit_ends_the_run_with_an_incomplete_answer():
     assert final(events)["incomplete"] is True and len(model.seen) == 2
 
 
+def test_a_draft_that_passed_the_check_is_still_shown_when_the_step_limit_is_reached():
+    settings = load_settings({**ENV, "ORCHESTRATOR_MODE": "graph", "ORCHESTRATOR_MAX_STEPS": "1"})
+    server = FakeServer(MDEIS_LISTING, {"draft_summary": DRAFTED, "check_citations": PASSED})
+    model = FakeModel(ask("draft_summary", DRAFT_ARGS), say("Here is the draft."))
+    answer = final(run(user("Write it"), model, server, settings))
+    assert "incomplete" not in answer and "step limit" not in answer["answer"]
+    assert "has passed the citation check" in answer["answer"]
+    assert "> x [A-000001]." in answer["answer"]
+
+
 def test_a_model_failure_ends_with_an_error_event_and_no_final():
     model = FakeModel(ModelError("the model service could not be reached"))
     events = run(user("hi"), model, FakeServer(MDEIS_LISTING))
