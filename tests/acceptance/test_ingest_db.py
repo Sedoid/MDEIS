@@ -20,6 +20,7 @@ pytest.importorskip("pdfplumber")
 
 import tool_env  # noqa: E402
 
+from mdeis import admin  # noqa: E402
 from mdeis.ingest import methodology, worker  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -307,3 +308,13 @@ def test_without_an_embedder_the_sections_are_stored_without_vectors(db, inbox, 
             "SELECT embedding_status FROM documents WHERE document_id = %s", (base,)
         ).fetchone()[0]
     assert status == "skipped" and document(db, base)["status"] == "done"
+
+
+def test_the_command_line_reads_its_own_document_even_while_the_worker_is_running(db, inbox):
+    """`make ingest` claims the document as it creates it, so a running ingestd cannot take it."""
+    pdf, truth = a_card_with(lambda t: True)
+    document_id, summary = admin.ingest_file(db, inbox, "results", pdf, "Tester")
+    assert summary["status"] == "done" and summary["records"] == 3 * len(truth["rows"])
+    with psycopg.connect(db) as conn:
+        assert worker.claim(conn) is None, "nothing was left pending for another worker"
+    assert document(db, document_id)["status"] == "done"
