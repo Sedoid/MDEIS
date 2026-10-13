@@ -55,11 +55,14 @@ def copy_into_inbox(source: Path, inbox: Path) -> tuple[str, str, int]:
 def ingest_file(url: str, inbox: Path, kind: str, source: Path, name: str) -> tuple[str, dict]:
     """Store one file as a document and read it now. Returns (document id, what happened)."""
     stored, digest, size = copy_into_inbox(source, inbox)
+    uploader = f"cli:{name}"
+    # Inserted already claimed ('processing'), so the background worker (ingestd) leaves it to us.
     with psycopg.connect(url) as conn:
         document_id = conn.execute(
             "INSERT INTO documents (kind, original_name, stored_name, sha256, size_bytes, "
-            "uploader_id, uploader_name) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING document_id",
-            (kind, source.name, stored, digest, size, f"cli:{name}", name),
+            "uploader_id, uploader_name, status, started_at, attempts) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, 'processing', now(), 1) RETURNING document_id",
+            (kind, source.name, stored, digest, size, uploader, name),
         ).fetchone()[0]
         conn.commit()
     diary.write(
@@ -69,7 +72,16 @@ def ingest_file(url: str, inbox: Path, kind: str, source: Path, name: str) -> tu
         outcome="ok",
         url=url,
     )
-    return document_id, worker.run_once(url, inbox, only=document_id) or {}
+    claimed = {
+        "document_id": document_id,
+        "kind": kind,
+        "stored_name": stored,
+        "sha256": digest,
+        "uploader_id": uploader,
+        "attempts": 1,
+    }
+    with psycopg.connect(url) as conn:
+        return document_id, worker.process(conn, claimed, inbox, url)
 
 
 def describe(document_id: str, kind: str, summary: dict) -> list[str]:
