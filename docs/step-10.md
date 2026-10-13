@@ -32,7 +32,7 @@ answer back. This is the plain tool-calling loop. It is the shippable path; the 
 | D10-5 | A request to rank or compare learners, or to suggest a pathway, subject choice or career, is refused with the reason before the model is called. The patterns are data in `prompts/refusals.json` | E-08. A starter list, not a complete one: the system prompt and the citation check are the other defences. Extend the file as real questions show gaps |
 | D10-6 | Of the borrowed Postgres server only four lookups are offered: `list_schemas`, `list_objects`, `get_object_details`, `execute_sql` (override with `PG_MCP_ALLOWED_TOOLS`). If that server is down the run goes on without it | Read-only lookups (the server and its database role are read-only twice). Numbers a model gets from SQL are not findings, so `check_citations` rejects them |
 | D10-7 | A tool whose parameters include `approver`, `approver_id`, `approver_name`, `user`, `user_id` or `by` is never offered | Non-negotiable 4 |
-| D10-8 | The step limit is `ORCHESTRATOR_MAX_STEPS` (default 8 model calls). When it is reached the run ends with an answer saying so, marked `incomplete` | A run cannot loop forever |
+| D10-8 | The step limit is `ORCHESTRATOR_MAX_STEPS` (default 12 model calls). When it is reached the run ends with an answer saying so, marked `incomplete` | A run cannot loop forever |
 | D10-9 | A tool failure is given to the model as the kind of error only (`the tool failed (RuntimeError)`), never the message. The service logs names, never message text, tokens or keys | A message could hold a record |
 | D10-10 | `ORCHESTRATOR_MODE=graph` is accepted but runs the plain loop until Step 12; `/healthz` says which mode is running | No pretending |
 
