@@ -158,7 +158,7 @@ test: $(ENV_FILE) ## Run pytest in a container (ARGS="-m integration" to pass op
 	$(COMPOSE) --profile test run --rm --build test pytest $(ARGS)
 
 lint: $(ENV_FILE) ## Run ruff in a container
-	$(COMPOSE) --profile test run --rm --build test ruff check src tests
+	$(COMPOSE) --profile test run --rm --build test ruff check src tests synthetic
 
 practice-data: $(ENV_FILE) ## Make the practice school (data/synthetic) in a container. Commit it only when the generator, a template or the seed changed
 	$(COMPOSE) --profile test run --rm --build --user "$$(id -u):$$(id -g)" practice-data
