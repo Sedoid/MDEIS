@@ -76,11 +76,11 @@ def detect(learner_id, cards, rules, move_label=_move_label) -> list:
                 )
             )
     for card in cards:
-        issues.extend(_card_issues(learner_id, card, rules))
+        issues.extend(_card_issues(learner_id, card, rules, move_label))
     return issues
 
 
-def _card_issues(learner_id, card, rules):
+def _card_issues(learner_id, card, rules, move_label):
     out = []
     year, card_id, denominator = card["year"], card["card_id"], card["denominator"]
     if denominator != rules.scale_max:
