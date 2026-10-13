@@ -91,5 +91,6 @@ clean; after `make prod-up` the page opens over https at `/mdeis-about/`; `make 
 
 - `docs/CONTAINERS.md`: the `proxy` container, the `prod` profile, and the new variables `APP_HOST`,
   `PROXY_BIND`, `PROXY_HTTP_PORT`, `PROXY_HTTPS_PORT`, `CADDY_IMAGE`, `WEBUI_SESSION_COOKIE_SECURE`.
+- `docs/STRUCTURE.md`: a row for `site/` (the structure check fails on this folder until it has one).
 - `.env.example`: I cannot edit it. Suggested: `APP_HOST=localhost`, `PROXY_BIND=127.0.0.1`,
   `WEBUI_SESSION_COOKIE_SECURE=false`.
