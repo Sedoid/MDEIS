@@ -134,6 +134,7 @@ def test_the_check_runs_after_every_draft_without_the_model_asking_for_it():
     assert server.calls[1][1] == {"report_id": "R-000012"}
     answer = final(events)["answer"]
     assert answer.startswith("Here is the draft")
+    assert "word for word" in answer and "> x [A-000001]." in answer, "the saved text is shown"
     assert "The draft R-000012 has passed the citation check" in answer
     assert "waiting for your release" in answer
     assert "Nothing has been released" in answer
