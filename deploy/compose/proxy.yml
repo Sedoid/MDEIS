@@ -14,7 +14,9 @@ services:
     environment:
       APP_HOST: ${APP_HOST:-localhost}
     volumes:
-      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Caddyfile = the full front door (needs a domain name). Caddyfile.page = the static page only,
+      # over plain http, for a bare IP address.
+      - ./deploy/caddy/${CADDYFILE:-Caddyfile}:/etc/caddy/Caddyfile:ro
       - ./site:/srv/site:ro
       - caddy_data:/data
       - caddy_config:/config

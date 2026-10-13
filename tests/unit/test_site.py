@@ -83,3 +83,14 @@ def test_the_proxy_pins_its_image_binds_to_loopback_by_default_and_serves_only_t
     for private in ("gateway", "orchestrator", "mdeis-mcp", "postgres", "n8n", "pg-mcp"):
         assert private not in caddy.split("reverse_proxy")[1], private
     assert "Strict-Transport-Security" in caddy and "-Server" in caddy
+
+
+def test_the_page_only_proxy_file_serves_the_page_and_forwards_nothing():
+    caddy = (ROOT / "deploy" / "caddy" / "Caddyfile.page").read_text(encoding="utf-8")
+    directives = "\n".join(line for line in caddy.splitlines() if not line.lstrip().startswith("#"))
+    assert "reverse_proxy" not in directives, "nothing is forwarded to any container"
+    assert "root * /srv/site" in directives and "respond \"Not found\" 404" in directives
+    assert "http://:80" in directives, "plain http: it must carry nothing secret"
+    assert "Content-Security-Policy" in directives and "-Server" in directives
+    for private in ("webui", "gateway", "orchestrator", "mdeis-mcp", "postgres", "n8n"):
+        assert private not in directives, private

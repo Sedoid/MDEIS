@@ -1,0 +1,37 @@
+# The page-only front door, for a bare IP address with no domain name and no certificate.
+# Selected with CADDYFILE=Caddyfile.page in .env.
+#
+#   http://IP:PORT/mdeis-about/   the static page in ./site (no scripts, no outside requests)
+#   anything else                 404. Nothing is forwarded to Open WebUI or to any other container.
+#
+# It speaks plain http, so it must not carry anything secret. That is why the chat is not reachable
+# here: sign-in passwords and chat text would travel unencrypted. Use an SSH tunnel for the chat, or
+# a domain name with the full Caddyfile.
+
+http://:80 {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	redir / /mdeis-about/ 302
+	redir /mdeis-about /mdeis-about/ permanent
+
+	handle_path /mdeis-about/* {
+		header Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'"
+		root * /srv/site
+		file_server
+	}
+
+	handle {
+		respond "Not found" 404
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
