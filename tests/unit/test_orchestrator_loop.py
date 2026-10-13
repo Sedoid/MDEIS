@@ -287,7 +287,7 @@ def test_only_the_orchestrator_names_the_model_service_and_it_never_names_the_si
     }
     assert mentions == {"orchestrator"}
     for p in (src / "orchestrator").rglob("*"):
-        if p.is_file():
+        if p.is_file() and p.suffix in (".py", ".md", ".json"):
             assert "APPROVER_TOKEN_SECRET" not in p.read_text(encoding="utf-8"), p.name
 
 

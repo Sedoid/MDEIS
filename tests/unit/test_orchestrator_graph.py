@@ -248,12 +248,16 @@ def test_a_ranking_request_is_refused_at_the_first_node_with_no_model_call():
     assert model.seen == [] and final(events)["refused"] is True
 
 
-def test_the_step_limit_ends_the_run_with_an_incomplete_answer():
+def test_the_step_limit_ends_the_run_with_what_was_found_and_an_incomplete_mark():
     settings = load_settings({**ENV, "ORCHESTRATOR_MODE": "graph", "ORCHESTRATOR_MAX_STEPS": "2"})
     one, two = ask("get_criterion", {"query": "TR-1"}), ask("get_criterion", {"query": "TR-2"})
-    model = FakeModel(one, two)
+    model = FakeModel(one, two, say("The tools showed TR-1 and TR-2. I did not write a draft."))
     events = run(user("rules"), model, FakeServer(MDEIS_LISTING), settings)
-    assert final(events)["incomplete"] is True and len(model.seen) == 2
+    answer = final(events)
+    assert answer["incomplete"] is True and "step limit" in answer["answer"]
+    assert "The tools showed TR-1 and TR-2" in answer["answer"], "what was found is not thrown away"
+    assert len(model.seen) == 3 and model.seen[2][1] == [], "the last call has no tools"
+    assert "no steps left" in json.dumps(model.seen[2][0][-1])
 
 
 def test_a_draft_that_passed_the_check_is_still_shown_when_the_step_limit_is_reached():

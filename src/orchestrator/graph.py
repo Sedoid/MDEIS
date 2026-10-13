@@ -41,6 +41,11 @@ READY = re.compile(r"The draft (R-\d{6,}) has passed the citation check")
 ISSUE_ID = re.compile(r"I-\d{6,}")
 NODES_PER_STEP = 3  # nodes one model step can pass through (agent, act, check)
 NODES_SPARE = 10  # and a few more for the start and the end
+LIMIT_HINT = (
+    "You have no steps left and no tools. Say plainly, in short sentences, what the tool results "
+    "above showed about the question, and what you could not finish. Use only numbers and sources "
+    "that appear in those results. Do not draft a report."
+)
 LIMIT_NOTE = (
     "I reached my step limit before I finished. Ask me to carry on, or ask a narrower question."
 )
@@ -60,6 +65,7 @@ class State(TypedDict, total=False):
     steps: int
     redrafts: int
     present: bool  # the draft passed: the model now only shows it
+    limited: bool  # the step limit was reached: the model is asked to say what it found
     outcome: str  # how the run ends: answer, refused, ask, gave_up, limit, error
     answer: str
 
@@ -188,15 +194,28 @@ def build(deps: Deps) -> Machine:
         return update
 
     async def agent(state: State) -> dict:
-        # Showing a draft that already passed the check uses no tools: the limit does not stop it.
-        if state["steps"] >= settings.max_steps and not state.get("present"):
-            return {"outcome": "limit", "answer": LIMIT_NOTE}
+        # Out of steps: one last call with no tools, asked to say what the tools showed. (Showing a
+        # draft that already passed the check is the same kind of call and is never stopped.)
+        limited = state["steps"] >= settings.max_steps and not state.get("present")
+        conversation = state["conversation"]
+        if limited:
+            conversation = [*conversation, {"role": "system", "content": LIMIT_HINT}]
         words = "Thinking." if not state["steps"] else "Working on it."
+        if limited:
+            words = "Out of steps: saying what was found."
         update: dict = {"events": [event("status", text=words)], "steps": state["steps"] + 1}
         try:
-            reply = await deps.model.complete(state["conversation"], offered(state))
+            reply = await deps.model.complete(conversation, [] if limited else offered(state))
         except ModelError as error:
             return {**update, "outcome": "error", "events": [event("error", text=str(error))]}
+        if limited:
+            said = guards.scrub(reply.text, deps.token) if reply.text and not reply.calls else ""
+            return {
+                **update,
+                "limited": True,
+                "outcome": "limit",
+                "answer": f"{LIMIT_NOTE}\n\n{said}" if said else LIMIT_NOTE,
+            }
         if not reply.calls:
             return {**update, "outcome": "answer", "answer": guards.scrub(reply.text, deps.token)}
         message = assistant_call(*reply.calls, text=reply.text)
@@ -364,6 +383,7 @@ def initial_state(conversation: list) -> State:
         steps=0,
         redrafts=0,
         present=False,
+        limited=False,
         outcome="",
         answer="",
     )
