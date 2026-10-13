@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-DEFAULT_MAX_STEPS = 8  # model calls in one run before the loop stops
+DEFAULT_MAX_STEPS = 12  # model calls in one run before the loop stops
 DEFAULT_MAX_REDRAFTS = 2  # times a draft that fails the citation check is written again
 DEFAULT_MDEIS_URL = "http://mdeis-mcp:8100/mcp"
 DEFAULT_PG_URL = "http://pg-mcp-ro:8200/sse"

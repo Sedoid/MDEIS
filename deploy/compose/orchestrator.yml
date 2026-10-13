@@ -15,7 +15,7 @@ services:
       ORCHESTRATOR_API_KEY: ${ORCHESTRATOR_API_KEY:?set ORCHESTRATOR_API_KEY in .env}
       # linear is the plain tool-calling loop (the fallback). graph is the LangGraph agent.
       ORCHESTRATOR_MODE: ${ORCHESTRATOR_MODE:-linear}
-      ORCHESTRATOR_MAX_STEPS: ${ORCHESTRATOR_MAX_STEPS:-8}
+      ORCHESTRATOR_MAX_STEPS: ${ORCHESTRATOR_MAX_STEPS:-12}
       ORCHESTRATOR_MAX_REDRAFTS: ${ORCHESTRATOR_MAX_REDRAFTS:-2}
       # Offer the class view to the model only when it is switched on (it is locked by default).
       CLASS_VIEW_ENABLED: ${CLASS_VIEW_ENABLED:-false}

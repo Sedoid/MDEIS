@@ -271,7 +271,7 @@ def test_a_reply_with_tool_calls_and_one_without_are_both_read():
 
 def test_the_settings_use_the_defaults_a_stranger_would_expect():
     s = load_settings({})
-    assert (s.mode, s.max_steps) == ("linear", 8)
+    assert (s.mode, s.max_steps) == ("linear", 12)
     assert (s.allow_fallbacks, s.data_collection) == (False, "deny")
     assert not s.model_ready and s.api_key == ""
     assert load_settings({"ORCHESTRATOR_MODE": "nonsense"}).mode == "linear"

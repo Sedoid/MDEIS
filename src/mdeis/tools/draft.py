@@ -6,7 +6,8 @@ from ..core import store
 from ._call import logged_tool
 from .context import Refusal, ToolContext
 
-FINDING_TOOLS = ("compute_trend", "ingest_assessments")
+# What a draft may be built from: results about the learner, and the rules and sections it cites.
+FINDING_TOOLS = ("compute_trend", "ingest_assessments", "get_criterion")
 
 
 def findings_for(ctx: ToolContext, hashes: list) -> list:
@@ -30,8 +31,9 @@ def findings_for(ctx: ToolContext, hashes: list) -> list:
 def draft_summary(ctx: ToolContext, learner_id: str, text: str, finding_hashes: list[str]):
     """Save a draft report. It is not released: a signed-in person must release it, after the check.
 
-    `finding_hashes` are the `result_hash` values of the tool results the text is built from. The
-    draft is pinned to the rulebook version those results used.
+    `finding_hashes` are the `result_hash` values of the tool results the text is built from: the
+    learner's results, and the rule lookups it cites. The draft is pinned to the rulebook version
+    those results used.
     """
     if not store.learner_exists(ctx.conn, learner_id):
         raise Refusal(f"there is no learner {learner_id}")
@@ -43,8 +45,9 @@ def draft_summary(ctx: ToolContext, learner_id: str, text: str, finding_hashes: 
     versions = {f["template_version"] for f in findings if "template_version" in f}
     if len(versions) != 1:
         raise Refusal("the findings must all come from one rulebook version")
-    if {f.get("learner_id") for f in findings} != {learner_id}:
-        raise Refusal("every finding must be about this learner")
+    about = {f["learner_id"] for f in findings if "learner_id" in f}
+    if about != {learner_id}:
+        raise Refusal("the findings must include results about this learner, and only this learner")
     version = versions.pop()
     methodology = ctx.conn.execute(
         "SELECT document_id FROM documents WHERE kind = 'methodology' AND active"
