@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from contextlib import AsyncExitStack
 
-from .tools import MDEIS, PG
+from .tools import MDEIS
 
 TOKEN_HEADER = "X-Approver-Token"
 RUN_HEADER = "X-Run-Id"
