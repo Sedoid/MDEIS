@@ -32,7 +32,7 @@ COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yml $(addpref
 
 .PHONY: help env-init env-sync check-env check-docker models dev-config dev-build dev-up dev-down up down dev-ps \
         dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules \
-        test lint check practice-data \
+        test test-contract lint check practice-data \
         demo demo-data smoke clean \
         probe-embed probe-mcp probe-pg-mcp probe-n8n probe-orchestrator probe-portal
 
@@ -156,6 +156,9 @@ search-rules: $(ENV_FILE) ## Find rules by meaning:  make search-rules Q="expect
 
 test: $(ENV_FILE) ## Run pytest in a container (ARGS="-m integration" to pass options)
 	$(COMPOSE) --profile test run --rm --build test pytest $(ARGS)
+
+test-contract: $(ENV_FILE) ## Run the tool contract tests (Step 7). They fail until the tools exist (Step 8), then must pass
+	$(COMPOSE) --profile test run --rm --build test pytest -m contract tests/acceptance/test_tools_contract.py $(ARGS)
 
 lint: $(ENV_FILE) ## Run ruff in a container
 	$(COMPOSE) --profile test run --rm --build test ruff check src tests synthetic
