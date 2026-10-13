@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MDEIS upload</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header>
+    <h1>MDEIS</h1>
+    <p id="who" class="who">Checking who is signed in…</p>
+  </header>
+  <p class="banner">Practice data only. Do not upload real learner records.</p>
+
+  <main>
+    <section id="signin" class="card" hidden>
+      <h2>Sign in first</h2>
+      <p>This page uses your Open WebUI sign-in. Open the chat, sign in, then come back and reload this page.</p>
+      <p><a id="signin-link" href="#" target="_blank" rel="noopener">Open the chat to sign in</a></p>
+    </section>
+
+    <section id="upload" class="card" hidden>
+      <h2>Upload</h2>
+      <div class="boxes">
+        <form id="form-results" class="box" data-kind="results">
+          <h3>Report cards</h3>
+          <p class="hint">PDF only. One card per file.</p>
+          <input type="file" name="file" accept=".pdf,application/pdf" multiple>
+          <button type="submit">Upload report cards</button>
+        </form>
+        <form id="form-methodology" class="box" data-kind="methodology" hidden>
+          <h3>Methodology</h3>
+          <p class="hint">PDF or Markdown. A person must check it before it is used.</p>
+          <input type="file" name="file" accept=".pdf,.md,application/pdf,text/markdown">
+          <button type="submit">Upload methodology</button>
+        </form>
+      </div>
+      <p id="message" class="message" role="status"></p>
+    </section>
+
+    <section id="status" class="card" hidden>
+      <h2>Your files</h2>
+      <table>
+        <thead><tr><th>File</th><th>Kind</th><th>Status</th><th>Detail</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <p id="empty" class="hint">Nothing uploaded yet.</p>
+    </section>
+
+    <section id="chat" class="card" hidden>
+      <h2>Chat</h2>
+      <p><a id="chat-link" href="#" target="_blank" rel="noopener">Open chat in a new tab</a></p>
+      <iframe id="chat-frame" title="Chat" hidden></iframe>
+    </section>
+  </main>
+</body>
+</html>

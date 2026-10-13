@@ -1,0 +1,34 @@
+:root { --ink: #1c2530; --muted: #5b6672; --line: #d5dbe1; --accent: #1b5e8c; --bg: #f6f8fa;
+        --warn: #8a5a00; --bad: #9b2226; --ok: #1d6b3a; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
+         padding: 0.75rem 1rem; background: #fff; border-bottom: 1px solid var(--line); }
+h1 { margin: 0; font-size: 1.25rem; }
+h2 { margin-top: 0; font-size: 1.1rem; }
+h3 { margin: 0 0 0.25rem; font-size: 1rem; }
+.who { margin: 0; color: var(--muted); }
+.banner { margin: 0; padding: 0.4rem 1rem; background: #fff6df; color: var(--warn); font-size: 0.9rem; }
+main { max-width: 64rem; margin: 0 auto; padding: 1rem; }
+.card { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 1rem;
+        margin-bottom: 1rem; }
+.boxes { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; }
+.box { border: 1px dashed var(--line); border-radius: 6px; padding: 0.75rem; }
+.hint { color: var(--muted); font-size: 0.9rem; margin: 0.25rem 0 0.5rem; }
+button { font: inherit; padding: 0.4rem 0.9rem; border: 1px solid var(--accent); border-radius: 4px;
+         background: var(--accent); color: #fff; cursor: pointer; margin-top: 0.5rem; }
+button.plain { background: #fff; color: var(--accent); }
+button:disabled { opacity: 0.5; cursor: default; }
+a { color: var(--accent); }
+.message { min-height: 1.5em; margin-bottom: 0; }
+.message.bad { color: var(--bad); }
+table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--line);
+         vertical-align: top; overflow-wrap: anywhere; }
+.s-done { color: var(--ok); }
+.s-failed { color: var(--bad); }
+.s-needs_review { color: var(--warn); }
+.diff { margin: 0.25rem 0 0; padding: 0.4rem; background: var(--bg); font: 0.85rem monospace;
+        white-space: pre-wrap; }
+iframe { width: 100%; height: 70vh; border: 1px solid var(--line); border-radius: 4px; }
+[hidden] { display: none !important; }

@@ -34,7 +34,7 @@ COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yml $(addpref
         dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules ingest ingest-dir ack token ask evals probe-gateway prod-config prod-up prod-down prod-check \
         test test-contract lint check practice-data \
         demo demo-data smoke clean \
-        probe-embed probe-mcp probe-pg-mcp probe-n8n probe-orchestrator probe-portal
+        probe-embed probe-mcp probe-pg-mcp probe-n8n probe-orchestrator probe-portal probe-signin
 
 help: ## Show this list
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -240,3 +240,6 @@ prod-check: ## From ANOTHER machine: check the public address:  make prod-check 
 
 probe-portal: $(ENV_FILE) ## Portal: its health answer, from inside the network
 	@$(COMPOSE) exec -T gateway python -c "import urllib.request; print(urllib.request.urlopen('http://portal:8080/healthz', timeout=10).read().decode())"
+
+probe-signin: $(ENV_FILE) ## Step 19: does the upload page's sign-in check work with the real Open WebUI?
+	@python3 scripts/probe_signin.py

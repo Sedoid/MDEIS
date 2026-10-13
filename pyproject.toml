@@ -47,6 +47,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 mdeis = ["db/migrations/*.sql"]
 orchestrator = ["prompts/*"]
+portal = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -17,6 +17,12 @@ services:
       PORTAL_DATABASE_URL: postgresql://${PORTAL_DB_USER:?set PORTAL_DB_USER in .env}:${PORTAL_DB_PASSWORD:?set PORTAL_DB_PASSWORD in .env}@postgres:5432/${MDEIS_DB_NAME:?set MDEIS_DB_NAME in .env}
       PORTAL_SESSION_SECRET: ${PORTAL_SESSION_SECRET:?set PORTAL_SESSION_SECRET in .env}
       WEBUI_URL: http://webui:8080
+      # Both addresses must use the SAME host name (127.0.0.1 or localhost, or the server's IP).
+      WEBUI_PUBLIC_URL: ${WEBUI_PUBLIC_URL:-http://127.0.0.1:${WEBUI_PORT:-3000}}
+      PORTAL_PUBLIC_URL: ${PORTAL_PUBLIC_URL:-}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
+      # Show the chat inside the page. Switch off if Open WebUI refuses to be framed (step 19 spike).
+      PORTAL_FRAME_CHAT: ${PORTAL_FRAME_CHAT:-true}
       INBOX_DIR: /inbox
     volumes:
       - inbox:/inbox
