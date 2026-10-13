@@ -23,10 +23,20 @@ let config = {};
 const VIEWS = ["upload", "files", "chat"];
 const TITLES = { upload: "Upload", files: "Your files", chat: "Chat" };
 
-async function get(path) {
-  const reply = await fetch(path, { credentials: "same-origin" });
-  return { status: reply.status, body: await reply.json().catch(() => ({})) };
+const OFFLINE = "Could not reach the server. Check the connection and try again.";
+
+// Every call to the portal goes through here. A dropped connection comes back as status 0 with a
+// plain message, so no caller has to handle a thrown error.
+async function call(path, options) {
+  try {
+    const reply = await fetch(path, { credentials: "same-origin", ...options });
+    return { ok: reply.ok, status: reply.status, body: await reply.json().catch(() => ({})) };
+  } catch (error) {
+    return { ok: false, status: 0, body: { error: OFFLINE } };
+  }
 }
+
+const get = (path) => call(path);
 
 function text(tag, value, className) {
   const element = document.createElement(tag);
@@ -83,7 +93,13 @@ function route() {
 }
 
 async function start() {
-  config = (await get("api/config")).body;
+  const settings = await get("api/config");
+  if (settings.status === 0) {
+    showSignIn();
+    $("signin-message").textContent = OFFLINE;
+    return;
+  }
+  config = settings.body;
   $("chat-link").href = config.chat_url;
   const who = await get("api/me");
   if (who.status !== 200) return showSignIn();
@@ -108,15 +124,13 @@ async function start() {
 // Open WebUI keeps its own copy of the login in this browser's storage and trusts that over the
 // cookie. The chat is on this same address, so the copy is put there before the chat is opened.
 async function handOverLogin() {
-  const reply = await fetch("api/chat-session", {
+  const reply = await call("api/chat-session", {
     method: "POST",
-    credentials: "same-origin",
     headers: { "X-CSRF-Token": csrf },
   });
   if (!reply.ok) return;
-  const body = await reply.json().catch(() => ({}));
   try {
-    if (body.token) localStorage.setItem("token", body.token);
+    if (reply.body.token) localStorage.setItem("token", reply.body.token);
   } catch (error) {
     // storage is blocked: the chat will ask for its own sign-in
   }
@@ -140,18 +154,16 @@ async function signIn(event) {
   button.disabled = true;
   button.textContent = "Signing in…";
   for (const id of ["email", "password"]) $(id).removeAttribute("aria-invalid");
-  const reply = await fetch("api/signin", {
+  const reply = await call("api/signin", {
     method: "POST",
-    credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email: $("email").value, password: $("password").value }),
   });
-  const body = await reply.json().catch(() => ({}));
-  $("password").value = "";
+  if (reply.status !== 0) $("password").value = "";  // kept if the request never left, to retry
   button.disabled = false;
   button.textContent = "Sign in";
   if (!reply.ok) {
-    message.textContent = body.error || "Sign-in did not work.";
+    message.textContent = reply.body.error || "Sign-in did not work.";
     for (const id of ["email", "password"]) $(id).setAttribute("aria-invalid", "true");
     $("password").focus();
     return;
@@ -160,11 +172,7 @@ async function signIn(event) {
 }
 
 async function signOut() {
-  await fetch("api/signout", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "X-CSRF-Token": csrf },
-  });
+  await call("api/signout", { method: "POST", headers: { "X-CSRF-Token": csrf } });
   csrf = null;
   try {
     localStorage.removeItem("token");
@@ -205,6 +213,16 @@ async function review(doc, cell) {
 
 async function refresh() {
   const { status, body } = await get("api/documents");
+  clearTimeout(timer);
+  if (status === 0) {  // the connection dropped: keep what is shown and try again shortly
+    timer = setTimeout(refresh, 5000);
+    return;
+  }
+  if (status === 401) {
+    showSignIn();
+    $("signin-message").textContent = "Your session ended. Sign in again.";
+    return;
+  }
   if (status !== 200) return;
   const rows = $("rows");
   rows.replaceChildren();
@@ -229,19 +247,16 @@ async function refresh() {
   }
   $("empty").hidden = body.documents.length > 0;
   document.querySelector("table").hidden = body.documents.length === 0;
-  clearTimeout(timer);
   if (busy) timer = setTimeout(refresh, 2000);
 }
 
 async function send(kind, file) {
-  const reply = await fetch("api/documents?kind=" + kind, {
+  const reply = await call("api/documents?kind=" + kind, {
     method: "POST",
-    credentials: "same-origin",
     headers: { "X-CSRF-Token": csrf, "X-File-Name": encodeURIComponent(file.name) },
     body: file,
   });
-  const body = await reply.json().catch(() => ({}));
-  return { ok: reply.ok, message: body.error || "" };
+  return { ok: reply.ok, offline: reply.status === 0, message: reply.body.error || "" };
 }
 
 async function submit(event) {
@@ -252,17 +267,24 @@ async function submit(event) {
   const button = form.querySelector("button");
   button.disabled = true;
   let failed = 0;
+  let offline = false;
   for (const file of files) {
     const result = await send(form.dataset.kind, file);
     if (!result.ok) {
       failed += 1;
       say(file.name + ": " + (result.message || "not accepted."), true);
+      if (result.offline) {  // stop here and keep the chosen files, so trying again is one click
+        offline = true;
+        break;
+      }
     }
   }
   if (!failed) say((files.length === 1 ? "Uploaded." : files.length + " files uploaded.") +
     " Progress is under Files.", false);
-  form.reset();
-  form.querySelector(".picked").textContent = "";
+  if (!offline) {
+    form.reset();
+    form.querySelector(".picked").textContent = "";
+  }
   button.disabled = false;
   await refresh();
 }

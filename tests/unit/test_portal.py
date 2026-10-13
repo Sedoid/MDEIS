@@ -421,6 +421,7 @@ def test_the_page_files_have_no_inline_script_or_style():
         assert bad not in page
     script = (folder / "app.js").read_text()
     assert "innerHTML" not in script and "eval(" not in script
+    assert script.count("fetch(") == 1, "every call goes through call(), which handles a dropped connection"
 
 
 def test_no_secret_or_model_code_in_the_portal():
