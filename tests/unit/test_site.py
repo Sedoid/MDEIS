@@ -94,3 +94,10 @@ def test_the_page_only_proxy_file_serves_the_page_and_forwards_nothing():
     assert "Content-Security-Policy" in directives and "-Server" in directives
     for private in ("webui", "gateway", "orchestrator", "mdeis-mcp", "postgres", "n8n"):
         assert private not in directives, private
+
+
+def test_the_bare_ip_proxy_file_forwards_only_to_the_chat_and_the_upload_page():
+    caddy = (ROOT / "deploy" / "caddy" / "Caddyfile.ip").read_text(encoding="utf-8")
+    targets = [line.split()[1] for line in caddy.splitlines() if "reverse_proxy" in line
+               and not line.lstrip().startswith("#")]
+    assert sorted(targets) == ["portal:8080", "webui:8080"]

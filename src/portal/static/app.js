@@ -40,10 +40,10 @@ function say(message, bad) {
 }
 
 async function start() {
-  config = (await get("/api/config")).body;
+  config = (await get("api/config")).body;
   $("signin-link").href = config.chat_url;
   $("chat-link").href = config.chat_url;
-  const who = await get("/api/me");
+  const who = await get("api/me");
   if (who.status !== 200) {
     $("who").textContent = "Not signed in";
     $("signin").hidden = false;
@@ -59,7 +59,7 @@ async function start() {
     $("chat-frame").src = config.chat_url;
     $("chat-frame").hidden = false;
   }
-  csrf = (await get("/api/csrf")).body.csrf;
+  csrf = (await get("api/csrf")).body.csrf;
   await refresh();
 }
 
@@ -75,7 +75,7 @@ function describe(doc) {
 }
 
 async function review(doc, cell) {
-  const full = await get("/api/documents/" + encodeURIComponent(doc.document_id));
+  const full = await get("api/documents/" + encodeURIComponent(doc.document_id));
   const issues = (full.body.issues || []).map((issue) =>
     [issue.kind, issue.clause_id, issue.detail].filter(Boolean).join(": "));
   cell.appendChild(text("div", issues.join("\n") || "No changes listed.", "diff"));
@@ -90,7 +90,7 @@ async function review(doc, cell) {
 }
 
 async function refresh() {
-  const { status, body } = await get("/api/documents");
+  const { status, body } = await get("api/documents");
   if (status !== 200) return;
   const rows = $("rows");
   rows.replaceChildren();
@@ -112,7 +112,7 @@ async function refresh() {
 }
 
 async function send(kind, file) {
-  const reply = await fetch("/api/documents?kind=" + kind, {
+  const reply = await fetch("api/documents?kind=" + kind, {
     method: "POST",
     credentials: "same-origin",
     headers: { "X-CSRF-Token": csrf, "X-File-Name": encodeURIComponent(file.name) },

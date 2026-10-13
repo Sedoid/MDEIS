@@ -105,3 +105,33 @@ Paste back: the lint and test output, the `probe-signin` output, and what you sa
 - `.env`: the three new variables are optional because the compose file has defaults. On a server
   set `WEBUI_PUBLIC_URL=http://<server-ip>:3000` so the chat link goes to the right place, and make
   sure the provider firewall allows ports 3000 and 8080.
+
+## Reaching it on a bare IP (added after the first server run)
+
+`make probe-signin` passed all four checks, so the sign-in design holds. The browser could not open
+`ip:3000` or `ip:8080`: only port 8088 (the Caddy proxy from Step 16) answers from outside, and the
+other ports are not open to the internet. So the chat and the upload page now go through that one
+port, with a new proxy file `deploy/caddy/Caddyfile.ip`:
+
+```
+http://13.140.150.214:8088/          the chat (Open WebUI)
+http://13.140.150.214:8088/portal/   the upload page
+http://13.140.150.214:8088/mdeis-about/
+```
+
+One host name and one port also means the sign-in cookie reaches the upload page without any
+cross-port question. The page's own addresses are now relative so that it works under `/portal/`.
+This is plain http: the sign-in password and chat text are not encrypted. Sign-up is off, so only the
+accounts you made can sign in. Treat it as a demo; a domain name and the full Caddyfile fix that.
+
+On the server:
+
+```
+git pull
+python3 scripts/set_env.py   # not needed; edit these three lines in .env by hand:
+#   CADDYFILE=Caddyfile.ip
+#   WEBUI_PUBLIC_URL=http://13.140.150.214:8088
+#   PORTAL_PUBLIC_URL=http://13.140.150.214:8088
+make dev-up
+make prod-down && make prod-up
+```
