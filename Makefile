@@ -31,7 +31,7 @@ endif
 COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yml $(addprefix -f ,$(SERVICE_FILES))
 
 .PHONY: help env-init env-sync check-env check-docker models dev-config dev-build dev-up dev-down up down dev-ps \
-        dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules ingest ack token ask \
+        dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules ingest ack token ask probe-gateway \
         test test-contract lint check practice-data \
         demo demo-data smoke clean \
         probe-embed probe-mcp probe-pg-mcp probe-n8n probe-orchestrator probe-portal
@@ -203,6 +203,9 @@ token: $(ENV_FILE) ## A five-minute approver token for testing by hand:  make to
 ask: $(ENV_FILE) ## Ask the orchestrator directly, no gateway:  make ask Q="How is L-0001 doing in English?" [TOKEN=...]
 	@test -n "$(Q)" || { echo 'usage: make ask Q="your question" [TOKEN=from make token]' >&2; exit 1; }
 	@$(COMPOSE) exec -T orchestrator python - "$(Q)" "$(TOKEN)" < scripts/ask_orchestrator.py
+
+probe-gateway: $(ENV_FILE) ## Gateway: no key and no user are refused, a signed-in user gets an answer
+	@$(COMPOSE) exec -T gateway python - < scripts/probe_gateway.py
 
 probe-portal: $(ENV_FILE) ## Portal: its health answer, from inside the network
 	@$(COMPOSE) exec -T gateway python -c "import urllib.request; print(urllib.request.urlopen('http://portal:8080/healthz', timeout=10).read().decode())"
