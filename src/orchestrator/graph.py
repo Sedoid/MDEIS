@@ -188,7 +188,8 @@ def build(deps: Deps) -> Machine:
         return update
 
     async def agent(state: State) -> dict:
-        if state["steps"] >= settings.max_steps:
+        # Showing a draft that already passed the check uses no tools: the limit does not stop it.
+        if state["steps"] >= settings.max_steps and not state.get("present"):
             return {"outcome": "limit", "answer": LIMIT_NOTE}
         words = "Thinking." if not state["steps"] else "Working on it."
         update: dict = {"events": [event("status", text=words)], "steps": state["steps"] + 1}
