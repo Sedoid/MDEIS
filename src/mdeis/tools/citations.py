@@ -3,7 +3,8 @@
 The rules, in order of what they catch (docs/step-08.md):
   uncited_sentence  a sentence with no [source] marker
   unknown_record    a [A-000123] marker no tool returned in this run
-  unknown_clause    a [TR-2] marker no tool returned in this run
+  unknown_clause    a [TR-2] marker no tool returned in this run, or not in the pinned rulebook
+  unknown_section   a [M-6.4] marker no tool returned, or not in the pinned methodology
   unknown_number    a number in the text that is not in the findings the draft was built from
   banned_word       a word the pinned rulebook bans
 The check is plain code. The writer cannot argue with it, and nothing but a clean pass sets
@@ -17,11 +18,12 @@ from ..core.rules import load_rules
 from ._call import logged_tool
 from .context import Refusal, ToolContext
 
-MARKER = re.compile(r"\[([A-Z]{1,2}-[0-9][0-9.]*)\]")
+MARKER = re.compile(r"\[([A-Z]{1,2}-[0-9][0-9A-Za-z.]*)\]")
 RECORD_ID = re.compile(r"A-[0-9]+")
-KNOWN_ID = re.compile(r"A-[0-9]{6,}|[A-Z]{2}-[0-9]+|M-[0-9][0-9.]*")
+SECTION_ID = re.compile(r"M-[0-9][0-9A-Za-z.]*")
+KNOWN_ID = re.compile(r"A-[0-9]{6,}|[A-Z]{2}-[0-9]+|M-[0-9][0-9A-Za-z.]*")
 NUMBER = re.compile(r"[0-9]+(?:\.[0-9]+)?")
-ID_TOKEN = re.compile(r"\b[A-Z]{1,2}-[0-9][0-9.]*")
+ID_TOKEN = re.compile(r"\b[A-Z]{1,2}-[0-9][0-9A-Za-z.]*")
 NOT_COUNTED = {"result_hash"}
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 RULES_TOOL = "get_criterion"
@@ -74,7 +76,13 @@ def returned_in_run(ctx: ToolContext, run_id: str, findings: list) -> tuple:
     return ids, numbers
 
 
-def problems_in(body: str, ids: set, numbers: set, banned: list) -> list:
+def problems_in(
+    body: str, ids: set, numbers: set, banned: list, clauses: set | None = None,
+    sections: set | None = None,
+) -> list:
+    """Every problem in a draft. `clauses` and `sections` are the rules of the pinned rulebook
+    version and the sections of the pinned methodology: a marker outside them is refused even if a
+    tool returned it. Left out, only what the tools returned in the run is checked."""
     problems = []
     for number, sentence in enumerate(sentences(body), start=1):
         markers = MARKER.findall(sentence)
@@ -83,10 +91,9 @@ def problems_in(body: str, ids: set, numbers: set, banned: list) -> list:
                 {"reason": "uncited_sentence", "sentence": number, "detail": sentence}
             )
         for marker in markers:
-            if marker in ids:
-                continue
-            reason = "unknown_record" if RECORD_ID.fullmatch(marker) else "unknown_clause"
-            problems.append({"reason": reason, "sentence": number, "detail": marker})
+            reason = _marker_problem(marker, ids, clauses, sections)
+            if reason:
+                problems.append({"reason": reason, "sentence": number, "detail": marker})
         for n in sorted(numbers_in(sentence)):
             if n not in numbers:
                 problems.append({"reason": "unknown_number", "sentence": number, "detail": str(n)})
@@ -96,19 +103,56 @@ def problems_in(body: str, ids: set, numbers: set, banned: list) -> list:
     return problems
 
 
-def sources_for(ctx: ToolContext, body: str, version: str) -> list:
-    """Each distinct marker in the draft, with what it points to."""
+def _marker_problem(marker, ids, clauses, sections) -> str | None:
+    if RECORD_ID.fullmatch(marker):
+        return None if marker in ids else "unknown_record"
+    if SECTION_ID.fullmatch(marker):
+        known = marker in ids and (sections is None or marker in sections)
+        return None if known else "unknown_section"
+    known = marker in ids and (clauses is None or marker in clauses)
+    return None if known else "unknown_clause"
+
+
+def sources_for(ctx: ToolContext, body: str, version: str, document_id: str | None) -> list:
+    """Each distinct marker in the draft, with what it points to: a record to its document, page
+    and row; a rule to the rulebook version; a methodology section to its document and page."""
     out = []
     for marker in dict.fromkeys(MARKER.findall(body)):
         if RECORD_ID.fullmatch(marker):
             row = ctx.conn.execute(
-                "SELECT subject, academic_year, term FROM assessments WHERE assessment_id = %s",
+                "SELECT subject, academic_year, term, source_document_id, source_page, source_row "
+                "FROM assessments WHERE assessment_id = %s",
                 (marker,),
             ).fetchone()
             if row:
-                subject, year, term = row
+                subject, year, term, document, page, source_row = row
                 out.append(
-                    {"id": marker, "kind": "record", "subject": subject, "year": year, "term": term}
+                    {
+                        "id": marker,
+                        "kind": "record",
+                        "subject": subject,
+                        "year": year,
+                        "term": term,
+                        "document_id": document,
+                        "page": page,
+                        "row": source_row,
+                    }
+                )
+        elif SECTION_ID.fullmatch(marker):
+            row = ctx.conn.execute(
+                "SELECT title, page FROM method_chunks WHERE document_id = %s AND section_id = %s",
+                (document_id, marker[len("M-") :]),
+            ).fetchone()
+            if row:
+                title, page = row
+                out.append(
+                    {
+                        "id": marker,
+                        "kind": "section",
+                        "document_id": document_id,
+                        "title": title,
+                        "page": page,
+                    }
                 )
         else:
             row = ctx.conn.execute(
@@ -116,7 +160,9 @@ def sources_for(ctx: ToolContext, body: str, version: str) -> list:
                 (version, marker),
             ).fetchone()
             if row:
-                out.append({"id": marker, "kind": "clause", "text": row[0]})
+                out.append(
+                    {"id": marker, "kind": "clause", "template_version": version, "text": row[0]}
+                )
     return out
 
 
@@ -128,17 +174,32 @@ def check_citations(ctx: ToolContext, report_id: str):
     draft that has passed can be released.
     """
     row = ctx.conn.execute(
-        "SELECT body, run_id, template_version, status, findings FROM reports "
-        "WHERE report_id = %s",
+        "SELECT body, run_id, template_version, status, findings, methodology_document_id "
+        "FROM reports WHERE report_id = %s",
         (report_id,),
     ).fetchone()
     if row is None:
         raise Refusal(f"there is no report {report_id}")
-    body, run_id, version, status, findings = row
+    body, run_id, version, status, findings, document_id = row
     if status != "pending_review":
         raise Refusal(f"{report_id} is {status}; only a draft can be checked")
     ids, numbers = returned_in_run(ctx, run_id, findings)
-    problems = problems_in(body, ids, numbers, load_rules(ctx.conn, version).banned_words)
+    rules = load_rules(ctx.conn, version)
+    in_version = {
+        r[0]
+        for r in ctx.conn.execute(
+            "SELECT clause_id FROM clauses WHERE version_name = %s", (version,)
+        ).fetchall()
+    }
+    in_methodology = {
+        "M-" + r[0]
+        for r in ctx.conn.execute(
+            "SELECT section_id FROM method_chunks WHERE document_id = %s "
+            "AND section_id IS NOT NULL",
+            (document_id,),
+        ).fetchall()
+    }
+    problems = problems_in(body, ids, numbers, rules.banned_words, in_version, in_methodology)
     ok = not problems
     ctx.conn.execute("UPDATE reports SET citations_ok = %s WHERE report_id = %s", (ok, report_id))
     result = {
@@ -146,6 +207,7 @@ def check_citations(ctx: ToolContext, report_id: str):
         "report_id": report_id,
         "template_version": version,
         "problems": problems,
-        "sources": sources_for(ctx, body, version),
+        "methodology_document_id": document_id,
+        "sources": sources_for(ctx, body, version, document_id),
     }
     return result, "ok" if ok else "blocked"

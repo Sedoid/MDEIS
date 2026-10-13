@@ -31,7 +31,7 @@ endif
 COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yml $(addprefix -f ,$(SERVICE_FILES))
 
 .PHONY: help env-init env-sync check-env check-docker models dev-config dev-build dev-up dev-down up down dev-ps \
-        dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules \
+        dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules ingest ack \
         test test-contract lint check practice-data \
         demo demo-data smoke clean \
         probe-embed probe-mcp probe-pg-mcp probe-n8n probe-orchestrator probe-portal
@@ -153,6 +153,15 @@ rules-status: $(ENV_FILE) ## Show the loaded rulebook versions, their rule count
 search-rules: $(ENV_FILE) ## Find rules by meaning:  make search-rules Q="expected reading level for Form 1"
 	@test -n "$(Q)" || { echo 'usage: make search-rules Q="your question"' >&2; exit 1; }
 	@$(COMPOSE) --profile tools run --rm rules python -m mdeis.rulebook search "$(Q)"
+
+ingest: $(ENV_FILE) ## Read one document:  make ingest KIND=results FILE=data/synthetic/cards/x.pdf AS="Ada Teacher"
+	@test -n "$(FILE)" -a -n "$(AS)" || { echo 'usage: make ingest KIND=results|methodology FILE=path AS="Your Name"' >&2; exit 1; }
+	@test -f "$(FILE)" || { echo "There is no file at $(FILE)." >&2; exit 1; }
+	@$(COMPOSE) --profile tools run --rm --build -v "$(abspath $(FILE)):/upload/$(notdir $(FILE)):ro" admin ingest --kind "$(or $(KIND),results)" --file "/upload/$(notdir $(FILE))" --as "$(AS)"
+
+ack: $(ENV_FILE) ## Put a methodology that needs review in force:  make ack DOC=D-000012 BY="Ada Teacher" NOTE="checked 6.4"
+	@test -n "$(DOC)" -a -n "$(BY)" || { echo 'usage: make ack DOC=D-000012 BY="Your Name" [NOTE="..."]' >&2; exit 1; }
+	@$(COMPOSE) --profile tools run --rm admin ack-methodology "$(DOC)" --by "$(BY)" --note "$(NOTE)"
 
 test: $(ENV_FILE) ## Run pytest in a container (ARGS="-m integration" to pass options)
 	$(COMPOSE) --profile test run --rm --build test pytest $(ARGS)

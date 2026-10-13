@@ -20,6 +20,8 @@ dependencies = [
     "httpx",
     "fastapi",
     "uvicorn",
+    # Reads the report cards and the methodology PDF by word position (docs/INGEST.md, D-014).
+    "pdfplumber",
 ]
 
 [project.optional-dependencies]

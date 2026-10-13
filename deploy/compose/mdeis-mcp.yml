@@ -58,6 +58,37 @@ services:
         condition: service_completed_successfully
     restart: "no"
 
+  # One-shot admin commands (profile "tools"): `make ingest` and `make ack` run it. It reads a
+  # document with the same code as the worker, so it needs the inbox (to store the file) and the
+  # database. Like the worker it holds no model key and no approver-token secret.
+  admin:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: deploy/docker/mdeis-mcp.Dockerfile
+      target: runtime
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?set PYTHON_IMAGE in .env}
+    image: mdeis-mcp:local
+    container_name: admin-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    entrypoint: ["python", "-m", "mdeis.admin"]
+    environment:
+      DATABASE_URL: postgresql://${MDEIS_APP_USER:?set MDEIS_APP_USER in .env}:${MDEIS_APP_PASSWORD:?set MDEIS_APP_PASSWORD in .env}@postgres:5432/${MDEIS_DB_NAME:?set MDEIS_DB_NAME in .env}
+      # Optional: without the embedder a methodology's sections are stored without vectors.
+      EMBEDDER_URL: http://embedder:8081
+      EMBED_DIM: ${EMBED_DIM:-768}
+      EMBED_MODEL_FILE: ${EMBED_MODEL_FILE:-}
+      INBOX_DIR: /inbox
+    volumes:
+      - inbox:/inbox
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
   mdeis-mcp:
     build:
       context: .

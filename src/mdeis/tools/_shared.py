@@ -48,6 +48,14 @@ def situation(ctx: ToolContext, learner_id: str, template_version: str | None) -
     )
 
 
+def active_methodology(conn) -> str | None:
+    """The document id of the methodology in force, or None when none has been uploaded."""
+    row = conn.execute(
+        "SELECT document_id FROM documents WHERE kind = 'methodology' AND active"
+    ).fetchone()
+    return row[0] if row else None
+
+
 def public_issue(issue: dict, answers: dict) -> dict:
     """An issue as the caller sees it: without the internal fingerprint, with its answer if any."""
     out = {k: v for k, v in issue.items() if k not in INTERNAL_ISSUE_KEYS}
