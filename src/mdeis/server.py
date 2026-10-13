@@ -21,8 +21,8 @@ from starlette.responses import JSONResponse
 
 from . import tools
 from .core import approver_token
-from .tools.context import Approver, ToolContext
 from .tools import class_view
+from .tools.context import Approver, ToolContext
 from .tools.criterion import DEFAULT_RESULTS
 
 APPROVER_HEADER = "x-approver-token"
