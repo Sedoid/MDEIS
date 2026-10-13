@@ -48,7 +48,7 @@ or when the model service fails.
 | D12-11 | `draft_summary` now accepts the hashes of rule lookups (`get_criterion`) as well as the learner's results, but still needs at least one result about the learner, and none about anyone else. The default step limit is 12 model calls | Found on the first real run: the model named every result it had gathered, and the tool refused the draft because rule lookups were not accepted. Eight steps was also too tight for a model that looks rules up one at a time |
 | D12-12 | When a draft has passed the check, the final answer includes the saved draft word for word, quoted, with its source markers, above the "passed the citation check" line | Found on the first real run: the chat showed the model's paraphrase, not the text that would be released. The approver must read what is released |
 | D12-13 | The step limit does not apply to the last call that shows a draft which has passed the check | Found on a messy learner: the check passed at the last allowed step and the draft was then thrown away with a "step limit" note |
-| D12-10 | `langgraph` is not pinned to an exact version in this step. After the first successful image build, run `make dev-ps` then `docker compose ... exec orchestrator pip freeze \| grep -i langgraph` and pin what it shows | I cannot check which versions exist from here |
+| D12-10 | `langgraph` is pinned to `1.2.15` and `langgraph-checkpoint-postgres` to `3.1.3`, the versions the first successful image build installed (read from `pip freeze` in the running container) | Exact pins, as D-001 asks, taken from a build that worked |
 
 ## What was built
 
