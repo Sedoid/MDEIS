@@ -32,8 +32,8 @@ MARKERS = ["circle", "square", "triangle", "diamond", "cross", "plus"]
 FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif"
 TICKS = 4
 PAD = 24  # space at the left and right of the text blocks
-SIZE = {"title": 21, "subtitle": 13, "tick": 12.5, "value": 14, "term": 13, "stage": 12,
-        "legend": 13.5, "gap": 14, "source": 12, "end": 12.5}
+SIZE = {"title": 19, "subtitle": 12.5, "tick": 12, "value": 12.5, "term": 12.5, "stage": 11.5,
+        "legend": 13, "gap": 13, "source": 11.5, "end": 12}
 ROW = 26  # distance between legend rows
 LABEL_LIMIT = 12  # more terms than this: values are not printed on the line, only on the axis
 END_GAP = 15  # least distance between two line names at the right edge
@@ -59,10 +59,10 @@ def _text(x, y, content, size, fill=INK, anchor="start", weight="normal", halo=F
     )
 
 
-def _marker(shape: str, x: float, y: float, colour: str, size: float = 5.5) -> str:
+def _marker(shape: str, x: float, y: float, colour: str, size: float = 4.6) -> str:
     """One point. Closed shapes are white inside so the line behind does not show through."""
     cx, cy, r = _n(x), _n(y), size
-    style = f'fill="#ffffff" stroke="{colour}" stroke-width="2.5" stroke-linejoin="round"'
+    style = f'fill="#ffffff" stroke="{colour}" stroke-width="2.2" stroke-linejoin="round"'
     if shape == "circle":
         return f'<circle cx="{cx}" cy="{cy}" r="{_n(r)}" {style}/>'
     if shape == "square":
@@ -75,7 +75,7 @@ def _marker(shape: str, x: float, y: float, colour: str, size: float = 5.5) -> s
         pts = f"{_n(x)},{_n(y - r - 2)} {_n(x + r + 2)},{_n(y)} {_n(x)},{_n(y + r + 2)} " \
               f"{_n(x - r - 2)},{_n(y)}"
         return f'<polygon points="{pts}" {style}/>'
-    line = f'stroke="{colour}" stroke-width="2.75" stroke-linecap="round"'
+    line = f'stroke="{colour}" stroke-width="2.4" stroke-linecap="round"'
     if shape == "cross":
         d = r - 0.5
         return (f'<path d="M{_n(x - d)},{_n(y - d)} L{_n(x + d)},{_n(y + d)} '
@@ -179,7 +179,7 @@ def trend_svg(chart: dict) -> str:
             if len(run) > 1:
                 path = " ".join(f"{_n(x_of(i))},{_n(y_of(line['values'][i]))}" for i in run)
                 parts.append(
-                    f'<polyline points="{path}" fill="none" stroke="{colour}" stroke-width="2.75" '
+                    f'<polyline points="{path}" fill="none" stroke="{colour}" stroke-width="2.25" '
                     f'stroke-linejoin="round"{dashed}/>'
                 )
 
@@ -232,9 +232,9 @@ def trend_svg(chart: dict) -> str:
         dashed = f' stroke-dasharray="{dash}"' if dash else ""
         parts.append(
             f'<line x1="{PAD}" y1="{row}" x2="{PAD + 32}" y2="{row}" stroke="{colour}" '
-            f'stroke-width="2.75"{dashed}/>'
+            f'stroke-width="2.25"{dashed}/>'
         )
-        parts.append(_marker(MARKERS[k % len(MARKERS)], PAD + 16, row, colour, 5))
+        parts.append(_marker(MARKERS[k % len(MARKERS)], PAD + 16, row, colour, 4.2))
         label = line["name"] if many else "Score in each term, from the report cards"
         parts.append(_text(text_x, row + 5, label, SIZE["legend"]))
         row += ROW
