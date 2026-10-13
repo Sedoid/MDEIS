@@ -24,7 +24,7 @@ SECRET = "portal-secret-not-real"
 ADA = User(id="u-ada", name="Ada Teacher", role="admin")
 BEN = User(id="u-ben", name="Ben Staff", role="user")
 PDF = b"%PDF-1.4\n% a made-up card\n"
-MD = "# Methodology\n\n6.4 Reading the scores\n".encode()
+MD = b"# Methodology\n\n6.4 Reading the scores\n"
 ORIGIN = {"Origin": "http://testserver"}
 
 
