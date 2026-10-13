@@ -162,3 +162,23 @@ def test_a_released_report_is_never_recomputed_under_a_newer_version(make_ctx, l
         "SELECT status, methodology_document_id FROM reports WHERE report_id = %s", (report_id,)
     ).fetchone()
     assert state == ("released", base), "it keeps the pin it was written under"
+
+
+def test_a_draft_may_name_the_rule_lookups_it_cites_but_must_include_the_learners_results(
+    make_ctx, learner
+):
+    ctx = make_ctx(APPROVER)
+    trend = tool("compute_trend")(ctx, learner_id=learner, skill="English")
+    rule = tool("get_criterion")(ctx, query="TR-2")
+    text = f"English fell [{trend['record_ids'][0]}] [TR-2]."
+    only_rule = tool("draft_summary")(
+        ctx, learner_id=learner, text=text, finding_hashes=[rule["result_hash"]]
+    )
+    assert only_rule["status"] == "refused", "a rule alone says nothing about the learner"
+    hashes = [trend["result_hash"], rule["result_hash"]]
+    both = tool("draft_summary")(ctx, learner_id=learner, text=text, finding_hashes=hashes)
+    assert both["status"] == "pending_review" and both["template_version"] == "v1"
+    unknown = tool("draft_summary")(
+        ctx, learner_id=learner, text=text, finding_hashes=[trend["result_hash"], "0" * 64]
+    )
+    assert unknown["status"] == "refused" and "not returned by a tool" in unknown["reason"]

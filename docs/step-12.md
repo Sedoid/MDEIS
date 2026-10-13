@@ -45,6 +45,7 @@ or when the model service fails.
 | D12-7 | `ingest_assessments` now lists, for each problem, the answers that fit it (`possible_answers`), so the question can say what the approver may answer | The orchestrator must not import the toolbox's rules |
 | D12-8 | The graph adds a short note to the system prompt (`prompts/graph_note.md`) saying which steps the system does itself | The model should not do them twice |
 | D12-9 | The default stays `ORCHESTRATOR_MODE=linear` until the graph has run on the server. Switch with `ORCHESTRATOR_MODE=graph` in `.env` | Do not make the unproven path the default |
+| D12-11 | `draft_summary` now accepts the hashes of rule lookups (`get_criterion`) as well as the learner's results, but still needs at least one result about the learner, and none about anyone else. The default step limit is 12 model calls | Found on the first real run: the model named every result it had gathered, and the tool refused the draft because rule lookups were not accepted. Eight steps was also too tight for a model that looks rules up one at a time |
 | D12-10 | `langgraph` is not pinned to an exact version in this step. After the first successful image build, run `make dev-ps` then `docker compose ... exec orchestrator pip freeze \| grep -i langgraph` and pin what it shows | I cannot check which versions exist from here |
 
 ## What was built
