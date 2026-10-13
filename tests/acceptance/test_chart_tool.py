@@ -20,6 +20,15 @@ def tool(name):
         pytest.fail(f"the tool {name!r} is not built yet ({type(e).__name__}: {e})", pytrace=False)
 
 
+@pytest.fixture(scope="module")
+def fx(files, key):
+    """handle -> the fixture's row (with its DB learner id) and its expected results."""
+    out = {}
+    for f in json.loads(files["truth/fixtures.json"]):
+        out[f["handle"]] = {**f, "expected": key["learners"][f["school_ref"]]["by_template"]}
+    return out
+
+
 def chart(ctx, learner, skills, version="v1"):
     return tool("make_chart")(ctx, learner_id=learner, skills=skills, template_version=version)
 
