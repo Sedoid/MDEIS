@@ -128,10 +128,10 @@ On the server:
 
 ```
 git pull
-python3 scripts/set_env.py   # not needed; edit these three lines in .env by hand:
-#   CADDYFILE=Caddyfile.ip
-#   WEBUI_PUBLIC_URL=http://13.140.150.214:8088
-#   PORTAL_PUBLIC_URL=http://13.140.150.214:8088
+make env        # adds the new names to .env if they are missing
+CADDYFILE=Caddyfile.ip WEBUI_PUBLIC_URL=http://13.140.150.214:8088 \
+  PORTAL_PUBLIC_URL=http://13.140.150.214:8088 \
+  python3 scripts/set_env.py CADDYFILE WEBUI_PUBLIC_URL PORTAL_PUBLIC_URL
 make dev-up
 make prod-down && make prod-up
 ```
