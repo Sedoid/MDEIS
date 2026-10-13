@@ -96,6 +96,8 @@ def scan_folder(folder, template_path="templates/v1.yaml", extra_texts=None):
     import json
 
     folder = Path(folder)
+    if not any(p.is_file() for p in folder.rglob("*")):
+        raise FileNotFoundError(f"nothing to scan in {folder}: missing or empty folder")
     findings = []
     for path in sorted(folder.rglob("*")):
         if path.suffix in TEXT_SUFFIXES and path.name != "MANIFEST.sha256" and path.is_file():
@@ -114,7 +116,11 @@ def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     folder = argv[0] if argv else "data/synthetic"
     template = argv[1] if len(argv) > 1 else "templates/v1.yaml"
-    findings = scan_folder(folder, template)
+    try:
+        findings = scan_folder(folder, template)
+    except FileNotFoundError as err:
+        print(f"error: {err}", file=sys.stderr)
+        return 2
     for label, kind, snippet in findings:
         print(f"{label}: {kind}: {snippet}")
     print(f"{len(findings)} finding(s) in {folder}")

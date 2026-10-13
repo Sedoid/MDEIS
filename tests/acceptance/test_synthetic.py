@@ -14,6 +14,7 @@ import sys
 from collections import Counter
 from fractions import Fraction
 
+import pytest
 import yaml
 from synthetic import cohort, generate, hand_checks, scan
 
@@ -274,6 +275,15 @@ def test_the_scan_finds_no_real_looking_personal_data(root, files, tmp_path):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
     assert scan.scan_folder(tmp_path, root / "templates" / "v1.yaml") == []
+
+
+def test_scanning_a_missing_or_empty_folder_is_an_error_not_a_pass(root, tmp_path):
+    template = root / "templates" / "v1.yaml"
+    with pytest.raises(FileNotFoundError):
+        scan.scan_folder(tmp_path / "nope", template)
+    with pytest.raises(FileNotFoundError):
+        scan.scan_folder(tmp_path, template)
+    assert scan.main([str(tmp_path / "nope")]) == 2
 
 
 def test_the_scan_does_catch_what_it_looks_for():
