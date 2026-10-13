@@ -59,7 +59,16 @@ Check and paste back (a screenshot is best):
 To switch the spike off, set `CHART_SPIKE=` (empty) in `.env` and run `make dev-up`. The hook is
 deleted in part 2.
 
-## Part 2 (after the spike says SVG renders; not started)
+## Spike result
+
+Seen in Open WebUI v0.11.4 on the server (dark theme): the picture renders inline, the legend stays
+whole, the text is readable, and the chat shows it in the normal reply. Layout then tidied: larger
+fonts (title 21, values 14, legend 13.5), the gap bracket moved clear of the value label, more room
+between the axis labels, the legend rows and the source line.
+Not yet checked: the light theme, click-to-enlarge, a second message in the same chat (history with a
+picture in it), and the portal's frame at phone width.
+
+## Part 2 (SVG renders; not started)
 
 1. Tests first: the chart's numbers equal the `compute_trend` window for that run; blocked or thin
    data gives no chart and a stated reason; another learner's data is refused; the gateway strips
