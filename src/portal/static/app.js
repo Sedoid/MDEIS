@@ -77,6 +77,38 @@ function toggleTheme() {
   }
 }
 
+// The sidebar can shrink to icons. The choice is kept per browser, and the page works without it.
+function setSidebar(collapsed) {
+  $("shell").classList.toggle("collapsed", collapsed);
+  const label = collapsed ? "Expand the sidebar" : "Collapse the sidebar";
+  $("collapse").setAttribute("aria-expanded", String(!collapsed));
+  $("collapse").setAttribute("aria-label", label);
+  $("collapse").title = label;
+}
+
+function toggleSidebar() {
+  const collapsed = !$("shell").classList.contains("collapsed");
+  setSidebar(collapsed);
+  try {
+    localStorage.setItem("mdeis-sidebar", collapsed ? "collapsed" : "open");
+  } catch (error) {
+    // storage is blocked: the choice lasts until the page is closed
+  }
+}
+
+// Chat at full width hides the sidebar and the notice bar, and asks the browser for real full
+// screen where it allows it. Esc leaves full screen and brings the layout back.
+function setWide(on) {
+  $("shell").classList.toggle("chat-wide", on);
+  $("wide").setAttribute("aria-pressed", String(on));
+  $("wide-label").textContent = on ? "Exit full screen" : "Full screen";
+  if (on && document.fullscreenEnabled && !document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else if (!on && document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+
 // One view at a time, chosen by the address (#/upload, #/files, #/chat), so Back and links work.
 function route() {
   if (!me) return;
@@ -88,6 +120,7 @@ function route() {
     else link.removeAttribute("aria-current");
   }
   $("main").classList.toggle("is-chat", name === "chat");
+  if (name !== "chat" && $("shell").classList.contains("chat-wide")) setWide(false);
   document.title = TITLES[name] + " · MDEIS";
   $("main").scrollTop = 0;
 }
@@ -139,6 +172,7 @@ async function handOverLogin() {
 function showSignIn() {
   me = null;
   clearTimeout(timer);
+  if ($("shell").classList.contains("chat-wide")) setWide(false);
   document.title = "Sign in · MDEIS";
   $("shell").hidden = true;
   $("chat-frame").removeAttribute("src");
@@ -335,5 +369,15 @@ document.addEventListener("DOMContentLoaded", () => {
   $("theme").addEventListener("click", toggleTheme);
   $("reveal").addEventListener("click", revealPassword);
   window.addEventListener("hashchange", route);
+  try {
+    setSidebar(localStorage.getItem("mdeis-sidebar") === "collapsed");
+  } catch (error) {
+    setSidebar(false);
+  }
+  $("collapse").addEventListener("click", toggleSidebar);
+  $("wide").addEventListener("click", () => setWide(!$("shell").classList.contains("chat-wide")));
+  document.addEventListener("fullscreenchange", () => {
+    if (!document.fullscreenElement && $("shell").classList.contains("chat-wide")) setWide(false);
+  });
   start();
 });

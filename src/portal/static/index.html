@@ -34,15 +34,18 @@
 
   <div id="shell" class="shell" hidden>
     <aside class="side">
-      <div class="brand"><span class="mark small" aria-hidden="true">M</span>MDEIS</div>
+      <div class="brand"><span class="mark small" aria-hidden="true">M</span><span class="brand-text">MDEIS</span>
+        <button id="collapse" type="button" class="icon-btn collapse" aria-expanded="true"
+                aria-label="Collapse the sidebar" title="Collapse the sidebar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM9 5v14"/></svg></button></div>
       <nav class="nav" aria-label="Main">
-        <a href="#/upload" data-view="upload">
+        <a href="#/upload" data-view="upload" title="Upload">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L8 8m4-4 4 4M4 20h16"/></svg>
           <span>Upload</span></a>
-        <a href="#/files" data-view="files">
+        <a href="#/files" data-view="files" title="Files">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6"/></svg>
           <span>Files</span></a>
-        <a href="#/chat" data-view="chat">
+        <a href="#/chat" data-view="chat" title="Chat">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>
           <span>Chat</span></a>
       </nav>
@@ -112,7 +115,12 @@
         <section id="view-chat" class="view view-chat" hidden>
           <div class="chat-bar">
             <h1>Chat</h1>
-            <a id="chat-link" href="#" target="_blank" rel="noopener">Open in a new tab</a>
+            <span class="chat-actions">
+              <a id="chat-link" href="#" target="_blank" rel="noopener">Open in a new tab</a>
+              <button id="wide" type="button" class="btn ghost compact" aria-pressed="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+                <span id="wide-label">Full screen</span></button>
+            </span>
           </div>
           <iframe id="chat-frame" title="Chat" hidden></iframe>
           <p id="chat-fallback" class="empty" hidden>The chat opens in its own tab.
