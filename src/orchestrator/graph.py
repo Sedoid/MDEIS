@@ -55,6 +55,7 @@ class State(TypedDict, total=False):
     asked: list  # issue numbers put to the approver in this run
     questions: list  # blocking problems found by the last tools, to ask about
     report: str  # a draft that still has to be checked
+    draft_text: str  # the words of the draft that was saved, exactly as saved
     ready: str  # a draft that passed the check in this run
     steps: int
     redrafts: int
@@ -139,6 +140,12 @@ def give_up_text(report_id: str, problems: list) -> str:
     )
 
 
+def saved_text(report_id: str, words: str) -> str:
+    """The draft exactly as saved, so that the approver reads what would be released."""
+    quoted = "\n".join(f"> {line}" if line else ">" for line in words.splitlines())
+    return f"\n\nThe draft {report_id} as saved, with its sources, word for word:\n\n{quoted}"
+
+
 def ready_footer(report_id: str) -> str:
     return (
         f"\n\nThe draft {report_id} has passed the citation check and is waiting for your "
@@ -207,7 +214,7 @@ def build(deps: Deps) -> Machine:
         conversation, called = list(state["conversation"]), list(state["called"])
         drafted, events = set(state["drafted"]), []
         asked_now = set(state["asked"]) | deps.earlier_asked
-        questions, seen, report = [], set(), None
+        questions, seen, report, draft_text = [], set(), None, ""
         for call in state["pending"]:
             result = await run_tool(call, state, drafted)
             called.append(call.name)
@@ -221,6 +228,7 @@ def build(deps: Deps) -> Machine:
                         questions.append(q)
             if call.name == "draft_summary" and result.get("report_id"):
                 report = str(result["report_id"])
+                draft_text = str(json.loads(call.arguments).get("text", ""))
         return {
             "conversation": conversation,
             "called": called,
@@ -228,6 +236,7 @@ def build(deps: Deps) -> Machine:
             "pending": [],
             "questions": questions,
             "report": report or "",
+            "draft_text": draft_text or state["draft_text"],
             "events": events,
         }
 
@@ -295,6 +304,7 @@ def build(deps: Deps) -> Machine:
             return {"events": []}
         text = state.get("answer", "")
         if state.get("ready"):
+            text += saved_text(state["ready"], state.get("draft_text", ""))
             text += ready_footer(state["ready"])
         extra = {
             "refused": {"refused": True},
@@ -348,6 +358,7 @@ def initial_state(conversation: list) -> State:
         asked=[],
         questions=[],
         report="",
+        draft_text="",
         ready="",
         steps=0,
         redrafts=0,
