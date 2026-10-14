@@ -210,3 +210,56 @@ def test_an_annual_score_may_end_in_the_star_that_marks_an_average_of_the_terms_
     assert rc.cell_text("t1", "ABS") == "ABS"
     assert rc.cell_text("t2", "14.00*") == "14.00*", "a star anywhere else is still not a number"
     assert rc.cell_text("weighted", "55.20*") == "55.20*"
+
+
+# --- cards from the teacher: a wrapped title, and remarks that say "Term 2" ---------------------
+def words(listing):
+    """Tokens from lines written as `y: word@x ...` (one page), as `make card-lines` prints them."""
+    out = []
+    for line in listing.strip().splitlines():
+        y, rest = line.split(":", 1)
+        for item in rest.split():
+            text, x = item.rsplit("@", 1)
+            out.append(rc.Tok(text, float(x), float(x) + 5 * len(text), int(y) - 4, int(y) + 4, 1))
+    return out
+
+
+HEADER = """
+254: Term@194 scores@226 /20@263 Annual@300
+278: Annual@349
+287: Coef.@148 /20@310 Teacher's@463
+295: Subject@86 score@349 ×@380 Grade@397
+299: Term@185 Term@223 Term@261
+315: 1@197 2@234 3@273
+"""
+
+
+def test_a_title_that_wraps_onto_a_second_line_is_one_title():
+    first = words("""
+79: OUTLIERS@72 COMPREHENSIVE@203 COLLEGE@426
+109: ANNUAL@79 REPORT@137 CARD@193 ·@232 FORM@239 4@281 SCIENCE@291
+109: (FIRST@350 SITTING)@396 ·@457 ACADEMIC@464
+130: YEAR@254 2025/2026@292
+165: Name:@76 Andy@112 Koskar@146
+""")
+    head = rc._title(first)
+    assert head["stage"] == "Form 4 Science (First Sitting)"
+    assert head["title_year"] == "2025/2026"
+    assert head["title_bottom"] >= 130, "the wrapped line is part of the title, not the header box"
+
+
+def test_a_title_on_one_line_still_reads_and_a_missing_one_still_fails():
+    one = words("109: ANNUAL@90 REPORT@149 CARD@204 ·@243 FORM@250 1@292 ·@320 ACADEMIC@327 "
+                "YEAR@400 2022/2023@437")
+    assert rc._title(one)["stage"] == "Form 1"
+    assert rc._title(words("109: OUTLIERS@72 COLLEGE@426")).failure.kind == rc.LAYOUT_UNRECOGNISED
+
+
+def test_a_remark_that_says_term_2_does_not_move_a_column():
+    remark = words("""
+377: B@412 work.@441 Term@472 2@502 score@511
+453: Term@482 1@512 and@530 Term@500 3@530
+""")
+    anchors = rc._table_header(words(HEADER) + remark)["anchors"]
+    assert (anchors["t1"], anchors["t2"], anchors["t3"]) == (185.0, 223.0, 261.0)
+    assert anchors["remarks"] == 463.0 and anchors["coef"] == 148.0

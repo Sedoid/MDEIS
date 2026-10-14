@@ -60,6 +60,8 @@ BLOCK_PAD = 2  # a remark block covers its lines plus this much
 TITLE = re.compile(
     r"ANNUAL REPORT CARD\s*[·•|]\s*(.+?)\s*[·•|]\s*ACADEMIC YEAR\s*(\d{4}/\d{4})"
 )
+TITLE_START = "ANNUAL REPORT CARD"
+TITLE_WRAP = 30  # the year may be on a second title line this far below the first
 LABELS = ("Name:", "Date of birth:", "Gender:", "ID number:", "Class:", "Academic year:")
 LABEL_SPLIT = re.compile("(" + "|".join(re.escape(label) for label in LABELS) + ")")
 LABEL_AT = re.compile("^(" + "|".join(re.escape(label) for label in LABELS) + ")")
@@ -224,14 +226,27 @@ def parse_pages(pages) -> ParseResult:
 def _title(first) -> dict | ParseResult:
     """The title line of page 1: stage, school year, school name."""
     lines = lines_of(first)
-    title_line = next((ln for ln in lines if TITLE.search(text_of(ln))), None)
-    if title_line is None:
+    start = next((k for k, ln in enumerate(lines) if TITLE_START in text_of(ln)), None)
+    title_line, match, title_bottom = None, None, 0
+    if start is not None:
+        # A long title (for example "... (FIRST SITTING)") wraps: the year is on the next line.
+        for stop in (start + 1, start + 2):
+            joined = [t for ln in lines[start:stop] for t in ln]
+            match = TITLE.search(text_of(joined))
+            if match:
+                title_line, title_bottom = lines[start], max(t.bottom for t in joined)
+                break
+            if stop >= len(lines) or lines[stop][0].cy - lines[stop - 1][0].cy > TITLE_WRAP:
+                break
+    if title_line is None or match is None:
         return fail(LAYOUT_UNRECOGNISED, "no 'ANNUAL REPORT CARD' title line", 1)
-    match = TITLE.search(text_of(title_line))
     above = [ln for ln in lines if ln[0].cy < title_line[0].cy - LINE_TOL]
     return {
         "title_line": title_line,
-        "stage": " ".join(w.capitalize() for w in match.group(1).split()),
+        "title_bottom": title_bottom,
+        "stage": " ".join(
+            re.sub(r"[A-Za-z]+", lambda m: m[0].capitalize(), w) for w in match.group(1).split()
+        ),
         "title_year": match.group(2),
         "school": " ".join(text_of(ln) for ln in above),
     }
@@ -249,11 +264,14 @@ def _table_header(first) -> dict | ParseResult:
     if not (coef and subject and grade and teacher and len(annual) == 2):
         return fail(LAYOUT_UNRECOGNISED, "the table header (Subject, Coef., ...) is missing", 1)
     terms = {}
-    for word in named("Term"):
+    # The term headers sit left of the Grade column. A teacher's remark that says "Term 2" is in the
+    # remarks column, to the right, and must not move a column.
+    for word in (w for w in named("Term") if w.x0 < grade[0].x0):
         digits = [
             d
             for d in first
             if d.text in ("1", "2", "3")
+            and d.x0 < grade[0].x0
             and d.x0 >= word.x0 - LINE_TOL
             and -LINE_TOL <= d.cy - word.cy <= TERM_DIGIT_REACH
         ]
@@ -288,7 +306,7 @@ def _table_header(first) -> dict | ParseResult:
 def _fields(first, head, header) -> dict:
     """Label -> value for the header box. Each column of labels is read on its own, so a value that
     wraps under its label stays with it."""
-    below_title = head["title_line"][0].bottom
+    below_title = head["title_bottom"]
     region = [t for t in first if t.top > below_title and t.bottom <= header["top"] + LINE_TOL]
     starts = []
     for line in lines_of(region):
