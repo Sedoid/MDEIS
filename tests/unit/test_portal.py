@@ -411,6 +411,11 @@ def test_the_page_can_take_a_folder_and_shows_the_files_in_groups():
     assert "/api/" not in script, "addresses stay relative so the page works under /portal/"
 
 
+def test_the_chat_frame_has_no_focus_ring_of_its_own():
+    css = (Path(portal.__file__).parent / "static" / "style.css").read_text()
+    assert "iframe:focus-visible { outline: none; }" in css
+
+
 def test_security_headers_and_no_cors(world):
     client, _, _ = world
     reply = client.get("/")

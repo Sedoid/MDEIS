@@ -126,6 +126,9 @@ main.is-chat { padding: 0; overflow: hidden; }
 .chat-bar a { font-size: 0.875rem; color: var(--muted); }
 .chat-actions { display: flex; align-items: center; gap: 1rem; }
 iframe { flex: 1; width: 100%; min-height: 0; border: 0; background: var(--bg); }
+/* The chat is a page of its own inside this frame and draws its own focus rings. Without this the
+   page-wide ring above is drawn around the whole chat whenever the frame has the focus. */
+iframe:focus, iframe:focus-visible { outline: none; }
 
 /* Upload */
 .boxes { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; }
