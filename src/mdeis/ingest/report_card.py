@@ -642,11 +642,30 @@ def parse_report_card(path) -> ParseResult:
     return parse_pages(pages)
 
 
+def show_lines(path, limit=40) -> int:
+    """For a card that will not read: the lines of each page, with where each word starts.
+
+    `python -m mdeis.ingest.report_card --lines FILE`. A line is `page y: word@x word@x ...`, the
+    words as the reader sees them. This is for people, not for the worker."""
+    import pdfplumber
+
+    with pdfplumber.open(path) as pdf:
+        pages = [page.extract_words() for page in pdf.pages]
+    for page in tokens_of(pages):
+        for line in lines_of(page)[:limit]:
+            words = " ".join(f"{t.text}@{round(t.x0)}" for t in line[:14])
+            more = f" (+{len(line) - 14} more)" if len(line) > 14 else ""
+            print(f"p{line[0].page} y={round(line[0].cy):>3}: {words}{more}")
+    return 0
+
+
 def main(argv=None) -> int:
     """`python -m mdeis.ingest.report_card FILE` prints the result as JSON. The worker runs it."""
     argv = sys.argv[1:] if argv is None else argv
+    if len(argv) == 2 and argv[0] == "--lines":
+        return show_lines(argv[1])
     if len(argv) != 1:
-        print("usage: python -m mdeis.ingest.report_card FILE", file=sys.stderr)
+        print("usage: python -m mdeis.ingest.report_card [--lines] FILE", file=sys.stderr)
         return 2
     print(json.dumps(parse_report_card(argv[0]).to_dict()))
     return 0

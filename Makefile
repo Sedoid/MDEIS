@@ -31,7 +31,7 @@ endif
 COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yml $(addprefix -f ,$(SERVICE_FILES))
 
 .PHONY: help env-init env-sync check-env check-docker models dev-config dev-build dev-up dev-down up down dev-ps \
-        dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules ingest ingest-dir ack token ask evals probe-gateway prod-config prod-up prod-down prod-check \
+        dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules ingest ingest-dir card-lines ack token ask evals probe-gateway prod-config prod-up prod-down prod-check \
         test test-contract lint check practice-data class-data \
         demo demo-data smoke clean \
         probe-embed probe-mcp probe-pg-mcp probe-n8n probe-orchestrator probe-portal probe-signin
@@ -163,6 +163,10 @@ ingest-dir: $(ENV_FILE) ## Read every PDF in a folder (RECURSIVE=1 for sub-folde
 	@test -n "$(DIR)" -a -n "$(AS)" || { echo 'usage: make ingest-dir KIND=results DIR=folder AS="Your Name"' >&2; exit 1; }
 	@test -d "$(DIR)" || { echo "There is no folder at $(DIR)." >&2; exit 1; }
 	@$(COMPOSE) --profile tools run --rm --build -v "$$(cd "$(DIR)" && pwd):/upload:ro" admin ingest-dir --kind "$(or $(KIND),results)" --dir /upload --as "$(AS)" $(if $(RECURSIVE),--recursive)
+
+card-lines: $(ENV_FILE) ## Show how the reader sees a card that will not read:  make card-lines FILE="path/to/card.pdf"
+	@test -f "$(FILE)" || { echo "There is no file at $(FILE)." >&2; exit 1; }
+	@$(COMPOSE) --profile tools run --rm --no-deps --entrypoint python -v "$$(cd "$$(dirname "$(FILE)")" && pwd)/$$(basename "$(FILE)"):/upload/card.pdf:ro" admin -m mdeis.ingest.report_card --lines /upload/card.pdf
 
 ack: $(ENV_FILE) ## Put a methodology that needs review in force:  make ack DOC=D-000012 BY="Ada Teacher" NOTE="checked 6.4"
 	@test -n "$(DOC)" -a -n "$(BY)" || { echo 'usage: make ack DOC=D-000012 BY="Your Name" [NOTE="..."]' >&2; exit 1; }
