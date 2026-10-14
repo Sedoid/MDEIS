@@ -81,7 +81,8 @@ def test_the_picture_goes_under_the_models_words_with_a_caption_in_both_engines(
         assert "Rules: [TR-1]." in answer
         assert "Records:" not in answer and "[A-000001]" not in answer
         assert answer.endswith(
-            "Sources (report cards): amina form1 2022-2023.pdf; amina form2 2023-2024.pdf."
+            "\n\n---\n\n*Sources (report cards): amina form1 2022-2023.pdf; "
+            "amina form2 2023-2024.pdf.*"
         )
         assert "Not drawn: Physics (only 2 of the 3 scores needed are on record)." in answer
 
@@ -158,7 +159,7 @@ def test_record_and_document_numbers_are_replaced_by_the_names_of_the_files():
         answer = final(runner(USER, model, server))["answer"]
         assert answer.startswith("Mathematics is steady, from card.")
         assert "[A-" not in answer and "[D-" not in answer and "d61ccfdb" not in answer
-        assert answer.endswith("Sources (report cards): a form1.pdf; b form2.pdf.")
+        assert answer.endswith("---\n\n*Sources (report cards): a form1.pdf; b form2.pdf.*")
 
 
 def test_each_file_is_named_once_even_when_several_tools_return_it():
@@ -182,7 +183,7 @@ def test_a_long_list_of_files_is_cut_after_a_dozen():
     model = FakeModel(ask("compute_trend", {"learner_id": "L-1", "skill": "Mathematics"}),
                       say("Steady."))
     answer = final(run_loop(USER, model, server))["answer"]
-    assert answer.endswith("; and 3 more.") and answer.count(".pdf") == 12
+    assert answer.endswith("; and 3 more.*") and answer.count(".pdf") == 12
 
 
 def test_a_question_to_the_approver_has_no_sources_line():
@@ -194,3 +195,12 @@ def test_a_question_to_the_approver_has_no_sources_line():
     answer = final(run_graph([{"role": "user", "content": "How is L-1 in English?"}],
                              model, server))["answer"]
     assert "[I-1]" in answer and "Sources" not in answer
+
+
+def test_a_file_name_with_markdown_characters_cannot_change_the_line_around_it():
+    odd = sourced(("a*b_c [x](y).pdf", "2022/2023"))
+    server = FakeServer(MDEIS_LISTING, {"compute_trend": odd})
+    model = FakeModel(ask("compute_trend", {"learner_id": "L-1", "skill": "Mathematics"}),
+                      say("Steady."))
+    answer = final(run_loop(USER, model, server))["answer"]
+    assert answer.endswith("*Sources (report cards): a\\*b\\_c \\[x\\]\\(y\\).pdf.*")

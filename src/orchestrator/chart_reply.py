@@ -81,6 +81,11 @@ def caption(result: dict) -> str:
     return "\n\n".join(lines)
 
 
+def _plain_text(name: str) -> str:
+    """A file name safe to put inside a line of markdown."""
+    return re.sub(r"([\\`*_{}\[\]()#+!|<>~])", r"\\\1", name)
+
+
 def add_sources(found: list, result) -> list:
     """`found` plus the report-card files named in a tool result, each file once."""
     seen = {item["document_id"] for item in found}
@@ -99,7 +104,10 @@ def sources_line(found: list) -> str:
     names = [s["file"] for s in ordered[:SOURCES_SHOWN]]
     more = len(ordered) - len(names)
     tail = f"; and {more} more" if more > 0 else ""
-    return "Sources (report cards): " + "; ".join(names) + tail + "."
+    # Set apart from the answer: a rule above, and italics. The names are escaped, so that a name
+    # with a * or _ in it cannot turn the rest of the line into italics or bold.
+    shown = "; ".join(_plain_text(name) for name in names)
+    return f"---\n\n*Sources (report cards): {shown}{tail}.*"
 
 
 def compose(
