@@ -123,3 +123,16 @@ def test_the_name_on_disk_is_not_in_the_list_or_the_detail(db):
     doc = card(db, "mine.pdf", sha="e" * 64)
     assert "stored_name" not in store.document_detail(AsDicts(db), doc)
     assert all("stored_name" not in row for row in store.list_documents(AsDicts(db)))
+
+
+def test_a_document_detail_lists_what_changed_or_went_wrong(db):
+    doc = make_document(db, kind="methodology", original_name="new.pdf", status="needs_review",
+                        sha256="f" * 64)
+    db.execute(
+        "INSERT INTO document_issues (document_id, kind, ref_id, detail) "
+        "VALUES (%s, 'section_changed', 'M-6.4', 'the wording of 6.4 changed')",
+        (doc,),
+    )
+    found = store.document_detail(AsDicts(db), doc)
+    assert found["issues"] == [{"kind": "section_changed", "ref_id": "M-6.4", "page": None,
+                                "row": None, "detail": "the wording of 6.4 changed"}]

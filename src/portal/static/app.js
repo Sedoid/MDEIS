@@ -267,7 +267,7 @@ async function review(doc, container, stamp) {
   const full = await get("api/documents/" + encodeURIComponent(doc.document_id));
   if (stamp !== methodStamp) return;
   const issues = (full.body.issues || []).map((issue) =>
-    [issue.kind, issue.clause_id, issue.detail].filter(Boolean).join(": "));
+    [issue.kind, issue.ref_id, issue.detail].filter(Boolean).join(": "));
   const box = document.createElement("details");
   box.appendChild(text("summary", "Show the changes"));
   box.appendChild(text("div", issues.join("\n") || "No changes listed.", "diff"));

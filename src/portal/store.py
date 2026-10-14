@@ -50,7 +50,7 @@ def document_detail(conn, document_id: str) -> dict | None:
     if doc is None:
         return None
     issues = conn.execute(
-        'SELECT kind, clause_id, page, "row", detail FROM document_issues '
+        'SELECT kind, ref_id, page, "row", detail FROM document_issues '
         "WHERE document_id = %s ORDER BY document_issue_id",
         (document_id,),
     ).fetchall()
