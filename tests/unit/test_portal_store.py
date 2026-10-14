@@ -7,7 +7,7 @@ deploy/postgres/checks/roles.sql.
 
 import psycopg
 import pytest
-from dbtools import make_document, make_learner
+from dbtools import make_document, make_learner, run_migrate
 from psycopg.rows import dict_row
 
 from portal import store
@@ -29,6 +29,8 @@ class AsDicts:
 def db(scratch_schema):
     """A fresh schema with every migration applied, so no live document is touched."""
     _, url = scratch_schema
+    built = run_migrate(url)
+    assert built.returncode == 0, built.stderr
     with psycopg.connect(url) as conn:
         yield conn
         conn.rollback()
