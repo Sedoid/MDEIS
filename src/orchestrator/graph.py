@@ -63,6 +63,7 @@ class State(TypedDict, total=False):
     draft_text: str  # the words of the draft that was saved, exactly as saved
     charts: list  # make_chart results to draw under the answer
     sources: list  # the report-card files the tools named, each once
+    rules: list  # the rules the tools applied, with the rulebook's wording
     ready: str  # a draft that passed the check in this run
     steps: int
     redrafts: int
@@ -251,6 +252,7 @@ def build(deps: Deps) -> Machine:
         drafted, events = set(state["drafted"]), []
         charts = list(state.get("charts", []))
         sources = list(state.get("sources", []))
+        rules = list(state.get("rules", []))
         asked_now = set(state["asked"]) | deps.earlier_asked
         questions, seen, report, draft_text = [], set(), None, ""
         for call in state["pending"]:
@@ -262,6 +264,7 @@ def build(deps: Deps) -> Machine:
             if chart_reply.is_chart(call.name, result):
                 charts.append(result)
             sources = chart_reply.add_sources(sources, result)
+            rules = chart_reply.add_rules(rules, result)
             if call.name in ("ingest_assessments", "compute_trend"):
                 for q in questions_from(result, asked_now, deps.last_user):
                     if q["issue_id"] not in seen:
@@ -280,6 +283,7 @@ def build(deps: Deps) -> Machine:
             "draft_text": draft_text or state["draft_text"],
             "charts": charts,
             "sources": sources,
+            "rules": rules,
             "events": events,
         }
 
@@ -346,14 +350,16 @@ def build(deps: Deps) -> Machine:
         if outcome == "error":
             return {"events": []}
         # A question to the approver, or a refusal, is code's own wording: no sources line there.
-        found = state.get("sources", []) if outcome in ("answer", "limit", "gave_up") else []
+        shown = outcome in ("answer", "limit", "gave_up")
+        found = state.get("sources", []) if shown else []
+        applied = state.get("rules", []) if shown else []
         text = chart_reply.compose(
-            state.get("answer", ""), state.get("charts", []), found, show_line=False
+            state.get("answer", ""), state.get("charts", []), found, show_line=False, rules=applied
         )
         if state.get("ready"):
             text += saved_text(state["ready"], state.get("draft_text", ""))
             text += ready_footer(state["ready"])
-        line = chart_reply.sources_line(found)
+        line = chart_reply.footer(found, applied)
         text += f"\n\n{line}" if line else ""
         extra = {
             "refused": {"refused": True},
@@ -410,6 +416,7 @@ def initial_state(conversation: list) -> State:
         draft_text="",
         charts=[],
         sources=[],
+        rules=[],
         ready="",
         steps=0,
         redrafts=0,

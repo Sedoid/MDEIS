@@ -204,3 +204,43 @@ def test_a_file_name_with_markdown_characters_cannot_change_the_line_around_it()
                       say("Steady."))
     answer = final(run_loop(USER, model, server))["answer"]
     assert answer.endswith("*Sources (report cards): a\\*b\\_c \\[x\\]\\(y\\).pdf.*")
+
+
+# --------------------------------------------------------------------------- the rulebook's words
+RULES = [
+    {"id": "ST-3", "text": "Form 3 literacy is expected between 12 and 16 out of 20."},
+    {"id": "GM-1", "text": "Groups smaller than 10 are never shown."},
+]
+RULED = {"status": "ok", "stage": "Form 3", "counts": {"below_expected_range": 6}, "rules": RULES}
+CLASS_WORDS = (
+    "Six learners are below [ST-3]. Groups under the minimum are hidden [GM-1].\n\n"
+    "Sources: [GM-1] [ST-3]"
+)
+LITERACY = {"learner_id": "L-1", "skill": "literacy"}
+
+
+def test_rule_markers_become_the_rulebooks_own_words():
+    for runner in (run_loop, run_graph):
+        server = FakeServer(MDEIS_LISTING, {"compute_trend": RULED})
+        model = FakeModel(ask("compute_trend", LITERACY), say(CLASS_WORDS))
+        answer = final(runner(USER, model, server))["answer"]
+        assert "[ST-3]" not in answer and "[GM-1]" not in answer and "Sources:" not in answer
+        assert answer.startswith("Six learners are below. Groups under the minimum are hidden.")
+        assert answer.endswith(
+            "---\n\n*Rules applied: ST-3 — Form 3 literacy is expected between 12 and 16 "
+            "out of 20; GM-1 — Groups smaller than 10 are never shown.*"
+        ), runner.__name__
+
+
+def test_files_and_rules_share_one_footer_under_one_rule():
+    server = FakeServer(MDEIS_LISTING, {"compute_trend": {**TREND, **RULED}})
+    model = FakeModel(ask("compute_trend", LITERACY), say("Steady."))
+    answer = final(run_graph(USER, model, server))["answer"]
+    assert answer.count("---") == 1
+    assert "*Sources (report cards): a form1.pdf; b form2.pdf.*\n\n*Rules applied:" in answer
+
+
+def test_without_the_rulebooks_words_the_markers_are_left_in_place():
+    model = FakeModel(say("English is steady [ST-3]."))
+    answer = final(run_graph(USER, model, FakeServer(MDEIS_LISTING)))["answer"]
+    assert answer == "English is steady [ST-3]."

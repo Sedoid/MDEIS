@@ -19,7 +19,7 @@ import os
 from ..core.rules import load_rules
 from ..core.trend import skill_result, when
 from ._call import logged_tool
-from ._shared import situation, with_hash
+from ._shared import rules_text, situation, with_hash
 from .context import Refusal, ToolContext
 
 FLAG = "CLASS_VIEW_ENABLED"
@@ -113,7 +113,11 @@ def stage_gap_counts(
             "reason": "the group is smaller than the minimum that may be shown",
             "clause_ids": clauses,
         }
-        return with_hash(result), "ok"
+        with_hash(result)
+        result["rules"] = rules_text(ctx.conn, rules.version, clauses)
+        return result, "ok"
     clauses += [rules.range_clause[(stage, skill)], rules.clause["gap"]]
     result = {**base, "status": "ok", "group_size": group, "counts": counts, "clause_ids": clauses}
-    return with_hash(result), "ok"
+    with_hash(result)
+    result["rules"] = rules_text(ctx.conn, rules.version, clauses)
+    return result, "ok"

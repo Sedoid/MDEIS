@@ -127,6 +127,7 @@ def test_the_answer_holds_no_names_no_learner_numbers_and_no_record_numbers(
     assert set(result) == {
         "school_id", "stage", "skill", "term", "template_version", "minimum_group_size",
         "status", "group_size", "counts", "clause_ids", "result_hash",
+        "rules",  # the rulebook's own wording for the rules applied: no learner data
     }  # fmt: skip
 
 

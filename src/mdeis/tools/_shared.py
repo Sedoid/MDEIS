@@ -56,6 +56,24 @@ def active_methodology(conn) -> str | None:
     return row[0] if row else None
 
 
+def rules_text(conn, version: str, clause_ids) -> list:
+    """The rulebook's own wording for the rules a result applied: `[{id, text}]`, in order.
+
+    A person cannot read `[ST-3]`; they can read what the rule says. Added to a result after the
+    hash is taken, so it changes no hash. Only rulebook text: nothing about a learner.
+    """
+    wanted = list(dict.fromkeys(clause_ids))
+    if not wanted:
+        return []
+    found = dict(
+        conn.execute(
+            "SELECT clause_id, text FROM clauses WHERE version_name = %s AND clause_id = ANY(%s)",
+            (version, wanted),
+        ).fetchall()
+    )
+    return [{"id": c, "text": found[c]} for c in wanted if c in found]
+
+
 def sources_of(conn, found: Situation, record_ids=None) -> list:
     """The report-card files these records came from, oldest first.
 

@@ -2,7 +2,7 @@
 
 from ..core import chartdata
 from ._call import logged_tool
-from ._shared import active_methodology, situation, sources_of, with_hash
+from ._shared import active_methodology, rules_text, situation, sources_of, with_hash
 from .context import Refusal, ToolContext
 from .trend import blocking_reasons
 
@@ -44,5 +44,6 @@ def make_chart(
     with_hash(result)  # the hash covers the scores, the ranges and the rulebook version
     result["methodology_document_id"] = active_methodology(ctx.conn)
     result["sources"] = sources_of(ctx.conn, found, data["record_ids"])
+    result["rules"] = rules_text(ctx.conn, found.rules.version, data["clause_ids"])
     return result, "ok"
 

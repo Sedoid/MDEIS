@@ -267,3 +267,22 @@ Server run sheet: `git pull`, `make test ARGS="tests/unit -q"`, `make test-contr
 `make test ARGS="tests/acceptance/test_chart_tool.py -q"`, `make dev-up`. Then ask for a chart and a
 trend for one learner and check the last line of each answer names files such as
 `amina vakia form2 2023-2024.pdf`, with no `[A-…]` or `[D-…]` in the text.
+
+## 10. The footer under an answer, and the rules in the rulebook's words (added later)
+
+- The answer ends under a horizontal rule with small italic lines: `*Sources (report cards): …*` and
+  `*Rules applied: ST-3 — Form 3 literacy is expected between 12 and 16 out of 20; GM-1 — Groups
+  smaller than 10 are never shown.*` The rule text is the rulebook's own (the `clauses` table).
+- `compute_trend`, `make_chart` and `stage_gap_counts` return `rules`: `[{id, text}]`, added after the
+  hash. The class view's answer now has that one more field (rulebook words only, no learner data);
+  `test_the_answer_holds_no_names_no_learner_numbers_and_no_record_numbers` lists its exact keys and
+  was updated to include `rules`.
+- When rule texts came with the results, the assistant's own `[ST-3]`-style markers, and an empty
+  "Sources:" line it may write, are removed from its words. Without them the words are left as written.
+- The saved draft is still quoted word for word, markers included (the citation check reads them).
+  Showing those as numbered footnotes is a separate choice (option A in the chat).
+
+Server run sheet: `git pull`, `make test ARGS="tests/unit -q"`, `make test-contract`,
+`make test ARGS="tests/acceptance/test_chart_tool.py tests/acceptance/test_class_view.py -q"`,
+`make dev-up`. Then repeat the class-view question and check the answer has no `[GM-1]` and ends
+with the rules in words.

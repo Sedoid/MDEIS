@@ -17,6 +17,8 @@ from mdeis import chart_image
 
 # Record, document and result numbers mean nothing to a person. The files they came from do.
 NUMBERS = re.compile(r"\s*\[(?:A|D)-\d+[^\]]*\]|\s*\[[0-9a-f]{6,}[^\]]*\]")
+RULE_MARKERS = re.compile(r"\s*\[[A-Z]{1,2}-\d[0-9A-Za-z.]*\]")  # [ST-3], [GM-1], [M-6.4]
+EMPTY_SOURCES = re.compile(r"(?im)^[ \t]*[*_]*sources?[*_]*[ \t]*:[ \t]*\.?[ \t]*$\n?")
 SOURCES_SHOWN = 12  # files named in one answer, then "and n more"
 IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)|data:image/[A-Za-z+.-]+;base64,[A-Za-z0-9+/=]+")
 SEEN = "[a chart was shown here]"
@@ -96,31 +98,62 @@ def add_sources(found: list, result) -> list:
     return found
 
 
+def add_rules(found: list, result) -> list:
+    """`found` plus the rules named in a tool result (with the rulebook's wording), each once."""
+    seen = {item["id"] for item in found}
+    for item in (result.get("rules") if isinstance(result, dict) else None) or []:
+        if isinstance(item, dict) and item.get("text") and item.get("id") not in seen:
+            seen.add(item["id"])
+            found = [*found, item]
+    return found
+
+
+def footer(found: list, rules: list | None = None) -> str:
+    """What the answer rests on, set apart from it: a rule above, small italic lines under it.
+
+    One line names the report cards; one gives the rulebook's own words for the rules applied. A
+    file name or a rule with markdown characters in it is escaped, so it cannot change the line."""
+    lines = []
+    if found:
+        ordered = sorted(found, key=lambda s: (s.get("academic_year", ""), s["file"]))
+        names = [s["file"] for s in ordered[:SOURCES_SHOWN]]
+        more = len(ordered) - len(names)
+        tail = f"; and {more} more" if more > 0 else ""
+        shown = "; ".join(_plain_text(name) for name in names)
+        lines.append(f"*Sources (report cards): {shown}{tail}.*")
+    if rules:
+        said = "; ".join(
+            f"{r['id']} — {_plain_text(r['text'].strip().rstrip('.'))}" for r in rules
+        )
+        lines.append(f"*Rules applied: {said}.*")
+    return "---\n\n" + "\n\n".join(lines) if lines else ""
+
+
 def sources_line(found: list) -> str:
-    """One plain line naming the report cards the answer rests on, or nothing."""
-    if not found:
-        return ""
-    ordered = sorted(found, key=lambda s: (s.get("academic_year", ""), s["file"]))
-    names = [s["file"] for s in ordered[:SOURCES_SHOWN]]
-    more = len(ordered) - len(names)
-    tail = f"; and {more} more" if more > 0 else ""
-    # Set apart from the answer: a rule above, and italics. The names are escaped, so that a name
-    # with a * or _ in it cannot turn the rest of the line into italics or bold.
-    shown = "; ".join(_plain_text(name) for name in names)
-    return f"---\n\n*Sources (report cards): {shown}{tail}.*"
+    return footer(found)
 
 
 def compose(
-    text: str, results: list, sources: list | None = None, show_line: bool = True
+    text: str,
+    results: list,
+    sources: list | None = None,
+    show_line: bool = True,
+    rules: list | None = None,
 ) -> str:
     """The model's words, then each chart and its caption, then the files the answer rests on.
 
     Anything image-like in the words goes. When the tools named their source files, the record,
-    document and result numbers the model wrote beside its sentences go too: they are replaced by
-    one line naming the files. Without source files the words are left as written."""
+    document and result numbers the model wrote beside its sentences go too, and so do rule markers
+    when the rulebook's wording came with them: a footer names the files and says what the rules
+    say.
+    Without them the words are left as written."""
     out = strip_images(text)
     if sources:
         out = NUMBERS.sub("", out)
+    if rules:
+        out = RULE_MARKERS.sub("", out)
+    if sources or rules:
+        out = EMPTY_SOURCES.sub("", out).rstrip()
     for result in results:
         image = picture(result)
         words = caption(result)
@@ -128,5 +161,5 @@ def compose(
             out += f"\n\n{image}"
         if words:
             out += f"\n\n{words}"
-    line = sources_line(sources or []) if show_line else ""
+    line = footer(sources or [], rules) if show_line else ""
     return out + f"\n\n{line}" if line else out

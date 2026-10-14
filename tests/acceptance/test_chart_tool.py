@@ -152,3 +152,24 @@ def test_reading_a_learner_names_every_card_and_a_blocked_trend_names_none(make_
     blocked = tool("compute_trend")(
         ctx, learner_id=fx["FX-04a"]["gen_id"], skill="English", template_version="v1")
     assert blocked["status"] == "blocked" and blocked["sources"] == []
+
+
+def test_a_result_gives_the_rulebooks_own_words_for_the_rules_it_applied(make_ctx, fx):
+    ctx = make_ctx()
+    learner = fx["FX-01"]["gen_id"]
+    trend = tool("compute_trend")(ctx, learner_id=learner, skill="English", template_version="v1")
+    assert [r["id"] for r in trend["rules"]] == trend["clause_ids"]
+    assert all(r["text"].strip() for r in trend["rules"])
+    drawn = chart(ctx, learner, ["English"])
+    assert [r["id"] for r in drawn["rules"]] == drawn["clause_ids"]
+    with psycopg.connect(ctx.database_url) as conn:
+        stored = dict(conn.execute(
+            "SELECT clause_id, text FROM clauses WHERE version_name = 'v1' AND clause_id = ANY(%s)",
+            (trend["clause_ids"],),
+        ).fetchall())
+    assert {r["id"]: r["text"] for r in trend["rules"]} == stored, "the rulebook's text, unchanged"
+    bare = {k: v for k, v in trend.items() if k not in
+            ("rules", "sources", "methodology_document_id", "result_hash", "logged_event_id")}
+    from mdeis.tools._shared import with_hash
+
+    assert with_hash(bare)["result_hash"] == trend["result_hash"], "rules are outside the hash"
