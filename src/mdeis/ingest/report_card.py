@@ -12,7 +12,8 @@ How a card is read, by position and by the numbers on a line, never as a table:
   nearest to its left edge. The words left of the coefficient column are the subject name.
 * A subject row is a line with a whole number in the coefficient column and values in the term
   columns. It must carry a coefficient, three term cells, the annual score and the weighted score. A
-  blank term is `-` or `ABS` and is returned as missing, never as zero. Anything else is a failure.
+  blank term is `-` or `ABS` and is returned as missing, never as zero. An annual score may end in
+  `*` (the average of the terms that have a result). Anything else is a failure.
 * The name, the grade letter and the remarks belong to the row nearest to them. A block of remark
   lines that has no row inside its height (the rest of a remark that ran over the page break) goes
   to the row before it.
@@ -66,6 +67,7 @@ YEAR = re.compile(r"\d{4}/\d{4}")
 WHOLE = re.compile(r"\d+")
 DECIMAL = re.compile(r"\d+(?:\.\d+)?")
 BLANKS = {"-", "ABS"}
+AVERAGED = "*"  # printed after an annual score that averages only the terms with a result
 GRADE = re.compile(r"[A-F]\+?")
 DENOMINATOR = re.compile(r"Term scores\s*/\s*(\d+)")
 AVERAGE = re.compile(
@@ -419,6 +421,15 @@ def _header_bottom(first, column, header) -> float:
     return header["top"]
 
 
+def cell_text(column: str, text: str) -> str:
+    """A cell as the number it prints. An annual score may end in `*`: the card says that mark means
+    the score averages the terms that have a result (a term with `ABS` is left out). The mark is
+    dropped here; our own sum does the same averaging and checks it against the printed score."""
+    if column == "annual" and text.endswith(AVERAGED):
+        return text[: -len(AVERAGED)]
+    return text
+
+
 def _rows_of(body, column, already) -> list | ParseResult:
     """The subject rows of one page: a line with a coefficient and values under the terms."""
     out = []
@@ -440,9 +451,10 @@ def _rows_of(body, column, already) -> list | ParseResult:
             got = by.get(name, [])
             if len(got) != 1:
                 return bad(f"expected one value under {name}, found {len(got)}")
-            if not (DECIMAL.fullmatch(got[0].text) or got[0].text in BLANKS):
+            text = cell_text(name, got[0].text)
+            if not (DECIMAL.fullmatch(text) or text in BLANKS):
                 return bad(f"{got[0].text!r} under {name} is not a number")
-            cells[name] = got[0].text
+            cells[name] = text
         out.append(
             {
                 "row": number,

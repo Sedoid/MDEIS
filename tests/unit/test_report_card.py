@@ -202,3 +202,11 @@ def test_both_blank_markers_are_accepted_in_a_term_cell(text):
     rows[0] = [dict(w, text=text) if abs(w["x0"] - term_two) < 1 else w for w in rows[0]]
     first = parse(one_page(rows)).card.rows[0]
     assert first.terms == ("14.00", None, "16.00") and first.printed_terms[1] == text
+
+
+def test_an_annual_score_may_end_in_the_star_that_marks_an_average_of_the_terms_with_a_result():
+    assert rc.cell_text("annual", "13.80*") == "13.80"
+    assert rc.cell_text("annual", "14.40") == "14.40"
+    assert rc.cell_text("t1", "ABS") == "ABS"
+    assert rc.cell_text("t2", "14.00*") == "14.00*", "a star anywhere else is still not a number"
+    assert rc.cell_text("weighted", "55.20*") == "55.20*"
