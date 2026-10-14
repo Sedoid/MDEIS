@@ -245,3 +245,25 @@ now a link that opens the uploaded file itself in a new tab: `GET /api/documents
 
 Server run sheet: `git pull`, the same `make test ARGS=...` as section 7, `make dev-up`, hard-refresh,
 click a file name in Files and the methodology name in the panel. Paste what opens (or the message).
+
+## 9. Sources are the report-card files (added later)
+
+The assistant used to cite `[A-001963…A-003201]`, `[D-000118]` and result hashes. They mean nothing to a
+person. Now:
+- `ingest_assessments`, `compute_trend` and `make_chart` return `sources`: the report-card files the
+  records came from, `{document_id, file, academic_year, stage}`, oldest first. It is added **after**
+  the hash is taken, so no result hash changes.
+- The orchestrator collects the files named in a run, each once, and ends the answer with one line:
+  `Sources (report cards): <file>; <file>…` (a dozen, then "and n more").
+- When files were named, the record, document and result numbers the model wrote beside its sentences
+  are removed. When none were named, the model's words are left as written.
+- A chart's caption no longer lists record numbers: it names the chart, the rule and anything left out.
+- A question to the approver, a refusal and a draft's saved text are untouched: the draft keeps the
+  markers the citation check needs (they are quoted word for word), and the questions keep their
+  `[I-…]` numbers because the next message answers them.
+- The system prompt now says: name the file in chat answers; never write record or document numbers.
+
+Server run sheet: `git pull`, `make test ARGS="tests/unit -q"`, `make test-contract`,
+`make test ARGS="tests/acceptance/test_chart_tool.py -q"`, `make dev-up`. Then ask for a chart and a
+trend for one learner and check the last line of each answer names files such as
+`amina vakia form2 2023-2024.pdf`, with no `[A-…]` or `[D-…]` in the text.
