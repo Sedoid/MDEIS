@@ -2,6 +2,7 @@
 
     GET  /                       the page            GET  /api/config   where the chat is
     GET  /api/me                 who is signed in    GET  /api/csrf     a token for this user
+    GET  /api/methodology        what is in force (administrators)
     POST /api/documents?kind=    upload a file       GET  /api/documents[/D-000001]  status
     GET  /healthz
 
@@ -199,6 +200,16 @@ def create_app(settings: Settings | None = None, auth=None, store=None) -> FastA
             return _say(401, "Sign in to Open WebUI first.")
         rows = await run_in_threadpool(store.list, None if user.is_admin else user.id)
         return {"documents": rows}
+
+    @app.get("/api/methodology")
+    async def methodology(request: Request):
+        """What is in force, what waits for a person to check it, and what came before."""
+        user = await who(request)
+        if user is None:
+            return _say(401, "Sign in to Open WebUI first.")
+        if not user.is_admin:
+            return _say(403, "Only an administrator may see the methodology.")
+        return await run_in_threadpool(store.methodology)
 
     @app.get("/api/documents/{document_id}")
     async def document(document_id: str, request: Request):

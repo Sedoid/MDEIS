@@ -100,6 +100,13 @@ SELECT pg_temp.denied('change an upload', :'portal_role', $$UPDATE documents SET
 SELECT pg_temp.denied('delete an upload', :'portal_role', $$DELETE FROM documents$$);
 SELECT pg_temp.denied('add a problem to a document', :'portal_role',
     $$INSERT INTO document_issues (document_id, kind) VALUES ('D-999999', 'x')$$);
+SELECT pg_temp.allowed('read which stage and year a card is for', :'portal_role',
+    $$SELECT document_id, academic_year, stage FROM report_cards$$);
+SELECT pg_temp.denied('read who a card is about', :'portal_role', $$SELECT learner_id FROM report_cards$$);
+SELECT pg_temp.denied('read what a card printed', :'portal_role',
+    $$SELECT printed_average FROM report_cards$$);
+SELECT pg_temp.denied('read what a card printed per subject', :'portal_role',
+    $$SELECT printed_annual FROM card_subjects$$);
 SELECT pg_temp.denied('read learners', :'portal_role', $$SELECT 1 FROM learners$$);
 SELECT pg_temp.denied('read scores', :'portal_role', $$SELECT 1 FROM assessments$$);
 SELECT pg_temp.denied('read reports', :'portal_role', $$SELECT 1 FROM reports$$);

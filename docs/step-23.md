@@ -1,7 +1,8 @@
 # Step 23: the teacher's data, and a portal that explains itself
 
-Branch: `step-21-charts` (new work goes on its own branch from here). Status: **a plan, nothing built
-except `make ingest-dir RECURSIVE=1`.** Today is 2026-10-14; the deadline is 2026-10-15.
+Branch: `step-23-portal-files` (from `step-21-charts`). Status: **built, not yet run on the server**
+(sections 4 and 7). Sections 1 to 3 are what the dry run found, and are done: all 50 of the teacher's
+cards read after two reader fixes (see section 7). Today is 2026-10-14; the deadline is 2026-10-15.
 
 ## 1. What is in the folder (read from the files, not guessed)
 
@@ -164,3 +165,65 @@ Needs checking). It needs no change to the database and still explains itself.
 **If the day runs short, cut in this order:** the folder drop (C), the grouping by year (fall back to
 grouping by status), the methodology history list. The methodology panel (A) and the dry run (section 2)
 stay, because they are what the video shows.
+
+
+## 7. What was built (you approved the grant)
+
+### The reader, after the dry run (done, pushed before this branch)
+First run: 22 of 50 read, 28 failed. Two causes, both found from the cards' own text:
+- an annual score ending in `*` (the card's mark for an average over the terms that have a result);
+- a teacher's remark that says "Term 2" moved the term columns, so ordinary words were read as scores;
+- a long title wrapped onto two lines ("... (FIRST SITTING) · ACADEMIC / YEAR 2025/2026").
+After the fixes: **50 of 50 read, 0 failed**. The first run's failures belong in `EVALS.md` as a
+real finding, with the failure kinds above. Unknown subjects (Additional Mathematics, Food and
+Nutrition, Economics) and stages ("Form 4 Science", "(First Sitting)", "(Repeat)") are not in `v1`;
+they surface as questions and as "the rulebook has no rule" until a `v3` rulebook exists (section 3).
+
+### The portal (this branch)
+| What | Where |
+| --- | --- |
+| Migration 004: the portal role may read `academic_year` and `stage` of a card, nothing else of it | `src/mdeis/db/migrations/004_portal_files.sql`, checks in `deploy/postgres/checks/roles.sql` |
+| The list joins the card's stage and year; a failure that was later read from the same file is no longer listed; up to 500 rows | `src/portal/store.py` |
+| `GET /api/methodology` (administrators): in force, waiting, earlier | `src/portal/app.py` |
+| Files grouped as accordions by stage and school year (newest first), with *Being read*, *Could not be read*, *Needs checking* on top and *Same file uploaded again* at the bottom; a summary line; open or closed as you leave them | `src/portal/static/app.js`, `index.html`, `style.css` |
+| Methodology panel: what is in force (file, who checked it, when), "Replace it", waiting for a check with the changes and the exact command to copy (with your name in `BY=`), earlier uploads | same |
+| Upload: many files, or "choose a whole folder"; PDFs only, others skipped by name; three at a time; "12 of 51 uploaded"; Stop; a dropped connection keeps the files | same |
+
+Not built: acknowledging from the page (stays `make ack`; the page prints the command with your
+name in it).
+
+### Checks run here (not pytest, not a browser)
+`node --check` on `app.js`; a fake page was driven with sample documents: the groups came out in the
+right order (2025/26 before 2023/24), the counts and summary were right, the empty state showed, and
+the methodology panel drew its three states (in force with earlier uploads, none, being read); the page
+rules from `test_portal.py` (no inline script or style, no `innerHTML`, one `fetch(`, no `/api/` path in
+the script) were replayed by hand. The database tests could not be run here.
+
+### Server run sheet
+```
+git fetch && git checkout step-23-portal-files && git pull
+make lint
+make test ARGS="tests/unit/test_portal.py tests/unit/test_portal_store.py tests/unit/test_migrations_static.py -q"
+make dev-up
+```
+`make dev-up` applies migration 004 (the `migrate` container). Expect lint clean and the tests passing.
+Then check the grant: `make dev-psql` and paste
+
+```sql
+set role portal_app;   -- if this says permission denied, skip it and run the next line only
+select document_id, academic_year, stage from report_cards limit 3;
+select learner_id from report_cards limit 1;   -- must be refused
+```
+
+Then in the browser at `http://13.140.150.214:8088/portal/` as the administrator:
+1. **Files**: the cards in groups such as "Form 2 · 2023/24", the newest year first; the summary line;
+   open and close a group and wait: it stays as you left it.
+2. **Upload, Methodology**: the panel says what is in force (or "No methodology yet"). Upload
+   `Methodology of MDEIS v 2.2.pdf`: it appears as "Waiting for a person to check it" with the changes
+   and a command to copy. Run it. The panel then says "In force", with your name and the date.
+3. Upload the same file again: it is listed under Earlier uploads as "Same file as D-…".
+4. **Upload, Report cards**: "choose a whole folder" with the teacher's folder (copy a few cards to
+   your Mac's Desktop first if you like). The HTML card is skipped by name. Watch "n of m uploaded";
+   try Stop. Everything already read shows as "Same file uploaded again".
+5. Sign in as the teacher's "User" account: Files works, no methodology panel, no methodology box.
+Paste screenshots.

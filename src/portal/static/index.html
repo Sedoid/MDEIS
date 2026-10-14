@@ -81,19 +81,32 @@
                 <span class="hint">PDF only. One card per file.</span>
                 <input id="file-results" type="file" name="file" accept=".pdf,application/pdf" multiple>
               </label>
+              <p class="folder-line">or
+                <button type="button" class="linkish pick-folder">choose a whole folder</button></p>
+              <input class="folder" type="file" webkitdirectory hidden>
               <p class="picked" aria-live="polite"></p>
+              <div class="progress" hidden>
+                <progress max="1" value="0"></progress>
+                <p class="progress-text" aria-live="polite"></p>
+                <button type="button" class="btn ghost stop">Stop</button>
+              </div>
               <button type="submit" class="btn primary">Upload report cards</button>
             </form>
             <form id="form-methodology" class="box" data-kind="methodology" hidden>
               <h2>Methodology</h2>
+              <div id="method-panel" class="method-panel" aria-live="polite"></div>
               <label class="drop" for="file-methodology">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L8 8m4-4 4 4M4 20h16"/></svg>
-                <span class="drop-title">Choose a PDF or Markdown file or drop it here</span>
+                <span id="method-drop-title" class="drop-title">Choose a PDF or Markdown file or drop it here</span>
                 <span class="hint">A person must check it before it is used.</span>
                 <input id="file-methodology" type="file" name="file"
                        accept=".pdf,.md,application/pdf,text/markdown">
               </label>
               <p class="picked" aria-live="polite"></p>
+              <div class="progress" hidden>
+                <progress max="1" value="0"></progress>
+                <p class="progress-text" aria-live="polite"></p>
+              </div>
               <button type="submit" class="btn primary">Upload methodology</button>
             </form>
           </div>
@@ -102,16 +115,12 @@
 
         <section id="view-files" class="view" hidden>
           <h1>Your files</h1>
-          <p class="sub">What has been uploaded and whether it could be read.</p>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>File</th><th>Kind</th><th>Status</th><th>Detail</th></tr></thead>
-              <tbody id="rows"></tbody>
-            </table>
-            <div id="empty" class="empty">
-              <p>Nothing uploaded yet.</p>
-              <a class="btn ghost" href="#/upload">Go to Upload</a>
-            </div>
+          <p class="sub">Report cards, grouped by class and school year, and whether each could be read.</p>
+          <p id="summary" class="summary" aria-live="polite"></p>
+          <div id="groups"></div>
+          <div id="empty" class="empty table-wrap">
+            <p>Nothing uploaded yet. Upload a folder of report cards to see them here.</p>
+            <a class="btn ghost" href="#/upload">Go to Upload</a>
           </div>
         </section>
 

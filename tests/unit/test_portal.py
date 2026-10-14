@@ -51,6 +51,7 @@ class FakeAuth:
 class FakeStore:
     def __init__(self, fail=False):
         self.rows, self.fail = [], fail
+        self.method = {"in_force": None, "waiting": [], "earlier": []}
 
     def add(self, **row):
         if self.fail:
@@ -63,6 +64,9 @@ class FakeStore:
 
     def get(self, document_id):
         return None
+
+    def methodology(self):
+        return self.method
 
 
 def settings(tmp_path, **changes):
@@ -383,6 +387,28 @@ def test_the_list_shows_only_my_files_unless_admin(world):
     upload(client, PDF + b"2", token="ada-token")
     assert len(as_user(client, "ben-token").get("/api/documents").json()["documents"]) == 1
     assert len(as_user(client, "ada-token").get("/api/documents").json()["documents"]) == 2
+
+
+def test_the_methodology_state_is_for_administrators_and_comes_from_the_store(world):
+    client, store, _ = world
+    assert client.get("/api/methodology").status_code == 401
+    assert as_user(client, "ben-token").get("/api/methodology").status_code == 403
+    store.method = {
+        "in_force": {"document_id": "D-000012", "original_name": "m.pdf", "active": True},
+        "waiting": [],
+        "earlier": [],
+    }
+    reply = as_user(client, "ada-token").get("/api/methodology")
+    assert reply.status_code == 200
+    assert reply.json()["in_force"]["document_id"] == "D-000012"
+
+
+def test_the_page_can_take_a_folder_and_shows_the_files_in_groups():
+    folder = Path(portal.__file__).parent / "static"
+    page, script = (folder / "index.html").read_text(), (folder / "app.js").read_text()
+    assert "webkitdirectory" in page
+    assert 'createElement("details")' in script and "academic_year" in script
+    assert "/api/" not in script, "addresses stay relative so the page works under /portal/"
 
 
 def test_security_headers_and_no_cors(world):
