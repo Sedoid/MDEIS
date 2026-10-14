@@ -109,11 +109,25 @@ def ready_reports(messages: list) -> set:
     return found
 
 
-def questions_from(result: dict, asked_before: set) -> list:
-    """Blocking problems in a tool result that nobody has been asked about yet."""
+def questions_from(result: dict, asked_before: set, asked_about: str = "") -> list:
+    """Blocking problems in a tool result that bear on the question and nobody has been asked yet.
+
+    `ingest_assessments` lists every problem in a learner's records, whatever was asked. A subject
+    named in the question narrows it to that subject. With none named, every subject that really is
+    blocked counts. A subject the rulebook does not know blocks nothing, so it is never asked about.
+    A blocked `compute_trend` lists reasons for the very subject asked for, and they are all asked.
+    """
+    blocked = set(result.get("blocked_subjects", []))
+    text = asked_about.lower()
+    named = {r["subject"] for r in result.get("records", []) if r["subject"].lower() in text}
+    wanted = (named & blocked) if named else blocked
     found = []
     for item in result.get("issues", []):
-        if item.get("severity") == "blocking" and not item.get("answered"):
+        if (
+            item.get("severity") == "blocking"
+            and not item.get("answered")
+            and item.get("subject") in wanted
+        ):
             found.append(item)
     for item in result.get("reasons", []):
         found.append(item)
@@ -246,7 +260,7 @@ def build(deps: Deps) -> Machine:
             if chart_reply.is_chart(call.name, result):
                 charts.append(result)
             if call.name in ("ingest_assessments", "compute_trend"):
-                for q in questions_from(result, asked_now):
+                for q in questions_from(result, asked_now, deps.last_user):
                     if q["issue_id"] not in seen:
                         seen.add(q["issue_id"])
                         questions.append(q)

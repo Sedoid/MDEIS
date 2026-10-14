@@ -357,3 +357,46 @@ def test_langgraph_gives_the_same_events_as_the_plain_engine():
     model = FakeModel(ask("ingest_assessments", {"learner_id": "L-1"}))
     asked = run(user("L-1?"), model, blocked, engine="langgraph")
     assert final(asked)["needs_answer"] is True
+
+
+# --------------------------------------------------------------------------- only what bears on it
+RECORDS = [{"subject": s, "record_id": f"A-{n}"} for n, s in enumerate(
+    ["Mathematics", "English", "Chemistry"], start=1)]
+MESSY = {
+    "records": RECORDS,
+    "issues": [
+        {"issue_id": "I-1", "severity": "blocking", "answered": None, "subject": "English",
+         "question": "Was English not assessed in term 2?", "possible_answers": ["confirm_absent"]},
+        {"issue_id": "I-2", "severity": "blocking", "answered": None, "subject": "Chemistry",
+         "question": "Is the Chemistry score missing?", "possible_answers": ["confirm_absent"]},
+        {"issue_id": "I-3", "severity": "blocking", "answered": None, "subject": "Economics",
+         "question": "Which rulebook subject is Economics?",
+         "possible_answers": ["exclude_record"]},
+    ],
+    "blocked_subjects": ["Chemistry", "English"],
+}  # fmt: skip
+
+
+def asked_ids(text, result=MESSY):
+    server = FakeServer(MDEIS_LISTING, {"ingest_assessments": result})
+    model = FakeModel(
+        ask("ingest_assessments", {"learner_id": "L-1"}), say("Mathematics is steady.")
+    )
+    answer = final(run(user(text), model, server))
+    return answer, [i for i in ("I-1", "I-2", "I-3") if i in answer["answer"]]
+
+
+def test_a_question_about_one_subject_is_not_held_up_by_problems_in_other_subjects():
+    answer, asked = asked_ids("What is L-1's trend in Mathematics?")
+    assert asked == [] and "needs_answer" not in answer
+    assert answer["answer"] == "Mathematics is steady."
+
+
+def test_a_question_about_a_blocked_subject_asks_about_that_subject_only():
+    answer, asked = asked_ids("What is L-1's trend in English?")
+    assert asked == ["I-1"] and answer["needs_answer"] is True
+
+
+def test_with_no_subject_named_every_blocked_subject_is_asked_about_but_not_an_unknown_one():
+    answer, asked = asked_ids("Write the report for L-1")
+    assert asked == ["I-1", "I-2"], "Economics is not in the rulebook, so it blocks nothing"
