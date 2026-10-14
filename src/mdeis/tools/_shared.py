@@ -56,6 +56,42 @@ def active_methodology(conn) -> str | None:
     return row[0] if row else None
 
 
+def sources_of(conn, found: Situation, record_ids=None) -> list:
+    """The report-card files these records came from, oldest first.
+
+    Each is `{document_id, file, academic_year, stage}`. `file` is the name the card was uploaded
+    under, which is what a person recognises; record numbers mean nothing to them. With no
+    `record_ids`, every card of the learner. It is added to a result after the hash is taken, so it
+    changes no hash.
+    """
+    wanted = None if record_ids is None else set(record_ids)
+    cards = {}
+    for card in found.cards:
+        if not card["document_id"]:
+            continue
+        ids = {t["record_id"] for e in card["subjects"].values() for t in e["terms"].values()}
+        if wanted is None or ids & wanted:
+            cards[card["document_id"]] = card
+    if not cards:
+        return []
+    names = dict(
+        conn.execute(
+            "SELECT document_id, original_name FROM documents WHERE document_id = ANY(%s)",
+            (list(cards),),
+        ).fetchall()
+    )
+    ordered = sorted(cards.values(), key=lambda c: (c["year_start"], c["document_id"]))
+    return [
+        {
+            "document_id": c["document_id"],
+            "file": names.get(c["document_id"], c["document_id"]),
+            "academic_year": c["year"],
+            "stage": c["stage"],
+        }
+        for c in ordered
+    ]
+
+
 def public_issue(issue: dict, answers: dict) -> dict:
     """An issue as the caller sees it: without the internal fingerprint, with its answer if any."""
     out = {k: v for k, v in issue.items() if k not in INTERNAL_ISSUE_KEYS}

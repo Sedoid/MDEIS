@@ -29,6 +29,12 @@ CHART = {
                   "scores_available": 2, "scores_needed": 3}],
     "record_ids": ["A-000001", "A-000002", "A-000007"],
     "clause_ids": ["TR-1"],
+    "sources": [
+        {"document_id": "D-000010", "file": "amina form1 2022-2023.pdf",
+         "academic_year": "2022/2023", "stage": "Form 1"},
+        {"document_id": "D-000011", "file": "amina form2 2023-2024.pdf",
+         "academic_year": "2023/2024", "stage": "Form 2"},
+    ],
     "source": "Report-card scores only. Not a prediction.",
     "result_hash": "abc",
 }
@@ -72,7 +78,11 @@ def test_the_picture_goes_under_the_models_words_with_a_caption_in_both_engines(
         answer = final(runner(USER, model, server))["answer"]
         assert answer.startswith("Mathematics rose and Chemistry has one score so far.")
         assert IMAGE.search(answer), runner.__name__
-        assert "Records: [A-000001] [A-000002] [A-000007]. Rules: [TR-1]." in answer
+        assert "Rules: [TR-1]." in answer
+        assert "Records:" not in answer and "[A-000001]" not in answer
+        assert answer.endswith(
+            "Sources (report cards): amina form1 2022-2023.pdf; amina form2 2023-2024.pdf."
+        )
         assert "Not drawn: Physics (only 2 of the 3 scores needed are on record)." in answer
 
 
@@ -126,3 +136,61 @@ def test_a_refused_or_failed_chart_call_draws_nothing():
         model = FakeModel(ask(*ASK), say("It did not work."))
         answer = final(run_loop(USER, model, server))["answer"]
         assert answer == "It did not work."
+
+
+# --------------------------------------------------------------------------- sources: file names
+def sourced(*names):
+    return {"status": "ok", "sources": [
+        {"document_id": f"D-{n:06d}", "file": name, "academic_year": year, "stage": "Form 1"}
+        for n, (name, year) in enumerate(names, start=1)
+    ]}
+
+
+TREND = {**sourced(("b form2.pdf", "2023/2024"), ("a form1.pdf", "2022/2023")), "trend": "steady"}
+WORDS = "Mathematics is steady [A-000062] [A-000104], from card [D-000118] [d61ccfdb\u2026]."
+
+
+def test_record_and_document_numbers_are_replaced_by_the_names_of_the_files():
+    for runner in (run_loop, run_graph):
+        server = FakeServer(MDEIS_LISTING, {"compute_trend": TREND})
+        model = FakeModel(ask("compute_trend", {"learner_id": "L-1", "skill": "Mathematics"}),
+                          say(WORDS))
+        answer = final(runner(USER, model, server))["answer"]
+        assert answer.startswith("Mathematics is steady, from card.")
+        assert "[A-" not in answer and "[D-" not in answer and "d61ccfdb" not in answer
+        assert answer.endswith("Sources (report cards): a form1.pdf; b form2.pdf.")
+
+
+def test_each_file_is_named_once_even_when_several_tools_return_it():
+    server = FakeServer(MDEIS_LISTING, {"compute_trend": TREND, "ingest_assessments": TREND})
+    model = FakeModel(ask("ingest_assessments", {"learner_id": "L-1"}),
+                      ask("compute_trend", {"learner_id": "L-1", "skill": "Mathematics"}),
+                      say("Steady."))
+    answer = final(run_graph(USER, model, server))["answer"]
+    assert answer.count("a form1.pdf") == 1 and answer.count("b form2.pdf") == 1
+
+
+def test_without_source_files_the_models_words_are_left_as_written():
+    model = FakeModel(say("English is steady [A-000001]."))
+    answer = final(run_graph(USER, model, FakeServer(MDEIS_LISTING)))["answer"]
+    assert answer == "English is steady [A-000001]." and "Sources" not in answer
+
+
+def test_a_long_list_of_files_is_cut_after_a_dozen():
+    many = sourced(*[(f"card {n:02d}.pdf", f"20{n:02d}/20{n + 1:02d}") for n in range(15)])
+    server = FakeServer(MDEIS_LISTING, {"compute_trend": many})
+    model = FakeModel(ask("compute_trend", {"learner_id": "L-1", "skill": "Mathematics"}),
+                      say("Steady."))
+    answer = final(run_loop(USER, model, server))["answer"]
+    assert answer.endswith("; and 3 more.") and answer.count(".pdf") == 12
+
+
+def test_a_question_to_the_approver_has_no_sources_line():
+    blocking = {**sourced(("a form1.pdf", "2022/2023")), "blocked_subjects": ["English"],
+                "issues": [{"issue_id": "I-1", "severity": "blocking", "answered": None,
+                            "subject": "English", "question": "Was English not assessed?"}]}
+    server = FakeServer(MDEIS_LISTING, {"ingest_assessments": blocking})
+    model = FakeModel(ask("ingest_assessments", {"learner_id": "L-1"}))
+    answer = final(run_graph([{"role": "user", "content": "How is L-1 in English?"}],
+                             model, server))["answer"]
+    assert "[I-1]" in answer and "Sources" not in answer

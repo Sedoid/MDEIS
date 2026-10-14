@@ -1,7 +1,7 @@
 """ingest_assessments: read one learner's stored records, check them, and name every problem."""
 
 from ._call import logged_tool
-from ._shared import public_issue, public_records, situation, with_hash
+from ._shared import public_issue, public_records, situation, sources_of, with_hash
 from .context import ToolContext
 
 
@@ -21,4 +21,6 @@ def ingest_assessments(ctx: ToolContext, learner_id: str, template_version: str 
         "issues": [public_issue(i, found.answers) for i in found.issues],
         "blocked_subjects": sorted(found.blocked),
     }
-    return with_hash(result), "ok"
+    with_hash(result)
+    result["sources"] = sources_of(ctx.conn, found)
+    return result, "ok"

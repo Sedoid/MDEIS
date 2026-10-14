@@ -110,3 +110,45 @@ def test_the_call_is_in_the_diary_and_takes_no_approver(make_ctx, fx):
             (ctx.run_id,),
         ).fetchall()
     assert lines == [("make_chart", "ok")]
+
+
+# --- sources: the report-card files, not record numbers --------------------------------------
+def named(ctx, document_ids):
+    with psycopg.connect(ctx.database_url) as conn:
+        return dict(conn.execute(
+            "SELECT document_id, original_name FROM documents WHERE document_id = ANY(%s)",
+            (list(document_ids),),
+        ).fetchall())
+
+
+def test_a_chart_names_the_report_card_files_it_was_drawn_from(make_ctx, fx):
+    ctx = make_ctx()
+    drawn = chart(ctx, fx["FX-01"]["gen_id"], ["English"])
+    sources = drawn["sources"]
+    assert sources, "a chart of stored scores has report cards behind it"
+    assert all(set(s) == {"document_id", "file", "academic_year", "stage"} for s in sources)
+    assert [s["academic_year"] for s in sources] == sorted(s["academic_year"] for s in sources)
+    names = named(ctx, [s["document_id"] for s in sources])
+    assert [s["file"] for s in sources] == [names[s["document_id"]] for s in sources]
+    assert len({s["document_id"] for s in sources}) == len(sources), "each file once"
+
+
+def test_a_trend_names_the_files_of_its_window_and_the_hash_does_not_change(make_ctx, fx):
+    ctx = make_ctx()
+    trend = tool("compute_trend")(
+        ctx, learner_id=fx["FX-01"]["gen_id"], skill="English", template_version="v1")
+    assert trend["sources"] and all(s["file"] for s in trend["sources"])
+    bare = {k: v for k, v in trend.items()
+            if k not in ("sources", "methodology_document_id", "result_hash", "logged_event_id")}
+    from mdeis.tools._shared import with_hash
+
+    assert with_hash(bare)["result_hash"] == trend["result_hash"], "sources are outside the hash"
+
+
+def test_reading_a_learner_names_every_card_and_a_blocked_trend_names_none(make_ctx, fx):
+    ctx = make_ctx()
+    read = tool("ingest_assessments")(ctx, learner_id=fx["FX-01"]["gen_id"])
+    assert len(read["sources"]) >= 1
+    blocked = tool("compute_trend")(
+        ctx, learner_id=fx["FX-04a"]["gen_id"], skill="English", template_version="v1")
+    assert blocked["status"] == "blocked" and blocked["sources"] == []

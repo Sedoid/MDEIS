@@ -15,6 +15,9 @@ import re
 
 from mdeis import chart_image
 
+# Record, document and result numbers mean nothing to a person. The files they came from do.
+NUMBERS = re.compile(r"\s*\[(?:A|D)-\d+[^\]]*\]|\s*\[[0-9a-f]{6,}[^\]]*\]")
+SOURCES_SHOWN = 12  # files named in one answer, then "and n more"
 IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)|data:image/[A-Za-z+.-]+;base64,[A-Za-z0-9+/=]+")
 SEEN = "[a chart was shown here]"
 LEFT_OFF = {
@@ -61,25 +64,55 @@ def picture(result: dict) -> str | None:
 
 
 def caption(result: dict) -> str:
-    """What the picture shows and where it came from, in words, with its record and rule markers."""
+    """What the picture shows, and any subject that was not drawn, in words. The sources of the
+    scores are named once, for the whole answer, by `sources_line`."""
     if not isinstance(result, dict):
         return ""
     lines = []
     if result.get("series"):
         names = ", ".join(line["name"] for line in result["series"])
-        records = " ".join(f"[{rid}]" for rid in result.get("record_ids", []))
         rules = " ".join(f"[{cid}]" for cid in result.get("clause_ids", []))
         lines.append(f"Chart of {names}, term by term, from the stored report-card scores.")
-        lines.append(f"Records: {records}. Rules: {rules}.")
+        if rules:
+            lines.append(f"Rules: {rules}.")
     left = result.get("excluded") or []
     if left:
         lines.append("Not drawn: " + "; ".join(_sentence(item) for item in left) + ".")
     return "\n\n".join(lines)
 
 
-def compose(text: str, results: list) -> str:
-    """The model's words, then each chart and its caption. Anything image-like in the words goes."""
+def add_sources(found: list, result) -> list:
+    """`found` plus the report-card files named in a tool result, each file once."""
+    seen = {item["document_id"] for item in found}
+    for item in (result.get("sources") if isinstance(result, dict) else None) or []:
+        if isinstance(item, dict) and item.get("file") and item.get("document_id") not in seen:
+            seen.add(item["document_id"])
+            found = [*found, item]
+    return found
+
+
+def sources_line(found: list) -> str:
+    """One plain line naming the report cards the answer rests on, or nothing."""
+    if not found:
+        return ""
+    ordered = sorted(found, key=lambda s: (s.get("academic_year", ""), s["file"]))
+    names = [s["file"] for s in ordered[:SOURCES_SHOWN]]
+    more = len(ordered) - len(names)
+    tail = f"; and {more} more" if more > 0 else ""
+    return "Sources (report cards): " + "; ".join(names) + tail + "."
+
+
+def compose(
+    text: str, results: list, sources: list | None = None, show_line: bool = True
+) -> str:
+    """The model's words, then each chart and its caption, then the files the answer rests on.
+
+    Anything image-like in the words goes. When the tools named their source files, the record,
+    document and result numbers the model wrote beside its sentences go too: they are replaced by
+    one line naming the files. Without source files the words are left as written."""
     out = strip_images(text)
+    if sources:
+        out = NUMBERS.sub("", out)
     for result in results:
         image = picture(result)
         words = caption(result)
@@ -87,4 +120,5 @@ def compose(text: str, results: list) -> str:
             out += f"\n\n{image}"
         if words:
             out += f"\n\n{words}"
-    return out
+    line = sources_line(sources or []) if show_line else ""
+    return out + f"\n\n{line}" if line else out

@@ -2,7 +2,7 @@
 
 from ..core.trend import skill_result, subject_result
 from ._call import logged_tool
-from ._shared import Situation, active_methodology, situation, with_hash
+from ._shared import Situation, active_methodology, situation, sources_of, with_hash
 from .context import Refusal, ToolContext
 
 
@@ -48,6 +48,7 @@ def compute_trend(
     result = {"learner_id": learner_id, "template_version": rules.version, **result}
     with_hash(result)  # the hash covers the inputs and the rulebook version, not the methodology
     result["methodology_document_id"] = active_methodology(ctx.conn)
+    result["sources"] = sources_of(ctx.conn, found, result.get("record_ids", []))
     if result["status"] == "blocked":
         result["reasons"] = blocking_reasons(found, subjects)
         return result, "blocked"

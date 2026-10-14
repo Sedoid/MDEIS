@@ -107,7 +107,7 @@ async def run(*, messages: list, token: str | None, run_id: str, settings, model
     definitions, owner, _dropped = tools.bind(listed, settings.pg_tools, settings.class_view)
     conversation = [{"role": "system", "content": system_prompt()}]
     conversation += conversation_from(messages, token)
-    called, drafted, charts = [], set(), []
+    called, drafted, charts, sources = [], set(), [], []
     for step in range(settings.max_steps):
         yield event("status", text="Thinking." if not step else "Working on it.")
         try:
@@ -116,7 +116,7 @@ async def run(*, messages: list, token: str | None, run_id: str, settings, model
             yield event("error", text=str(error))
             return
         if not reply.calls:
-            answer = chart_reply.compose(guards.scrub(reply.text, token), charts)
+            answer = chart_reply.compose(guards.scrub(reply.text, token), charts, sources)
             for item in final_events(answer, called, run_id):
                 yield item
             return
@@ -139,6 +139,7 @@ async def run(*, messages: list, token: str | None, run_id: str, settings, model
             called.append(call.name)
             if chart_reply.is_chart(call.name, result):
                 charts.append(result)
+            sources = chart_reply.add_sources(sources, result)
             content = guards.scrub(json.dumps(result, default=str), token)
             conversation.append({"role": "tool", "tool_call_id": call.id, "content": content})
             yield event("status", text=f"Used {call.name}.")
@@ -146,5 +147,7 @@ async def run(*, messages: list, token: str | None, run_id: str, settings, model
         "I reached my step limit before I finished. "
         "Ask me to carry on, or ask a narrower question."
     )
-    for item in final_events(chart_reply.compose(note, charts), called, run_id, incomplete=True):
+    for item in final_events(
+        chart_reply.compose(note, charts, sources), called, run_id, incomplete=True
+    ):
         yield item
