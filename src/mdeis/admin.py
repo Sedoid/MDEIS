@@ -35,7 +35,7 @@ USAGE = (
     "usage:\n"
     "  python -m mdeis.admin load-criteria FILE [FILE ...] [--by NAME] [--no-activate]\n"
     '  python -m mdeis.admin ingest --kind results|methodology --file PATH --as "Name"\n'
-    '  python -m mdeis.admin ingest-dir --kind results --dir FOLDER --as "Name"\n'
+    '  python -m mdeis.admin ingest-dir --kind results --dir FOLDER --as "Name" [--recursive]\n'
     '  python -m mdeis.admin ack-methodology D-000012 --by "Name" [--note "..."]'
 )
 
@@ -119,18 +119,31 @@ def ingest(argv: list[str]) -> int:
     return 0 if worked(summary) else 1
 
 
+def find_cards(folder: Path, recursive: bool = False) -> tuple[list[Path], list[Path]]:
+    """The PDF files in a folder, in name order, and the other files that will be left alone."""
+    if not folder.is_dir():
+        return [], []
+    found = sorted(folder.rglob("*") if recursive else folder.glob("*"))
+    files = [p for p in found if p.is_file() and not p.name.startswith(".")]
+    pdfs = [p for p in files if p.suffix.lower() == ".pdf"]
+    return pdfs, [p for p in files if p.suffix.lower() != ".pdf"]
+
+
 def ingest_dir(argv: list[str]) -> int:
     """Read every PDF in a folder, in name order. One line for each, then a count."""
     parser = argparse.ArgumentParser(prog="python -m mdeis.admin ingest-dir")
     parser.add_argument("--kind", choices=("results", "methodology"), required=True)
     parser.add_argument("--dir", required=True)
     parser.add_argument("--as", dest="name", required=True, help="who is uploading them")
+    parser.add_argument("--recursive", action="store_true", help="also read the sub-folders")
     args = parser.parse_args(argv)
     folder = Path(args.dir)
-    files = sorted(folder.glob("*.pdf")) if folder.is_dir() else []
+    files, others = find_cards(folder, args.recursive)
     if not files:
         print(f"There are no PDF files in {folder}.", file=sys.stderr)
         return 1
+    for other in others:
+        print(f"left alone (not a PDF): {other.relative_to(folder)}")
     url, inbox = os.environ["DATABASE_URL"], worker.inbox_dir()
     failed = 0
     for source in files:
@@ -138,7 +151,8 @@ def ingest_dir(argv: list[str]) -> int:
         ok = worked(summary)
         failed += not ok
         note = "" if ok else f"  <-- {summary.get('failure_kind', 'not processed')}"
-        print(f"{'ok  ' if ok else 'FAIL'}  {source.name}: {summary.get('status')}{note}")
+        shown = source.relative_to(folder)
+        print(f"{'ok  ' if ok else 'FAIL'}  {shown}: {summary.get('status')}{note}")
     print(f"\n{len(files) - failed} of {len(files)} read; {failed} failed")
     return 0 if not failed else 1
 

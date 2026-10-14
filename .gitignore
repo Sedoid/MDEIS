@@ -60,6 +60,10 @@ minio-data/
 data/tmp/
 # The whole practice school, every card (make class-data). Made on demand, never committed.
 data/full-class/
+# The teacher's own files (made-up cards and her methodology). Loaded into the server, never committed.
+data/incoming/
+data/MDEIS SYNTHETIC REPORT CARDS*
+data/Methodology of MDEIS*
 .claude/hooks/debug.log
 evals/tmp/
 # Committed eval results live in evals/results/ and are NOT ignored:
