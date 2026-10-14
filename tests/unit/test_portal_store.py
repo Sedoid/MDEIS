@@ -107,3 +107,19 @@ def test_the_one_in_force_the_one_waiting_and_the_earlier_ones(db):
     earlier = {r["document_id"]: r for r in state["earlier"]}
     assert set(earlier) == {old, same}
     assert earlier[same]["duplicate_of"] == now and earlier[old]["duplicate_of"] is None
+
+
+def test_where_a_file_is_kept_and_whose_it_is(db):
+    doc = card(db, "mine.pdf", sha="d" * 64, who="u-me")
+    found = store.document_file(AsDicts(db), doc)
+    assert found == {
+        "stored_name": "d.bin", "original_name": "mine.pdf", "kind": "results",
+        "uploader_id": "u-me",
+    }
+    assert store.document_file(AsDicts(db), "D-999999") is None
+
+
+def test_the_name_on_disk_is_not_in_the_list_or_the_detail(db):
+    doc = card(db, "mine.pdf", sha="e" * 64)
+    assert "stored_name" not in store.document_detail(AsDicts(db), doc)
+    assert all("stored_name" not in row for row in store.list_documents(AsDicts(db)))

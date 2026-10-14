@@ -4,6 +4,7 @@
     GET  /api/me                 who is signed in    GET  /api/csrf     a token for this user
     GET  /api/methodology        what is in force (administrators)
     POST /api/documents?kind=    upload a file       GET  /api/documents[/D-000001]  status
+    GET  /api/documents/D-000001/file   the file itself, for a new tab
     GET  /healthz
 
 Who is signed in comes from Open WebUI (auth.py). A file is checked, written to the inbox under a
@@ -20,7 +21,7 @@ import re
 import urllib.request
 import uuid
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -37,6 +38,7 @@ STATIC = Path(__file__).parent / "static"
 SESSION_SECONDS = 7 * 24 * 3600  # how long the browser keeps the login cookie
 KINDS = {"results": (".pdf",), "methodology": (".pdf", ".md")}
 PDF_START = b"%PDF-"
+STORED_NAME = re.compile(r"^[0-9a-f]{32}\.(pdf|md)$")  # what the portal and the admin tool write
 DOCUMENT_ID = re.compile(r"^D-[0-9]{6,}$")
 
 
@@ -56,7 +58,8 @@ def create_app(settings: Settings | None = None, auth=None, store=None) -> FastA
     async def headers(request: Request, call_next):
         response = await call_next(request)
         response.headers.update(security.HEADERS)
-        response.headers["Content-Security-Policy"] = policy
+        if not request.url.path.endswith("/file"):  # a PDF is shown by the browser's own viewer
+            response.headers["Content-Security-Policy"] = policy
         return response
 
     async def who(request: Request) -> User | None:
@@ -220,6 +223,30 @@ def create_app(settings: Settings | None = None, auth=None, store=None) -> FastA
         if not found or not (user.is_admin or found.get("uploader_id") == user.id):
             return _say(404, "There is no such document.")
         return {k: v for k, v in found.items() if k != "uploader_id"}
+
+    @app.get("/api/documents/{document_id}/file")
+    async def open_file(document_id: str, request: Request):
+        """The uploaded file itself, to be shown in a new tab. Its owner and administrators only."""
+        user = await who(request)
+        if user is None:
+            return _say(401, "Sign in to Open WebUI first.")
+        found = DOCUMENT_ID.match(document_id) and await run_in_threadpool(
+            store.file_of, document_id
+        )
+        if not found or not (user.is_admin or found["uploader_id"] == user.id):
+            return _say(404, "There is no such document.")
+        if not STORED_NAME.match(found["stored_name"]):  # never build a path from anything else
+            return _say(404, "There is no such document.")
+        path = Path(config.inbox) / found["stored_name"]
+        if not path.is_file():
+            return _say(404, "The file is no longer available.")
+        pdf = found["stored_name"].endswith(".pdf")
+        shown = security.clean_name(found["original_name"])
+        return FileResponse(
+            path,
+            media_type="application/pdf" if pdf else "text/plain; charset=utf-8",
+            headers={"Content-Disposition": "inline; filename*=UTF-8''" + quote(shown)},
+        )
 
     @app.post("/api/documents")
     async def upload(request: Request, kind: str = ""):

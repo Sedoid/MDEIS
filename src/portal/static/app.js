@@ -234,6 +234,17 @@ function when(iso) {
     year: "numeric" }) : "";
 }
 
+// The file's name, as a link that opens the file itself in a new tab.
+function fileLink(doc) {
+  const link = document.createElement("a");
+  link.href = "api/documents/" + encodeURIComponent(doc.document_id) + "/file";
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.title = "Open in a new tab";
+  link.textContent = doc.original_name;
+  return link;
+}
+
 function describe(doc) {
   if (doc.status === "failed") {
     const where = doc.failure_page ? " (page " + doc.failure_page +
@@ -279,11 +290,13 @@ function renderMethod(state, documents) {
   const stamp = methodStamp;
   const reading = documents.filter((d) => d.kind === "methodology" &&
     (d.status === "pending" || d.status === "processing"));
-  const line = (pill, name, detail) => {
+  const line = (pill, doc, detail) => {
     const row = document.createElement("div");
     row.className = "method-row";
     row.appendChild(pill);
-    row.appendChild(text("strong", name));
+    const name = document.createElement("strong");
+    name.appendChild(fileLink(doc));
+    row.appendChild(name);
     if (detail) row.appendChild(text("span", detail, "method-meta"));
     return row;
   };
@@ -291,7 +304,7 @@ function renderMethod(state, documents) {
   if (inForce) {
     const by = inForce.acknowledged_by ? "checked by " + inForce.acknowledged_by + " on " +
       when(inForce.acknowledged_at) : "in force";
-    panel.appendChild(line(text("span", "In force", "pill s-done"), inForce.original_name,
+    panel.appendChild(line(text("span", "In force", "pill s-done"), inForce,
       by + " · " + inForce.document_id));
     panel.appendChild(text("p", "Reports already written stay pinned to this one. After a " +
       "replacement they show as out of date; they are never rewritten.", "hint"));
@@ -300,12 +313,12 @@ function renderMethod(state, documents) {
       "hint"));
   }
   for (const doc of reading) {
-    panel.appendChild(line(text("span", PLAIN[doc.status], "pill s-" + doc.status),
-      doc.original_name, doc.document_id));
+    panel.appendChild(line(text("span", PLAIN[doc.status], "pill s-" + doc.status), doc,
+      doc.document_id));
   }
   for (const doc of (state && state.waiting) || []) {
     const row = line(text("span", "Waiting for a person to check it", "pill s-needs_review"),
-      doc.original_name, doc.document_id);
+      doc, doc.document_id);
     panel.appendChild(row);
     review(doc, panel, stamp);
   }
@@ -317,7 +330,11 @@ function renderMethod(state, documents) {
       let note = "Replaced";
       if (doc.duplicate_of) note = "Same file as " + doc.duplicate_of + "; nothing was added";
       else if (doc.status === "failed") note = describe(doc);
-      box.appendChild(text("p", doc.original_name + " · " + note, "method-earlier"));
+      const item = document.createElement("p");
+      item.className = "method-earlier";
+      item.appendChild(fileLink(doc));
+      item.appendChild(document.createTextNode(" · " + note));
+      box.appendChild(item);
     }
     panel.appendChild(box);
   }
@@ -360,7 +377,7 @@ function fileRow(doc) {
     else td.appendChild(content);
     row.appendChild(td);
   };
-  cell("File", doc.original_name);
+  cell("File", fileLink(doc));
   cell("Status", text("span", PLAIN[doc.status] || doc.status, "pill s-" + doc.status));
   cell("Detail", describe(doc));
   return row;

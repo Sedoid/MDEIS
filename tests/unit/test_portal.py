@@ -52,6 +52,7 @@ class FakeStore:
     def __init__(self, fail=False):
         self.rows, self.fail = [], fail
         self.method = {"in_force": None, "waiting": [], "earlier": []}
+        self.files = {}
 
     def add(self, **row):
         if self.fail:
@@ -67,6 +68,9 @@ class FakeStore:
 
     def methodology(self):
         return self.method
+
+    def file_of(self, document_id):
+        return self.files.get(document_id)
 
 
 def settings(tmp_path, **changes):
@@ -408,12 +412,84 @@ def test_the_page_can_take_a_folder_and_shows_the_files_in_groups():
     page, script = (folder / "index.html").read_text(), (folder / "app.js").read_text()
     assert "webkitdirectory" in page
     assert 'createElement("details")' in script and "academic_year" in script
+    assert '"/file"' in script and 'link.target = "_blank"' in script and "noopener" in script
     assert "/api/" not in script, "addresses stay relative so the page works under /portal/"
 
 
 def test_the_chat_frame_has_no_focus_ring_of_its_own():
     css = (Path(portal.__file__).parent / "static" / "style.css").read_text()
     assert "iframe:focus-visible { outline: none; }" in css
+
+
+# -- opening a file in a new tab -------------------------------------------------------------
+
+
+def stored(store, folder, document_id, name, body, owner="u-ada", kind="results", original=None):
+    (folder / name).write_bytes(body)
+    store.files[document_id] = {
+        "stored_name": name, "original_name": original or name, "kind": kind, "uploader_id": owner,
+    }
+
+
+NAME = "0123456789abcdef0123456789abcdef"
+
+
+def test_the_owner_opens_their_file_in_the_browser(world):
+    client, store, folder = world
+    stored(store, folder, "D-000001", f"{NAME}.pdf", PDF, original="amina form1 2022-2023.pdf")
+    reply = as_user(client).get("/api/documents/D-000001/file")
+    assert reply.status_code == 200 and reply.content == PDF
+    assert reply.headers["content-type"] == "application/pdf"
+    disposition = reply.headers["content-disposition"]
+    assert disposition.startswith("inline;") and "amina%20form1%202022-2023.pdf" in disposition
+    assert reply.headers["x-content-type-options"] == "nosniff"
+    assert "content-security-policy" not in reply.headers, "the PDF viewer needs no page policy"
+
+
+def test_a_methodology_in_markdown_opens_as_plain_text(world):
+    client, store, folder = world
+    stored(store, folder, "D-000002", f"{NAME}.md", MD, kind="methodology")
+    reply = as_user(client).get("/api/documents/D-000002/file")
+    assert reply.headers["content-type"] == "text/plain; charset=utf-8"
+    assert reply.content == MD
+
+
+def test_nobody_opens_a_file_without_signing_in_and_nobody_opens_another_users_file(world):
+    client, store, folder = world
+    stored(store, folder, "D-000003", f"{NAME}.pdf", PDF, owner="u-ada")
+    assert client.get("/api/documents/D-000003/file").status_code == 401
+    assert as_user(client, "ben-token").get("/api/documents/D-000003/file").status_code == 404
+    stored(store, folder, "D-000007", f"{NAME[:-1]}0.pdf", PDF, owner="u-ben")
+    assert as_user(client, "ben-token").get("/api/documents/D-000007/file").status_code == 200
+
+
+def test_an_administrator_may_open_anyones_file(world):
+    client, store, folder = world
+    stored(store, folder, "D-000004", f"{NAME}.pdf", PDF, owner="u-ben")
+    assert as_user(client, "ada-token").get("/api/documents/D-000004/file").status_code == 200
+
+
+def test_a_stored_name_that_is_not_one_of_ours_is_never_read_from_disk(world):
+    client, store, folder = world
+    secret = folder.parent / "secret.pdf"
+    secret.write_bytes(b"%PDF-secret")
+    for bad in ("../secret.pdf", "/etc/passwd", f"{NAME}.exe", "x.pdf", f"{NAME}.pdf/../x.pdf"):
+        store.files["D-000005"] = {
+            "stored_name": bad, "original_name": "x.pdf", "kind": "results", "uploader_id": "u-ada"
+        }
+        assert as_user(client).get("/api/documents/D-000005/file").status_code == 404, bad
+
+
+def test_a_missing_file_an_unknown_document_and_a_bad_number_are_404(world):
+    client, store, folder = world
+    store.files["D-000006"] = {
+        "stored_name": f"{NAME}.pdf", "original_name": "gone.pdf", "kind": "results",
+        "uploader_id": "u-ada",
+    }
+    as_user(client)
+    assert client.get("/api/documents/D-000006/file").status_code == 404  # not on disk
+    assert client.get("/api/documents/D-999999/file").status_code == 404
+    assert client.get("/api/documents/not-a-number/file").status_code == 404
 
 
 def test_security_headers_and_no_cors(world):

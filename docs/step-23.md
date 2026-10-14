@@ -227,3 +227,21 @@ Then in the browser at `http://13.140.150.214:8088/portal/` as the administrator
    try Stop. Everything already read shows as "Same file uploaded again".
 5. Sign in as the teacher's "User" account: Files works, no methodology panel, no methodology box.
 Paste screenshots.
+
+
+## 8. Open a file in a new tab (added later)
+
+Every file name in the Files list, and every methodology in the panel (in force, waiting, earlier), is
+now a link that opens the uploaded file itself in a new tab: `GET /api/documents/D-…/file`.
+
+- The owner of a file, and administrators, can open it; anyone else gets "no such document". Signing in
+  is needed (the new tab carries the same sign-in cookie).
+- A PDF is shown by the browser's own viewer. A Markdown methodology opens as plain text.
+- The path on disk is built only from a name the portal or the admin tool made (32 hex digits and
+  `.pdf` or `.md`). Any other stored name is refused, so no path can be steered.
+- The page's content policy is not sent with a PDF (the browser's PDF viewer would be blocked by it);
+  the type is fixed and `nosniff` is set so a file is never treated as a web page.
+- A file that is no longer in the inbox says so ("no longer available").
+
+Server run sheet: `git pull`, the same `make test ARGS=...` as section 7, `make dev-up`, hard-refresh,
+click a file name in Files and the methodology name in the panel. Paste what opens (or the message).

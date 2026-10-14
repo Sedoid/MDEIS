@@ -57,6 +57,15 @@ def document_detail(conn, document_id: str) -> dict | None:
     return {**_plain(doc), "issues": issues}
 
 
+def document_file(conn, document_id: str) -> dict | None:
+    """Where a document's file is kept, and whose it is. The name on disk stays in the portal."""
+    return conn.execute(
+        "SELECT stored_name, original_name, kind, uploader_id FROM documents "
+        "WHERE document_id = %s",
+        (document_id,),
+    ).fetchone()
+
+
 def methodology_state(conn) -> dict:
     """The methodology in force, those waiting for a person to check them, and the earlier ones."""
     rows = [
@@ -98,6 +107,10 @@ class PgStore:
     def get(self, document_id: str) -> dict | None:
         with self._connect() as conn:
             return document_detail(conn, document_id)
+
+    def file_of(self, document_id: str) -> dict | None:
+        with self._connect() as conn:
+            return document_file(conn, document_id)
 
     def methodology(self) -> dict:
         with self._connect() as conn:
