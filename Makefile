@@ -166,7 +166,7 @@ ingest-dir: $(ENV_FILE) ## Read every PDF in a folder (RECURSIVE=1 for sub-folde
 
 card-lines: $(ENV_FILE) ## Show how the reader sees a card that will not read:  make card-lines FILE="path/to/card.pdf"
 	@test -f "$(FILE)" || { echo "There is no file at $(FILE)." >&2; exit 1; }
-	@$(COMPOSE) --profile tools run --rm --no-deps --entrypoint python -v "$$(cd "$$(dirname "$(FILE)")" && pwd)/$$(basename "$(FILE)"):/upload/card.pdf:ro" admin -m mdeis.ingest.report_card --lines /upload/card.pdf
+	@$(COMPOSE) --profile tools run --rm --build --no-deps --entrypoint python -v "$$(cd "$$(dirname "$(FILE)")" && pwd)/$$(basename "$(FILE)"):/upload/card.pdf:ro" admin -m mdeis.ingest.report_card --lines /upload/card.pdf
 
 ack: $(ENV_FILE) ## Put a methodology that needs review in force:  make ack DOC=D-000012 BY="Ada Teacher" NOTE="checked 6.4"
 	@test -n "$(DOC)" -a -n "$(BY)" || { echo 'usage: make ack DOC=D-000012 BY="Your Name" [NOTE="..."]' >&2; exit 1; }
