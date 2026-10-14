@@ -59,18 +59,42 @@ Write it from the real files: the date, the model, the commit, the table, and th
 - Variation: for any AI-written text, the harness records how many of 5 runs passed. The numbers
   from `compute_trend` must be identical in all runs; if not, the bug is in the code.
 
-## 5. The teacher session (the named approver)
+## 5. The teacher session (the named approver), shortened
 
-The build plan says a teacher is the named approver in the demo and that a short quote goes in the
-description. Before you do this:
+Decided: you load her methodology and her made-up report cards yourself while you work, so she does
+not have to upload anything. Her time goes on the two things only she can do.
 
-- [ ] She agrees to be named, in writing (a message is enough), for the demo and the log.
-- [ ] She sees only the made-up school. No real learner is shown, mentioned or uploaded.
+Before you load anything of hers:
+
+- [ ] She confirms in writing (a message is enough) that the cards are **made up**: no real learner,
+      name, photo or result. If she is unsure about any card, do not load it.
+- [ ] Her methodology and her cards stay out of git. Load them into the server only. Ask her before
+      any of her files is committed, and I need your yes too before a new card goes into `data/`.
+- [ ] Load them the same way a user would: methodology in the portal as the administrator, then
+      `make ack DOC=D-… BY="Demo Approver" NOTE="…"`; cards with `make ingest-dir KIND=results
+      DIR=<folder> AS="Demo loader"`. A card her layout makes unreadable is a finding, not a failure to
+      hide: record its failure kind and page and row in `EVALS.md` under what the reader could not do.
+
+What she does (about 30 minutes, you watching):
+
 - [ ] She reviews `templates/v1.yaml`: the values marked PLACEHOLDER (ranges, minimum evidence, banned
-      words) are hers to confirm or change. Change the file, run `make load-criteria`, and record what
-      changed. Do not edit a version that is already loaded: make `v2`, or a new file name.
-- [ ] She signs in as herself in Open WebUI and does a release. The diary then shows her name.
+      words) are hers to confirm or change. Loading her methodology document does **not** change these
+      rules: the methodology is cited text, the rules live in the template. Change the file, run
+      `make load-criteria`, and record what changed. Do not edit a version that is already loaded: make
+      `v2`, or a new file name.
+- [ ] She signs in as herself (a "User" account, not the administrator), asks about one of her learners
+      by number, reads the draft, and asks for the release. The diary then shows her name.
 - [ ] Ask her what is unclear, what is wrong, and what she would not trust. Write her words down as she
       says them. Use a quote only if she agrees to it.
+
+Do **not** clear the database for her session. The diary (`action_log`) is the record of the evals and
+the hand tests, and clearing it deletes your evidence. If you want to watch a fresh upload, ask her to
+upload two or three cards from a folder you give her during the session: nothing needs wiping for that.
+If you do reset later, save the evidence first:
+
+```bash
+docker exec $(docker ps --format '{{.Names}}' | grep '^postgres-') sh -c \
+  'pg_dump -U "$POSTGRES_USER" -d "$MDEIS_DB_NAME"' > ~/mdeis-backup-$(date +%F).sql
+```
 
 Put the confirmed values, what she changed and her quote in the README's team and evaluation sections.
