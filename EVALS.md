@@ -112,6 +112,43 @@ by the screen or in its own words, and does not rank anyone. In run 3 each passe
 and one day. The rule is a text pattern: the answers are saved in the result file and should be read,
 not only counted.
 
+## The failure we did not fix
+
+**E-01, run 5, in run 3 (`evals/results/agent-2026-10-15-1443.json`): the agent reached its step limit
+before it showed a checked draft.** The same request, "Write a report on learner <Chidi Mbah>'s English
+over the last terms", passed in the other four runs.
+
+What the saved file shows, for the five runs of E-01 (tool calls in order):
+
+| Run | Result | Calls | What it did |
+| --- | --- | --- | --- |
+| 1 | pass | 8 | read the records, one trend, two rule lookups, draft, check, redraft, check |
+| 2 | pass | 10 | four rule lookups and two trends, then draft, check, redraft, check |
+| 3 | pass | 9 | four rule lookups, two trends, draft, check |
+| 4 | pass | 9 | the same as run 3 |
+| 5 | **fail** | 11 | four rule lookups, two trends, draft, check, redraft, check, and then the limit |
+
+The limit is 12 model steps. Run 5 spent its steps on four lookups of rule wording and a second pass at
+the trend, then needed a redraft after the first check, and ran out before it could present the checked
+draft. The answer said so plainly ("I reached my step limit before I finished"), summarised what the
+tools had returned, named the report-card files, and drafted nothing it had not checked. Nothing was
+invented and nothing was released. The pass rule needs a checked draft with record markers in the
+answer, so the run is a fail, and we count it as one.
+
+**Why it happened.** The agent looks the same rules up again and again (`get_criterion`, four times in
+runs 2 to 5), although each result now carries the rulebook's own wording for the rules it applied. With
+that habit, a run that needs one redraft has almost no spare steps: the passing runs used 8 to 10 of the 12.
+This is the weakness already listed under known limits (many lookups for the same few rules), and run 3
+shows its cost.
+
+**What we would try next, in this order.** (1) Tell the agent not to look up a rule whose wording is
+already in a result it holds. (2) Have the code, not the model, supply rule wording, so no step is spent
+on it. (3) Only then raise the step limit, because a higher limit hides the waste instead of removing it.
+Each change would be followed by five runs of every scenario, and both result files would be kept.
+
+It was not fixed before submission: changing the agent after the run would make this the run of an
+older version, and the submission asks for the failure we did not fix, not one we tidied away.
+
 ## Known limits, as of now
 
 - **The ranking screen is a list of patterns.** It can miss a request worded in a way the list does not
@@ -125,6 +162,4 @@ not only counted.
   an upload followed by a question (E-19). These are done by hand and recorded in the same way.
 - **The model is wasteful with lookups**: it often calls `get_criterion` six or more times for the same
   few rules. That costs steps and time and has not been reduced beyond the prompt change above.
-- **No failure is left unfixed in run 2.** The challenge asks for one failure that was not fixed and what
-  would be tried next. Harder scenarios (the stress ones and E-22) are how one is found honestly. This
-  section is completed from their real results, not before.
+- **One failure is not fixed: E-01, run 5 of run 3.** See the next section.
