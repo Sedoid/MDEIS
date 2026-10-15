@@ -287,6 +287,21 @@ are recorded as failures, and the failure that was found is described there.
 - Parent-facing report layouts, and charts and PDF downloads served by our own server after
   release.
 - Import from common school record formats.
+- **Seasonal automations through n8n, inside the approval gate.** None of this is built yet; n8n runs in
+  the stack but has no workflow and no email. The idea is to remove routine work from the approver
+  without removing the approver:
+  - *Notices to the approver:* at the end of a term, an email with counts and a link to the upload
+    page ("12 learners have enough evidence, 3 drafts wait for you, 2 problems in the records need
+    your answer, a methodology waits for a check"). No finding about a child is in the email.
+  - *Preparing term drafts:* a draft and a citation check for each learner with enough evidence,
+    started by a named approver with one button, never under a made-up service identity. Drafts stay
+    drafts.
+  - *Delivery after release:* once the approver has released a report, n8n may send it to the
+    approver or the teacher.
+  The rule that holds: a report is released only by the signed-in approver, in their own message,
+  and nothing about a learner leaves the system before that. Delivery to guardians is out of scope
+  until consent and a human step before it are designed. Building this needs a mail service, a few
+  read-only database views, and a decision on how a batch of drafts is started by a named person.
 
 ## Repository map
 
