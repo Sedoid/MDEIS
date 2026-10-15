@@ -286,3 +286,28 @@ Server run sheet: `git pull`, `make test ARGS="tests/unit -q"`, `make test-contr
 `make test ARGS="tests/acceptance/test_chart_tool.py tests/acceptance/test_class_view.py -q"`,
 `make dev-up`. Then repeat the class-view question and check the answer has no `[GM-1]` and ends
 with the rules in words.
+
+## 11. Progress while it works, and a missing stage weight (added last)
+
+**Progress.** The gateway now sends what the agent is doing as `reasoning_content`, which Open WebUI
+shows as a live "Thinking" block ("Reading your question.", "Reading the learner's records…", "Working
+out a trend…", "Preparing a chart…"), and which closes by itself when the answer starts. Tool names are
+turned into plain words; an unknown tool is shown as "Working…". It is never part of the answer or of the
+conversation. `SHOW_PROGRESS=false` switches it off. **Not verified in Open WebUI v0.11.4**: if nothing
+appears, the setting for it is the one to check.
+
+**A stage with no weight.** The trend no longer stops with "the rulebook has no stage weight for Form 5
+Science".
+- A window inside one stage needs no weight: the same weight on every term cancels out of the average.
+  So the trend and level are worked out, and nothing is assumed.
+- A window that spans stages, one of them with no weight in the rulebook, counts that stage's terms once.
+  The result lists it under `assumed`, and the answer always carries a line: "Assumed: the rulebook sets
+  no weight for …". The rulebook's own weights are used wherever it has them.
+- A missing expected **range** is not guessed (that is a school's value): a level against the stage's
+  range is still refused for a stage the rulebook has no range for. Both need a `v3` rulebook with the
+  cards' stage names ("Form 5 Science" as "Form 5" or with its own values), which the teacher confirms.
+- Test E-24, `tests/unit/test_trend_weights.py`, with values worked out by hand.
+
+Server run sheet: `git pull`, `make test ARGS="tests/unit -q"`, `make test-contract` (the trend tool's
+results are unchanged for stages the rulebook knows), `make dev-up`; ask for the Mathematics trend of
+`OCC/2022/0147`; ask any question and watch for the "Thinking" block.
