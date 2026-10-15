@@ -16,7 +16,7 @@ and the template clauses behind it. A **named human approver** must release ever
 | --- | --- |
 | Design, tool contracts, test plan | Written (`docs/`) |
 | Criteria templates (a normal and a stricter one) and their loader, database and migrations, the diary, the synthetic practice school and its answer key | Built and run on the author's server |
-| The eight tools and the MCP server, with the contract tests that define them | Built and run: the 71 contract tests pass on the author's server |
+| The eight tools and the MCP server, with the contract tests that define them | Built and run: the 71 contract tests pass on the author's server, and so do the 514 unit tests (one skips itself when the embedder is not running) |
 | Report-card and methodology readers, the document worker, version pins | Built and run. 50 made-up report cards from a teacher were read: 22 of 50 on the first try, then 34, then 50 of 50 after three reader fixes (details in `EVALS.md`) |
 | Orchestrator (a plain tool loop, and the LangGraph agent), the gateway | Built and run end to end through Open WebUI. The agent evals are in `EVALS.md` |
 | Upload page (sign-in, upload by file or folder, files grouped by class and year, methodology in force, files open in a new tab) | Built and used in a browser |
