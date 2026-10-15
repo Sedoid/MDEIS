@@ -101,6 +101,13 @@ def test_the_model_is_never_offered_a_tool_that_takes_an_approver_in_the_real_se
         assert not re.search(rf"def \w+\([^)]*\b{bad}\b", source, re.S), bad
 
 
+def test_the_instructions_say_how_to_find_a_learner_by_name_and_not_to_guess():
+    text = (ROOT / "src" / "orchestrator" / "prompts" / "system.md").read_text(encoding="utf-8")
+    assert "display_name ILIKE" in text and "SELECT learner_id, school_ref, display_name" in text
+    assert "Several rows" in text and "do not guess" in text
+    assert "Never write out a name you did not get" in text
+
+
 # --------------------------------------------------------------------------- the tool loop
 def test_a_tool_the_model_asks_for_is_called_and_its_result_is_given_back():
     server = FakeServer(MDEIS_LISTING, {"compute_trend": {"status": "ok", "trend": "declining"}})

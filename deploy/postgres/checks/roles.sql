@@ -78,7 +78,7 @@ SELECT pg_temp.allowed('write learners', :'app_role', $$UPDATE learners SET disp
 
 -- ---- the read-only role: the borrowed server -------------------------------------------------
 SELECT pg_temp.allowed('read learner ids', :'ro_role', $$SELECT learner_id, school_code FROM learners$$);
-SELECT pg_temp.denied('read learner names', :'ro_role', $$SELECT display_name FROM learners$$);
+SELECT pg_temp.allowed('read learner names, to find a learner by name', :'ro_role', $$SELECT display_name FROM learners$$);
 SELECT pg_temp.denied('read the diary', :'ro_role', $$SELECT 1 FROM action_log$$);
 SELECT pg_temp.allowed('read documents', :'ro_role', $$SELECT * FROM documents$$);
 SELECT pg_temp.allowed('read scores and the rule sentences', :'ro_role',
