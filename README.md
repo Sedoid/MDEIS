@@ -108,7 +108,9 @@ make dev-up              # downloads the embedding model, builds and starts ever
 make demo-data           # loads the rulebook, the methodology and the practice report cards
 ```
 
-Then open `http://127.0.0.1:3000` and sign in with the administrator account named in `.env`.
+Then open the chat at `http://127.0.0.1:3000` and sign in with the administrator account named in `.env`.
+The upload page is at `http://127.0.0.1:8080` (or under `/portal/` on the public proxy). It uses the same
+sign-in as the chat, so sign in to the chat's address and open the page on the same host name.
 `make demo` is meant to do all of this in one command and to check each step; **it is Planned**
 and this README will not call it done until it has passed from a fresh clone with only `.env`
 edited. `make clean` removes the containers and the data volumes. `make help` lists every command.
@@ -130,22 +132,39 @@ make dev-health  # proves the wiring and the safety properties of the running st
 
 ## Usage instructions
 
-**Planned.** The intended walkthrough, which is also the demo script:
+This is the walkthrough, and it is also the demo script. The steps have been run on the author's server
+with the practice school and a teacher's made-up cards; the evaluation results are in
+[`EVALS.md`](EVALS.md).
 
-1. Sign in to Open WebUI as the approver and ask about a synthetic learner, for example
-   "Show me the longitudinal picture for L-0007."
-2. If the records have blocking problems (a missing term, a duplicate, a mark above the
-   maximum), the agent asks you in chat. You answer; the agent records your answer with
-   `resolve_issue`.
-3. The agent computes trends and the gap to the stage standard, and drafts a report with
-   `[A-000123]` record citations and `[TR-2]` clause citations.
-4. `check_citations` runs. If it fails, the draft is fixed and re-checked (bounded retries).
-5. You read the draft and approve. Only then does `release_report` run, with your name from the
-   session.
-6. Ask it to rank two learners. It refuses and explains why.
+**1. Put the records in (the upload page).** Sign in, upload the school's methodology (it waits for a
+named person to check it with `make ack`, then shows as in force), then upload report cards: files, or a
+whole folder. They are read by ordinary code, not by the model. The Files list groups them by class and
+school year, shows any that could not be read and why, and every file name opens the file in a new tab.
 
-Swapping `templates/v1.yaml` for `templates/v2-strict.yaml` changes the results for the same
-data, with no code change. That is the proof that rules live in the template.
+**2. Ask in the chat.** Ask by the learner's number (for example `L-0111`) or by the ID number printed on
+the report card. Names cannot be looked up, by design.
+
+- *"What is learner OCC/2024/0211's English trend like?"* The agent reads the records, works out the trend
+  with code, and answers in plain words. Under the answer it names the report-card files it used and the
+  rules it applied, in the rulebook's own words.
+- *"Show a chart of English for that learner"*, or *"Show Mathematics, Chemistry and Physics together"*.
+  The chart is drawn from stored scores only, with its legend inside the picture.
+- If the records have a problem that blocks a subject (a missing term, a duplicate, a mark above the
+  maximum), the agent asks you in chat and waits. Answer in your own words; it records your answer with
+  `resolve_issue`. It does not guess.
+- *"Write a report on that learner's Chemistry."* The agent drafts it with record and rule citations,
+  and `check_citations` accepts or rejects it. A failed draft is fixed and checked again, a bounded number
+  of times.
+- You read the draft. Only when you ask for the release, in a separate message, does `release_report` run,
+  with your name taken from the sign-in.
+- *"Who is the best in the class?"* or *"Which subject should she take?"* are refused with a reason.
+
+**3. Check what happened.** Every tool call is in the action log, with the approver's name. In `make
+dev-psql`: `select at, tool, outcome, approver_name from action_log order by event_id desc limit 20;`
+and `select * from verify_action_log();` (no rows means no line was changed).
+
+Swapping `templates/v1.yaml` for `templates/v2-strict.yaml` changes the results for the same data, with no
+code change. The tool tests show it; that is the proof that rules live in the template.
 
 ## Technology stack
 
@@ -191,12 +210,11 @@ result with reasons, not an exception. Every call is written to the action log w
 and the approver, if any. The approver is read from a verified, short-lived signed token
 forwarded as a header, never from a tool argument.
 
-Contracts for every tool: [`docs/SPEC.md`](docs/SPEC.md) section 5. Tool examples for reuse will
-be in `TOOLS.md` once the tools exist.
+Contracts for every tool: [`docs/SPEC.md`](docs/SPEC.md) section 5.
 
 ## MCP tools/servers
 
-**Ours (the Lucent AI server). Written, awaiting a server run.**
+**Ours (the Lucent AI server). Built and run: 71 contract tests pass.**
 
 | Tool | Kind | What it does |
 | --- | --- | --- |
@@ -207,6 +225,7 @@ be in `TOOLS.md` once the tools exist.
 | `draft_summary` | write | Stores the model's text as a pending report |
 | `check_citations` | read | Rejects uncited, unsourced or banned-word text |
 | `release_report` | **acting, the gate** | Releases a checked report. Needs a valid approver |
+| `make_chart` | read | Prepares a progression chart of stored scores for one or several subjects, with the files and rules behind it. The system draws the picture, never the model |
 | `stage_gap_counts` | read, **locked** | Counts only, no names, one school, groups below the template's minimum hidden. Written but off: not listed unless switched on by a named person |
 
 **Borrowed.** [crystaldba/postgres-mcp](https://github.com/crystaldba/postgres-mcp) (MIT licence), in
@@ -227,36 +246,33 @@ does not use LangChain's model or MCP adapters.
 
 ## Human-in-the-loop workflow
 
-Two points need a person, both with the named approver taken from the session:
+Three points need a person, each with the named person taken from the sign-in, never from the model:
 
-1. **Resolving data problems.** The system does not repair records. A person answers.
-2. **Releasing a report.** `release_report` refuses without a valid approver or if
-   `check_citations` has not passed. Both allowed and refused attempts are logged.
+1. **Checking the methodology.** A methodology that is uploaded waits until a named person has checked
+   it and acknowledged it. Until then it is not in force.
+2. **Resolving data problems.** The system does not repair records. A person answers, and the answer is
+   recorded under their name.
+3. **Releasing a report.** `release_report` refuses without a valid approver, or if `check_citations` has
+   not passed. The approver reads the draft in chat and asks for the release in a separate message.
+   Both allowed and refused attempts are logged.
 
-Nothing reaches a parent or teacher outside this gate. The approver reads the draft in chat
-before anything is released.
-
-## Evaluation
-
-Eleven tests in two layers, described in [`docs/TESTS.md`](docs/TESTS.md): a deterministic core
-layer (the 71 contract tests) and an agent layer that runs each scenario five times and reports the
-spread. The real runs are quoted in [`EVALS.md`](EVALS.md) and saved under `evals/results/`. Failures
-are recorded as failures, and the failure that was found is described there.
-
-## Safety rules
-
-- Numbers come only from deterministic code and SQL.
-- Rules come from the template, with a clause ID on each.
-- No judgement on a child: findings describe the data ("reading in the Form 1 range for three
-  terms"), never "weak" or "gifted". No ranking or comparison between learners.
-- No pathway, subject-choice or career suggestions.
-- Synthetic data only.
-- No secrets in the repo.
+Nothing reaches a parent or teacher outside this gate.
 
 ## Limitations
 
-- **Mostly not yet run.** See the status table. This README says what works and what was tested,
-  and nothing more.
+- **What was run, and how far.** See the status table and [`EVALS.md`](EVALS.md). The agent evals are
+  one model, one provider and a few days; five runs of each scenario show the spread on that model only.
+  One E-01 run reached its step limit once; it is recorded there, along with the change made afterwards
+  and the fact that five later runs are not proof.
+- **The report-card reader is built for one layout.** Another school's card design needs a new reader.
+  A teacher's cards in the same layout needed three fixes before all 50 read.
+- **A stage or subject the rulebook does not know** ("Form 4 Science", Economics) is read, but a level
+  against that stage's range is refused until a rulebook version names it with values the school confirms.
+  A stage with no weight, where a window spans stages, is counted once and the answer says so.
+- **Chat answers are not machine-checked the way drafts are.** A draft cannot pass without a real record or
+  rule behind every sentence. A chat answer rests on the instructions, on numbers coming only from tools,
+  and on the sources line under it.
+- **Names cannot be looked up.** The agent asks for the learner number or the card's ID number.
 - **Synthetic data only.** Real-world messiness, real handwriting and real school records are
   untested. The template values in `v1` are placeholders until a teacher confirms them.
 - **Evidence is limited to records.** Marks and notes show attainment, not why. Lucent AI does not
@@ -305,7 +321,26 @@ are recorded as failures, and the failure that was found is described there.
   until consent and a human step before it are designed. Building this needs a mail service, a few
   read-only database views, and a decision on how a batch of drafts is started by a named person.
 
-## Repository map
+## Other
+
+### Evaluation
+
+Eleven tests in two layers, described in [`docs/TESTS.md`](docs/TESTS.md): a deterministic core
+layer (the 71 contract tests) and an agent layer that runs each scenario five times and reports the
+spread. The real runs are quoted in [`EVALS.md`](EVALS.md) and saved under `evals/results/`. Failures
+are recorded as failures, and the failure that was found is described there.
+
+### Safety rules
+
+- Numbers come only from deterministic code and SQL.
+- Rules come from the template, with a clause ID on each.
+- No judgement on a child: findings describe the data ("reading in the Form 1 range for three
+  terms"), never "weak" or "gifted". No ranking or comparison between learners.
+- No pathway, subject-choice or career suggestions.
+- Synthetic data only.
+- No secrets in the repo.
+
+### Repository map
 
 Full detail in [`docs/STRUCTURE.md`](docs/STRUCTURE.md).
 
@@ -320,11 +355,11 @@ deploy/         service config and scripts
 docs/           spec, containers, tests, template, decisions
 ```
 
-## Licence
+### Licence
 
 Apache License 2.0, an OSI-approved licence. See [`LICENSE`](LICENSE).
 
-## Team
+### Team
 
 Up to three members, all 18 or over and resident in Africa, as the challenge requires. Names to
 be added.
