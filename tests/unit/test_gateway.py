@@ -93,6 +93,58 @@ def streamed_text(response):
     return "".join(c["choices"][0]["delta"].get("content", "") for c in chunks)
 
 
+def reasoning_of(response):
+    chunks = [json.loads(x) for x in data_lines(response)[:-1]]
+    deltas = [c["choices"][0]["delta"] for c in chunks]
+    return [d["reasoning_content"] for d in deltas if "reasoning_content" in d]
+
+
+# --------------------------------------------------------------------------- progress
+def test_what_the_agent_is_doing_is_shown_as_it_works_so_the_page_does_not_look_frozen(make):
+    working = events(
+        ("status", {"text": "Reading your question."}),
+        ("status", {"text": "Thinking."}),
+        ("status", {"text": "Used ingest_assessments."}),
+        ("status", {"text": "Used compute_trend."}),
+        ("status", {"text": "Used compute_trend."}),
+        ("token", {"text": "Mathematics is "}),
+        ("status", {"text": "Working on it."}),
+        ("token", {"text": "steady."}),
+        ("final", {"answer": "Mathematics is steady.", "tools": [], "run_id": "R"}),
+    )
+    response = post(make(Orchestrator(working)), {**BODY, "stream": True})
+    assert reasoning_of(response) == [
+        "Reading your question.\n",
+        "Thinking.\n",
+        "Reading the learner's records…\n",
+        "Working out a trend…\n",
+    ], "plain words, each step once, and none after the answer has begun"
+    assert streamed_text(response) == "Mathematics is steady."
+
+
+def test_progress_never_becomes_part_of_the_answer_or_the_conversation(make):
+    working = events(("status", {"text": "Used make_chart."}),
+                     ("final", {"answer": "Done.", "tools": [], "run_id": "R"}))
+    response = post(make(Orchestrator(working)), {**BODY, "stream": True})
+    assert "Preparing a chart" in "".join(reasoning_of(response))
+    assert "Preparing" not in streamed_text(response)
+
+
+def test_an_unknown_tool_is_shown_as_a_plain_step_without_its_name(make):
+    working = events(("status", {"text": "Used some_new_tool."}),
+                     ("final", {"answer": "Done.", "tools": [], "run_id": "R"}))
+    shown = "".join(reasoning_of(post(make(Orchestrator(working)), {**BODY, "stream": True})))
+    assert "some_new_tool" not in shown and "Working" in shown
+
+
+def test_progress_can_be_switched_off(make, monkeypatch):
+    monkeypatch.setenv("SHOW_PROGRESS", "false")
+    working = events(("status", {"text": "Thinking."}),
+                     ("final", {"answer": "Done.", "tools": [], "run_id": "R"}))
+    response = post(make(Orchestrator(working)), {**BODY, "stream": True})
+    assert reasoning_of(response) == [] and streamed_text(response) == "Done."
+
+
 # --------------------------------------------------------------------------- who is signed in
 def test_a_request_with_no_user_gets_401_and_never_reaches_the_orchestrator(make):
     orchestrator = Orchestrator()

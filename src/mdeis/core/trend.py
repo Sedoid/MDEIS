@@ -13,6 +13,7 @@ nearest edge of the stage's expected range (CA-5), and its direction compares th
 term's gaps against their own stage's ranges (TR-4).
 """
 
+from fractions import Fraction
 from typing import NamedTuple
 
 from .numbers import distance_to_range, level_name, two_places, weighted_average
@@ -53,11 +54,31 @@ def move_label(change, rules) -> str:
     return "steady"
 
 
-def _weight(rules, stage):
-    weight = rules.stage_weights.get(stage)
-    if weight is None:
-        raise RulebookGap(f"the rulebook has no stage weight for {stage}")
-    return weight
+def window_weights(rules, stages) -> tuple:
+    """The weight of each term of a window, and the stages whose weight had to be assumed.
+
+    A weight only matters when a window spans more than one stage: the same weight on every term
+    cancels out of the average. So a window inside one stage needs none (every term counts once)
+    and nothing is assumed. When it spans stages and the rulebook has no weight for one of them,
+    that stage's terms count once, and the stage is named in the second value so that the result
+    can say so. The rulebook's own weights are always used where it has them.
+    """
+    mixed = len(set(stages)) > 1
+    weights, assumed = [], []
+    for stage in stages:
+        weight = rules.stage_weights.get(stage)
+        if weight is None:
+            weight = Fraction(1)
+            if mixed and stage not in assumed:
+                assumed.append(stage)
+        weights.append(weight)
+    return weights, assumed
+
+
+def assumptions(assumed) -> dict:
+    """The part of a result that says what was assumed, or nothing when nothing was."""
+    items = [{"what": "stage weight", "stage": s, "used": two_places(Fraction(1))} for s in assumed]
+    return {"assumed": items} if items else {}
 
 
 def subject_result(records, subject, rules, blocked) -> dict:
@@ -77,7 +98,8 @@ def subject_result(records, subject, rules, blocked) -> dict:
         }
     window = values[-rules.window_terms :]
     first, last = window[0][1], window[-1][1]
-    level = weighted_average([(_weight(rules, r["stage"]), v) for r, v in window])
+    weights, assumed = window_weights(rules, [r["stage"] for r, _ in window])
+    level = weighted_average([(w, v) for w, (_, v) in zip(weights, window, strict=True)])
     change = last - first
     clauses = list(base["clause_ids"])
     if len({r["stage"] for r, _ in window}) > 1:
@@ -103,6 +125,7 @@ def subject_result(records, subject, rules, blocked) -> dict:
         "record_ids": [r["record_id"] for r, _ in window],
         "records_available": len(values),
         "clause_ids": clauses,
+        **assumptions(assumed),
     }
 
 
@@ -154,7 +177,8 @@ def skill_result(records, area, rules, blocked) -> dict:
             "stage_gap": None,
         }
     window = values[-rules.window_terms :]
-    level = weighted_average([(_weight(rules, v.stage), v.value) for v in window])
+    weights, assumed = window_weights(rules, [v.stage for v in window])
+    level = weighted_average([(w, v.value) for w, v in zip(weights, window, strict=True)])
     first_stage, last_stage = window[0].stage, window[-1].stage
     low, high = _range(rules, last_stage, area)
     first_low, first_high = _range(rules, first_stage, area)
@@ -196,6 +220,7 @@ def skill_result(records, area, rules, blocked) -> dict:
         ],
         "record_ids": [rid for v in window for rid in v.record_ids],
         "clause_ids": clauses,
+        **assumptions(assumed),
     }
 
 

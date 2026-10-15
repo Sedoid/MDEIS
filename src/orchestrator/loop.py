@@ -107,7 +107,7 @@ async def run(*, messages: list, token: str | None, run_id: str, settings, model
     definitions, owner, _dropped = tools.bind(listed, settings.pg_tools, settings.class_view)
     conversation = [{"role": "system", "content": system_prompt()}]
     conversation += conversation_from(messages, token)
-    called, drafted, charts, sources, rules = [], set(), [], [], []
+    called, drafted, charts, sources, rules, assumed = [], set(), [], [], [], []
     for step in range(settings.max_steps):
         yield event("status", text="Thinking." if not step else "Working on it.")
         try:
@@ -117,7 +117,7 @@ async def run(*, messages: list, token: str | None, run_id: str, settings, model
             return
         if not reply.calls:
             words = guards.scrub(reply.text, token)
-            answer = chart_reply.compose(words, charts, sources, rules=rules)
+            answer = chart_reply.compose(words, charts, sources, rules=rules, assumed=assumed)
             for item in final_events(answer, called, run_id):
                 yield item
             return
@@ -142,6 +142,7 @@ async def run(*, messages: list, token: str | None, run_id: str, settings, model
                 charts.append(result)
             sources = chart_reply.add_sources(sources, result)
             rules = chart_reply.add_rules(rules, result)
+            assumed = chart_reply.add_assumed(assumed, result)
             content = guards.scrub(json.dumps(result, default=str), token)
             conversation.append({"role": "tool", "tool_call_id": call.id, "content": content})
             yield event("status", text=f"Used {call.name}.")
@@ -150,6 +151,9 @@ async def run(*, messages: list, token: str | None, run_id: str, settings, model
         "Ask me to carry on, or ask a narrower question."
     )
     for item in final_events(
-        chart_reply.compose(note, charts, sources, rules=rules), called, run_id, incomplete=True
+        chart_reply.compose(note, charts, sources, rules=rules, assumed=assumed),
+        called,
+        run_id,
+        incomplete=True,
     ):
         yield item

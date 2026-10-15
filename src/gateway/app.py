@@ -263,9 +263,39 @@ async def whole_answer(events) -> str:
     return answer if answer is not None else INTERRUPTED
 
 
+STEPS = {  # what a step is called to a person, not to a programmer
+    "ingest_assessments": "Reading the learner's records…",
+    "compute_trend": "Working out a trend…",
+    "make_chart": "Preparing a chart…",
+    "get_criterion": "Looking up the rulebook…",
+    "draft_summary": "Writing the draft…",
+    "check_citations": "Checking the sources…",
+    "resolve_issue": "Recording your answer…",
+    "release_report": "Releasing the report…",
+    "stage_gap_counts": "Counting the class…",
+    "execute_sql": "Looking up a learner number…",
+}
+USED = re.compile(r"^Used (\w+)\.$")
+
+
+def progress_words(text: str) -> str:
+    """A status line from the agent in plain words. A tool this list does not know is not named."""
+    used = USED.match(text)
+    if not used:
+        return text
+    return STEPS.get(used.group(1), "Working…")
+
+
+def show_progress() -> bool:
+    off = ("0", "false", "no", "off")
+    return os.environ.get("SHOW_PROGRESS", "true").strip().lower() not in off
+
+
 async def stream_events(request_id: str, events):
+    """Open WebUI shows `reasoning_content` as a live "Thinking" block, so what the agent is doing
+    is visible while it works, and it closes by itself when the answer starts."""
     yield chunk(request_id, {"role": "assistant", "content": ""})
-    sent, finished = False, False
+    sent, finished, last = False, False, ""
     async for name, data in events:
         if name == "token":
             sent = True
@@ -278,7 +308,12 @@ async def stream_events(request_id: str, events):
             yield chunk(request_id, {"content": data["text"]})
             finished = True
         elif name == "status":
-            yield ": working\n\n"  # keeps the connection open; Open WebUI ignores comments
+            words = progress_words(data.get("text", ""))
+            if show_progress() and not sent and words and words != last:
+                last = words
+                yield chunk(request_id, {"reasoning_content": f"{words}\n"})
+            else:
+                yield ": working\n\n"  # keeps the connection open; Open WebUI ignores comments
     if not finished and not sent:
         yield chunk(request_id, {"content": INTERRUPTED})
     yield chunk(request_id, {}, "stop")

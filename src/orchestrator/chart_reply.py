@@ -108,7 +108,18 @@ def add_rules(found: list, result) -> list:
     return found
 
 
-def footer(found: list, rules: list | None = None) -> str:
+def add_assumed(found: list, result) -> list:
+    """`found` plus what a tool result says it assumed, each stage once."""
+    seen = {(item["what"], item["stage"]) for item in found}
+    for item in (result.get("assumed") if isinstance(result, dict) else None) or []:
+        key = (item.get("what"), item.get("stage"))
+        if isinstance(item, dict) and all(key) and key not in seen:
+            seen.add(key)
+            found = [*found, item]
+    return found
+
+
+def footer(found: list, rules: list | None = None, assumed: list | None = None) -> str:
     """What the answer rests on, set apart from it: a rule above, small italic lines under it.
 
     One line names the report cards; one gives the rulebook's own words for the rules applied. A
@@ -121,6 +132,12 @@ def footer(found: list, rules: list | None = None) -> str:
         tail = f"; and {more} more" if more > 0 else ""
         shown = "; ".join(_plain_text(name) for name in names)
         lines.append(f"*Sources (report cards): {shown}{tail}.*")
+    if assumed:
+        stages = ", ".join(_plain_text(item["stage"]) for item in assumed)
+        lines.append(
+            f"*Assumed: the rulebook sets no weight for {stages}, so each term there counts once "
+            "in the average. This shows only where a window spans more than one stage.*"
+        )
     if rules:
         said = "; ".join(
             f"{r['id']} — {_plain_text(r['text'].strip().rstrip('.'))}" for r in rules
@@ -139,6 +156,7 @@ def compose(
     sources: list | None = None,
     show_line: bool = True,
     rules: list | None = None,
+    assumed: list | None = None,
 ) -> str:
     """The model's words, then each chart and its caption, then the files the answer rests on.
 
@@ -161,5 +179,5 @@ def compose(
             out += f"\n\n{image}"
         if words:
             out += f"\n\n{words}"
-    line = footer(sources or [], rules) if show_line else ""
+    line = footer(sources or [], rules, assumed) if show_line else ""
     return out + f"\n\n{line}" if line else out

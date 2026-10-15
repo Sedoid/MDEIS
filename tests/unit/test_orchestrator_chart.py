@@ -244,3 +244,24 @@ def test_without_the_rulebooks_words_the_markers_are_left_in_place():
     model = FakeModel(say("English is steady [ST-3]."))
     answer = final(run_graph(USER, model, FakeServer(MDEIS_LISTING)))["answer"]
     assert answer == "English is steady [ST-3]."
+
+
+# --------------------------------------------------------------------------- an assumption is said
+ASSUMING = {"status": "ok", "trend": "improving", "level": "17.00",
+            "assumed": [{"what": "stage weight", "stage": "Form 5 Science", "used": "1.00"}]}
+
+
+def test_an_assumed_weight_is_always_said_under_the_answer_whatever_the_model_wrote():
+    for runner in (run_loop, run_graph):
+        server = FakeServer(MDEIS_LISTING, {"compute_trend": ASSUMING})
+        model = FakeModel(ask("compute_trend", {"learner_id": "L-1", "skill": "Mathematics"}),
+                          say("Mathematics is improving."))
+        answer = final(runner(USER, model, server))["answer"]
+        assert "*Assumed: the rulebook sets no weight for Form 5 Science, so each term" in answer
+
+
+def test_nothing_is_said_when_nothing_was_assumed():
+    server = FakeServer(MDEIS_LISTING, {"compute_trend": {"status": "ok", "trend": "steady"}})
+    model = FakeModel(ask("compute_trend", {"learner_id": "L-1", "skill": "Mathematics"}),
+                      say("Steady."))
+    assert "Assumed" not in final(run_graph(USER, model, server))["answer"]

@@ -64,6 +64,7 @@ class State(TypedDict, total=False):
     charts: list  # make_chart results to draw under the answer
     sources: list  # the report-card files the tools named, each once
     rules: list  # the rules the tools applied, with the rulebook's wording
+    assumed: list  # what the tools had to assume (a stage weight), each once
     ready: str  # a draft that passed the check in this run
     steps: int
     redrafts: int
@@ -253,6 +254,7 @@ def build(deps: Deps) -> Machine:
         charts = list(state.get("charts", []))
         sources = list(state.get("sources", []))
         rules = list(state.get("rules", []))
+        assumed = list(state.get("assumed", []))
         asked_now = set(state["asked"]) | deps.earlier_asked
         questions, seen, report, draft_text = [], set(), None, ""
         for call in state["pending"]:
@@ -265,6 +267,7 @@ def build(deps: Deps) -> Machine:
                 charts.append(result)
             sources = chart_reply.add_sources(sources, result)
             rules = chart_reply.add_rules(rules, result)
+            assumed = chart_reply.add_assumed(assumed, result)
             if call.name in ("ingest_assessments", "compute_trend"):
                 for q in questions_from(result, asked_now, deps.last_user):
                     if q["issue_id"] not in seen:
@@ -284,6 +287,7 @@ def build(deps: Deps) -> Machine:
             "charts": charts,
             "sources": sources,
             "rules": rules,
+            "assumed": assumed,
             "events": events,
         }
 
@@ -353,13 +357,15 @@ def build(deps: Deps) -> Machine:
         shown = outcome in ("answer", "limit", "gave_up")
         found = state.get("sources", []) if shown else []
         applied = state.get("rules", []) if shown else []
+        guessed = state.get("assumed", []) if shown else []
         text = chart_reply.compose(
-            state.get("answer", ""), state.get("charts", []), found, show_line=False, rules=applied
+            state.get("answer", ""), state.get("charts", []), found, show_line=False,
+            rules=applied, assumed=guessed,
         )
         if state.get("ready"):
             text += saved_text(state["ready"], state.get("draft_text", ""))
             text += ready_footer(state["ready"])
-        line = chart_reply.footer(found, applied)
+        line = chart_reply.footer(found, applied, guessed)
         text += f"\n\n{line}" if line else ""
         extra = {
             "refused": {"refused": True},
@@ -417,6 +423,7 @@ def initial_state(conversation: list) -> State:
         charts=[],
         sources=[],
         rules=[],
+        assumed=[],
         ready="",
         steps=0,
         redrafts=0,
