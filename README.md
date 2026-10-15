@@ -9,22 +9,17 @@ Lucent AI reads one learner's school records across subjects, terms and years, a
 data shows against a **criteria template the school supplies**. Every finding cites the records
 and the template clauses behind it. A **named human approver** must release every report.
 
-> **Status: build in progress (window closes 15 Oct 2026).** This README says what exists and what has
-> been run, and nothing more. "Run" means run on the author's server with the output kept; "written"
-> means the code and its tests exist but have not been run yet. Results are committed under
-> `evals/results/` once they exist.
-
 | Part | Status |
 | --- | --- |
 | Design, tool contracts, test plan | Written (`docs/`) |
-| Criteria templates (a normal and a stricter one) and their loader, database and migrations, the diary, the synthetic practice school and its answer key | Built and run on the author's server |
-| The eight tools and the MCP server, with the contract tests that define them | Built and run: the 71 contract tests pass on the author's server, and so do the 514 unit tests (one skips itself when the embedder is not running) |
+| Criteria templates (a normal and a stricter one) and their loader, database and migrations, the diary, the synthetic practice school and its answer key | Built and run on my server |
+| The eight tools and the MCP server, with the contract tests that define them | Built and run: the 71 contract tests pass on my server, and so do the 514 unit tests (one skips itself when the embedder is not running) |
 | Report-card and methodology readers, the document worker, version pins | Built and run. 50 made-up report cards from a teacher were read: 22 of 50 on the first try, then 34, then 50 of 50 after three reader fixes (details in `EVALS.md`) |
 | Orchestrator (a plain tool loop, and the LangGraph agent), the gateway | Built and run end to end through Open WebUI. The agent evals are in `EVALS.md` |
-| Upload page (sign-in, upload by file or folder, files grouped by class and year, methodology in force, files open in a new tab) | Built and used in a browser |
+| Upload page (sign-in, upload by file or folder, files grouped by class and year, methodology in force, files open in a new tab) | Built, and I have used it in a browser |
 | Progression charts in the chat, drawn from stored scores only | Built and run |
-| Class view (counts only) | Built and **locked**: off, and not listed, unless switched on. It was run once with the switch on. Its automated tests are slow and not all confirmed |
-| Public page and reverse proxy | Run on a bare IP address over plain http for the demo (no domain, no certificate) |
+| Class view (counts only) | Built and **locked**: off, and not listed, unless switched on. I ran it once with the switch on. Its automated tests are slow and not all confirmed |
+| Public page and reverse proxy | I run it on a bare IP address over plain http for the demo (no domain, no certificate) |
 | `make demo` (the one command) | **Planned** until it has passed from a fresh clone on a clean machine |
 | Evaluation results | Three real runs in `EVALS.md` (the latest: 49 of 50), with the one failure recorded |
 
@@ -43,7 +38,7 @@ as one story.
 
 Existing "AI for schools" tools tend to do one of two harmful things: hand a model a pile of
 marks and let it say what it likes (unsourced, unrepeatable), or put a judgement on a child
-("weak", "gifted", a rank, a career path). The challenge forbids both, and so do we.
+("weak", "gifted", a rank, a career path). The challenge forbids both, and so do I.
 
 ## Solution overview
 
@@ -112,8 +107,7 @@ Then open the chat at `http://127.0.0.1:3000` and sign in with the administrator
 The upload page is at `http://127.0.0.1:8080` (or under `/portal/` on the public proxy). It uses the same
 sign-in as the chat, so sign in to the chat's address and open the page on the same host name.
 `make demo` is meant to do all of this in one command and to check each step; **it is Planned**
-and this README will not call it done until it has passed from a fresh clone with only `.env`
-edited. `make clean` removes the containers and the data volumes. `make help` lists every command.
+and I will not call it done until it has passed from a fresh clone with only `.env` edited. `make clean` removes the containers and the data volumes. `make help` lists every command.
 
 The values you provide are the ones `make env-init` marks for you: your OpenRouter key and the
 open-weights model name (`OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and optionally
@@ -132,7 +126,7 @@ make dev-health  # proves the wiring and the safety properties of the running st
 
 ## Usage instructions
 
-This is the walkthrough, and it is also the demo script. The steps have been run on the author's server
+This is the walkthrough, and it is also the demo script. I have run these steps on my server
 with the practice school and a teacher's made-up cards; the evaluation results are in
 [`EVALS.md`](EVALS.md).
 
@@ -141,8 +135,8 @@ named person to check it with `make ack`, then shows as in force), then upload r
 whole folder. They are read by ordinary code, not by the model. The Files list groups them by class and
 school year, shows any that could not be read and why, and every file name opens the file in a new tab.
 
-**2. Ask in the chat.** Ask by the learner's number (for example `L-0111`) or by the ID number printed on
-the report card. Names cannot be looked up, by design.
+**2. Ask in the chat.** Ask by the learner's name, by the learner's number (for example `L-0111`), or by the
+ID number printed on the report card. If two learners share a name, the agent asks which one you mean.
 
 - *"What is learner OCC/2024/0211's English trend like?"* The agent reads the records, works out the trend
   with code, and answers in plain words. Under the answer it names the report-card files it used and the
@@ -174,14 +168,14 @@ code change. The tool tests show it; that is the proof that rules live in the te
 | Orchestration | LangGraph (Python, open source) runs the agent in its own `orchestrator` container, with a plain tool loop as the fallback. n8n (open source) runs automations beside it |
 | Optional second check | Jev (`typesafe/jev-1.13`) through OpenRouter. Third-party, not open-weights, off by default. It can only hold a draft |
 | Model | A pinned open-weights model through OpenRouter (provider order fixed, fallbacks off, data collection denied). The model slug is pinned in the environment file |
-| Our MCP server | Python 3.12 and the official MCP Python SDK, Streamable HTTP |
+| My MCP server | Python 3.12 and the official MCP Python SDK, Streamable HTTP |
 | Borrowed MCP server | A read-only Postgres MCP server |
 | Data | Postgres 16 with pgvector |
 | Embeddings | llama.cpp server with an open embedding model |
 | Packaging | Docker Compose, one container per part |
 | Tracing (optional) | Langfuse |
 | Quality | pytest, ruff, GitHub Actions |
-| Deployment (bonus) | Docker Compose on a personal server |
+| Deployment (bonus) | Docker Compose on my own server |
 
 ## Agent architecture
 
@@ -198,13 +192,13 @@ produce a finding except through a tool call, and the gate sits on the only irre
 - **Refuse:** requests to rank, compare learners, put a judgement on a child or suggest a pathway are refused
   with a reason.
 
-This project is built with the help of AI coding agents (Claude Code). The agent rules and task
-plans are kept outside this repository. Every change is reviewed by the author, and the tests and
-CI are the check on the code.
+I built this project with the help of AI coding agents (Claude Code). The agent rules and task
+plans are kept outside this repository. I review every change, and the tests and CI are the check
+on the code.
 
 ## MCP implementation
 
-Our server is written in Python with the official MCP SDK and served over Streamable HTTP, which
+The server is written in Python with the official MCP SDK and served over Streamable HTTP, which
 Open WebUI supports natively. All tools return structured JSON. A refusal is a normal structured
 result with reasons, not an exception. Every call is written to the action log with the run id
 and the approver, if any. The approver is read from a verified, short-lived signed token
@@ -214,7 +208,7 @@ Contracts for every tool: [`docs/SPEC.md`](docs/SPEC.md) section 5.
 
 ## MCP tools/servers
 
-**Ours (the Lucent AI server). Built and run: 71 contract tests pass.**
+**Mine (the Lucent AI server). Built and run: 71 contract tests pass.**
 
 | Tool | Kind | What it does |
 | --- | --- | --- |
@@ -262,7 +256,7 @@ Nothing reaches a parent or teacher outside this gate.
 
 - **What was run, and how far.** See the status table and [`EVALS.md`](EVALS.md). The agent evals are
   one model, one provider and a few days; five runs of each scenario show the spread on that model only.
-  One E-01 run reached its step limit once; it is recorded there, along with the change made afterwards
+  One E-01 run reached its step limit once; it is recorded there, along with the change I made afterwards
   and the fact that five later runs are not proof.
 - **The report-card reader is built for one layout.** Another school's card design needs a new reader.
   A teacher's cards in the same layout needed three fixes before all 50 read.
@@ -272,7 +266,11 @@ Nothing reaches a parent or teacher outside this gate.
 - **Chat answers are not machine-checked the way drafts are.** A draft cannot pass without a real record or
   rule behind every sentence. A chat answer rests on the instructions, on numbers coming only from tools,
   and on the sources line under it.
-- **Names cannot be looked up.** The agent asks for the learner number or the card's ID number.
+- **Names are searchable, and that has a cost.** The assistant can find a learner by name. The name it finds
+  is sent to the model's provider (the model is reached through OpenRouter), and so is any name a user
+  types. That is acceptable only if the school accepts it, or runs its own model. File names of report cards
+  appear in answers as sources, and in this school's files they carry the learner's name. A spelling that
+  differs from the card's can miss; the agent then asks for the ID number.
 - **Synthetic data only.** Real-world messiness, real handwriting and real school records are
   untested. The template values in `v1` are placeholders until a teacher confirms them.
 - **Evidence is limited to records.** Marks and notes show attainment, not why. Lucent AI does not
@@ -302,7 +300,7 @@ Nothing reaches a parent or teacher outside this gate.
 - Local-language report text, checked by a human.
 - Evidence from cases judged by teachers to measure how often the gap findings agree with
   teachers' own judgement.
-- Parent-facing report layouts, and charts and PDF downloads served by our own server after
+- Parent-facing report layouts, and charts and PDF downloads served by the Lucent AI server after
   release.
 - Import from common school record formats.
 - **Seasonal automations through n8n, inside the approval gate.** None of this is built yet; n8n runs in
@@ -328,7 +326,7 @@ Nothing reaches a parent or teacher outside this gate.
 Eleven tests in two layers, described in [`docs/TESTS.md`](docs/TESTS.md): a deterministic core
 layer (the 71 contract tests) and an agent layer that runs each scenario five times and reports the
 spread. The real runs are quoted in [`EVALS.md`](EVALS.md) and saved under `evals/results/`. Failures
-are recorded as failures, and the failure that was found is described there.
+are recorded as failures, and the failure I found is described there.
 
 ### Safety rules
 
