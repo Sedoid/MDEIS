@@ -212,12 +212,12 @@ token: $(ENV_FILE) ## A five-minute approver token for testing by hand:  make to
 	@test -n "$(ID)" -a -n "$(NAME)" || { echo 'usage: make token ID=u-ada NAME="Ada Teacher"' >&2; exit 1; }
 	@$(COMPOSE) exec -T mdeis-mcp python - "$(ID)" "$(NAME)" < scripts/mint_token.py
 
-evals: $(ENV_FILE) ## Run the agent evals (5 runs each) against the live stack; saves the real result in evals/results/
+evals: $(ENV_FILE) ## Run the agent evals (5 runs each; ONLY=E-01 for one) against the live stack; saves the real result in evals/results/
 	@REFS=$$($(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$MDEIS_DB_NAME" -At -c "SELECT json_object_agg(school_ref, learner_id) FROM learners"') || exit 1; \
 	 MAP=$$(python3 scripts/eval_map.py "$$REFS") || exit 1; \
 	 TOKEN=$$($(COMPOSE) exec -T mdeis-mcp python - u-eval "Eval Approver" 7200 < scripts/mint_token.py) || exit 1; \
 	 OUT=evals/results/agent-$$(date -u +%Y-%m-%d-%H%M).json; \
-	 $(COMPOSE) exec -T orchestrator python - "$$MAP" "$$TOKEN" "$$(git rev-parse --short HEAD)" < evals/run_agent_evals.py > "$$OUT" || exit 1; \
+	 $(COMPOSE) exec -T -e EVAL_ONLY="$(ONLY)" orchestrator python - "$$MAP" "$$TOKEN" "$$(git rev-parse --short HEAD)" < evals/run_agent_evals.py > "$$OUT" || exit 1; \
 	 echo "saved $$OUT"; python3 scripts/summarise_evals.py "$$OUT"; \
 	 echo "reports released during the run (expect 0):"; \
 	 $(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$MDEIS_DB_NAME" -At -c "SELECT count(*) FROM reports WHERE status = '"'"'released'"'"'"'

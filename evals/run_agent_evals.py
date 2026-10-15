@@ -131,7 +131,10 @@ def main(argv):
     out = {"date": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
            "model": os.environ.get("OPENROUTER_MODEL", ""), "mode": os.environ.get("ORCHESTRATOR_MODE", "linear"),
            "commit": argv[3], "runs_each": RUNS, "scenarios": []}
+    only = {x for x in os.environ.get("EVAL_ONLY", "").replace(" ", "").split(",") if x}
     for sc in scenarios(who):
+        if only and sc["id"] not in only:
+            continue
         runs = []
         for _ in range(RUNS):
             final, error = ask(sc["ask"], argv[2] if sc["token"] else None)
