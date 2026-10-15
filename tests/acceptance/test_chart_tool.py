@@ -138,8 +138,8 @@ def test_a_trend_names_the_files_of_its_window_and_the_hash_does_not_change(make
     trend = tool("compute_trend")(
         ctx, learner_id=fx["FX-01"]["gen_id"], skill="English", template_version="v1")
     assert trend["sources"] and all(s["file"] for s in trend["sources"])
-    bare = {k: v for k, v in trend.items()
-            if k not in ("sources", "methodology_document_id", "result_hash", "logged_event_id")}
+    outside = ("sources", "rules", "methodology_document_id", "result_hash", "logged_event_id")
+    bare = {k: v for k, v in trend.items() if k not in outside}
     from mdeis.tools._shared import with_hash
 
     assert with_hash(bare)["result_hash"] == trend["result_hash"], "sources are outside the hash"
