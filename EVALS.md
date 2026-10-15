@@ -123,7 +123,7 @@ What the saved file shows, for the five runs of E-01 (tool calls in order):
 | Run | Result | Calls | What it did |
 | --- | --- | --- | --- |
 | 1 | pass | 8 | read the records, one trend, two rule lookups, draft, check, redraft, check |
-| 2 | pass | 10 | four rule lookups and two trends, then draft, check, redraft, check |
+| 2 | pass | 10 | three rule lookups and two trends, then draft, check, redraft, check |
 | 3 | pass | 9 | four rule lookups, two trends, draft, check |
 | 4 | pass | 9 | the same as run 3 |
 | 5 | **fail** | 11 | four rule lookups, two trends, draft, check, redraft, check, and then the limit |
@@ -135,8 +135,8 @@ tools had returned, named the report-card files, and drafted nothing it had not 
 invented and nothing was released. The pass rule needs a checked draft with record markers in the
 answer, so the run is a fail, and we count it as one.
 
-**Why it happened.** The agent looks the same rules up again and again (`get_criterion`, four times in
-runs 2 to 5), although each result now carries the rulebook's own wording for the rules it applied. With
+**Why it happened.** The agent looks the same rules up again and again (`get_criterion`, three or four times
+in runs 2 to 5), although each result now carries the rulebook's own wording for the rules it applied. With
 that habit, a run that needs one redraft has almost no spare steps: the passing runs used 8 to 10 of the 12.
 This is the weakness already listed under known limits (many lookups for the same few rules), and run 3
 shows its cost.
@@ -162,4 +162,4 @@ older version, and the submission asks for the failure we did not fix, not one w
   an upload followed by a question (E-19). These are done by hand and recorded in the same way.
 - **The model is wasteful with lookups**: it often calls `get_criterion` six or more times for the same
   few rules. That costs steps and time and has not been reduced beyond the prompt change above.
-- **One failure is not fixed: E-01, run 5 of run 3.** See the next section.
+- **One failure is not fixed: E-01, run 5 of run 3.** See the section above.
