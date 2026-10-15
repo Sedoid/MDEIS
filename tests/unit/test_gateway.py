@@ -174,6 +174,7 @@ def test_the_one_model_is_listed(make):
     response = make(Orchestrator()).get("/v1/models", headers=SIGNED_IN)
     assert response.status_code == 200
     assert [m["id"] for m in response.json()["data"]] == ["mdeis-assistant"]
+    assert [m["name"] for m in response.json()["data"]] == ["Lucent AI"]
 
 
 # --------------------------------------------------------------------------- the token

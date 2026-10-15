@@ -32,6 +32,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from mdeis.core import approver_token
 
 MODEL_ID = "mdeis-assistant"
+MODEL_NAME = "Lucent AI"  # what a person sees in the model list; the id above is not shown
 USER_ID_HEADER = "X-OpenWebUI-User-Id"
 USER_NAME_HEADER = "X-OpenWebUI-User-Name"
 CHAT_ID_HEADER = "X-OpenWebUI-Chat-Id"
@@ -170,7 +171,7 @@ def create_app(client_factory=None) -> FastAPI:
 
     @app.get("/v1/models", dependencies=[Depends(require_key)])
     def models() -> dict:
-        model = {"id": MODEL_ID, "object": "model", "owned_by": "mdeis"}
+        model = {"id": MODEL_ID, "name": MODEL_NAME, "object": "model", "owned_by": "mdeis"}
         return {"object": "list", "data": [model]}
 
     @app.post("/v1/chat/completions", dependencies=[Depends(require_key)])

@@ -1,9 +1,11 @@
-# MDEIS: Multidimensional Educational Intelligence System
+# Lucent AI
+
+*Working name in the repository, the package and the commands: MDEIS (Multidimensional Educational Intelligence System).*
 
 Entry for the **African Agentic AI Design Challenge** (Nairobi AI Community and Qhala Trust),
 Education track, "The Long View".
 
-MDEIS reads one learner's school records across subjects, terms and years, and reports what the
+Lucent AI reads one learner's school records across subjects, terms and years, and reports what the
 data shows against a **criteria template the school supplies**. Every finding cites the records
 and the template clauses behind it. A **named human approver** must release every report.
 
@@ -45,7 +47,7 @@ marks and let it say what it likes (unsourced, unrepeatable), or put a judgement
 
 ## Solution overview
 
-MDEIS is a small agent system that:
+Lucent AI is a small agent system that:
 
 1. **Loads** one learner's assessment records and converts every scale using the school's
    template. Messy data (missing terms, duplicates, marks above the maximum, notes that
@@ -77,7 +79,7 @@ unchanged.
 Every part is a container, and they talk to each other over private Docker networks. Only the
 Open WebUI port and the upload page port are published to your machine, on the local address.
 
-![MDEIS architecture: the foundation built first, and the full design with the optional parts marked](docs/img/architecture-full.svg)
+![Lucent AI architecture: the foundation built first, and the full design with the optional parts marked](docs/img/architecture-full.svg)
 
 The full picture, the smaller foundation built first, one request step by step and what each part
 is trusted with are in [`ARCHITECTURE.md`](ARCHITECTURE.md).
@@ -87,7 +89,7 @@ is trusted with are in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 - **n8n** runs automations outside the agent, such as an annotated explainer for a released report. It reads released content through views, writes drafts for review, and cannot release anything.
 - **The model** plans, calls tools and writes the summary text. It never produces a number that
   a tool did not return.
-- **The MDEIS server** does every calculation, check and release, and makes no model calls.
+- **The Lucent AI server** does every calculation, check and release, and makes no model calls.
 - **Postgres** holds records, parsed template rules, a pgvector index of clause text, and the
   action log.
 
@@ -194,7 +196,7 @@ be in `TOOLS.md` once the tools exist.
 
 ## MCP tools/servers
 
-**Ours (the MDEIS server). Written, awaiting a server run.**
+**Ours (the Lucent AI server). Written, awaiting a server run.**
 
 | Tool | Kind | What it does |
 | --- | --- | --- |
@@ -257,7 +259,7 @@ are recorded as failures, and the failure that was found is described there.
   and nothing more.
 - **Synthetic data only.** Real-world messiness, real handwriting and real school records are
   untested. The template values in `v1` are placeholders until a teacher confirms them.
-- **Evidence is limited to records.** Marks and notes show attainment, not why. MDEIS does not
+- **Evidence is limited to records.** Marks and notes show attainment, not why. Lucent AI does not
   explain causes and does not decide anything about a learner.
 - **Small-model risk.** An open-weights model can write a poor sentence. The citation checker
   catches missing sources and banned words, but not every poor phrasing, which is why a person

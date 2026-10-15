@@ -20,7 +20,7 @@ def main() -> int:
     portal_port = (env.get("PORTAL_PORT") or "").strip()
 
     print()
-    print("MDEIS is up and healthy.")
+    print("Lucent AI is up and healthy.")
     print()
     print(f"  Chat:         {chat}")
     if portal_port:
