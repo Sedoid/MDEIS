@@ -121,7 +121,7 @@ function route() {
   }
   $("main").classList.toggle("is-chat", name === "chat");
   if (name !== "chat" && $("shell").classList.contains("chat-wide")) setWide(false);
-  document.title = TITLES[name] + " · MDEIS";
+  document.title = TITLES[name] + " · Lucent AI";
   $("main").scrollTop = 0;
 }
 
@@ -173,7 +173,7 @@ function showSignIn() {
   me = null;
   clearTimeout(timer);
   if ($("shell").classList.contains("chat-wide")) setWide(false);
-  document.title = "Sign in · MDEIS";
+  document.title = "Sign in · Lucent AI";
   $("shell").hidden = true;
   $("chat-frame").removeAttribute("src");
   $("groups").replaceChildren();

@@ -1,6 +1,6 @@
-# MDEIS architecture
+# Lucent AI architecture
 
-MDEIS measures and explains learning from school records, against a criteria template the school
+Lucent AI measures and explains learning from school records, against a criteria template the school
 supplies. It never decides, ranks or recommends for a person. A named human approves everything
 that leaves the system.
 
