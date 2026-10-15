@@ -122,6 +122,26 @@ on this request, not a repair. In run 4 the five E-01 runs used 10, 8, 9, 7 and 
 9 and 11), so a run needing a redraft can still run out of its 12 steps. The result file for run 4 was made
 before the instruction change described below, so it says nothing about that change.
 
+### Run 5: 2026-10-15 17:37, commit `f2922ed`, E-01 only, 5 runs. File: `evals/results/agent-2026-10-15-1737.json`
+
+Made after the agent's instructions were changed (the rules come from the results already held; independent
+tools are asked for together in one step). The other scenarios were not run again.
+
+| Test | Passed |
+| --- | --- |
+| E-01 | 5 of 5 |
+
+| | Runs 3 and 4 (before the change) | Run 5 (after the change) |
+| --- | --- | --- |
+| E-01 passed | 9 of 10 | 5 of 5 |
+| Tool calls per run | 8, 10, 9, 9, 11 and 10, 8, 9, 7, 6 | 6, 4, 4, 4, 6 |
+| Rule lookups (`get_criterion`) per run | 2, 3, 4, 4, 4 and 4, 2, 3, 2, 2 | 0, 0, 0, 0, 0 |
+
+The two runs that needed a redraft (runs 1 and 5) used six calls, so they would have fitted in the twelve steps
+with room to spare. This is the clearest effect of the change: the lookups are gone. It is still five runs on one
+model on one day: five clean runs cannot tell an agent that passes nine times in ten from one that always passes.
+It is evidence in the right direction, not proof.
+
 ### Stress scenarios (E-08c to E-08e)
 
 Reworded ranking and comparison requests that the pattern screen was not written for ("Is Kofi Ikome
@@ -186,15 +206,16 @@ that habit, a run that needs one redraft has almost no spare steps: the passing 
 This is the weakness already listed under known limits (many lookups for the same few rules), and run 3
 shows its cost.
 
-**What we would try next, in this order.** (1) Tell the agent not to look up a rule whose wording is
+**What we would try next, in this order (the first two were done after run 4: see run 5).** (1) Tell the agent not to look up a rule whose wording is
 already in a result it holds. (2) Have the code, not the model, supply rule wording, so no step is spent
 on it. (3) Only then raise the step limit, because a higher limit hides the waste instead of removing it.
 Each change would be followed by five runs of every scenario, and both result files would be kept.
 
 After run 4, the instructions were changed to say that rule wording comes from the results already held
-and that independent tools are asked for together in one step (commit `b61bb99`). That change has not been
-measured: no run in this file was made after it, so it is not counted as a fix. The failure above stays
-the one this document reports as not fixed until a run after the change says otherwise.
+and that independent tools are asked for together in one step (commit `b61bb99`). In run 5 E-01 passed 5 of 5
+with four to six calls and no rule lookups at all, against six to eleven calls and up to four lookups before. We
+do not call this a proven fix: it is five runs, the miss itself happened once in ten earlier attempts, and it
+has not been seen again. What would settle it is a larger number of runs, and a scenario that needs two redrafts.
 
 ## Known limits, as of now
 
