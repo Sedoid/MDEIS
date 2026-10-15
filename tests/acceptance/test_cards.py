@@ -4,8 +4,8 @@ A small reader below opens each PDF with pdfplumber and reads what is printed: t
 every subject row (by the cell rectangles), the remarks (joined across a page break), TOTAL, the
 average, absences and the council decision. What it reads must equal the truth sheet beside the
 card, field by field, with the same page and row. This proves the PDFs say what the truth says.
-It is not the system's parser (that is the real parser): it reads by cell geometry; the real parser reads by
-the numbers on a line.
+It is not the system's parser (that is the real parser): it reads by cell geometry; the real parser
+reads by the numbers on a line.
 
 Needs pdfplumber and fpdf2 (dev only).
 """
