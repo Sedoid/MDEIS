@@ -16,13 +16,15 @@ and the template clauses behind it. A **named human approver** must release ever
 | --- | --- |
 | Design, tool contracts, test plan | Written (`docs/`) |
 | Criteria templates (a normal and a stricter one) and their loader, database and migrations, the diary, the synthetic practice school and its answer key | Built and run on the author's server |
-| The eight tools and the MCP server, with the contract tests that define them | Written, awaiting a server run |
-| Report-card and methodology readers, the document worker, version pins | Written, awaiting a server run |
-| Orchestrator (a plain tool loop, and the LangGraph agent), the gateway | Written, awaiting a server run |
-| Class view (counts only) | Written and **locked**: off, and not listed, unless switched on |
-| Public page and reverse proxy | Written, not deployed |
+| The eight tools and the MCP server, with the contract tests that define them | Built and run: the 71 contract tests pass on the author's server |
+| Report-card and methodology readers, the document worker, version pins | Built and run. 50 made-up report cards from a teacher were read: 22 of 50 on the first try, then 34, then 50 of 50 after three reader fixes (details in `EVALS.md`) |
+| Orchestrator (a plain tool loop, and the LangGraph agent), the gateway | Built and run end to end through Open WebUI. The agent evals are in `EVALS.md` |
+| Upload page (sign-in, upload by file or folder, files grouped by class and year, methodology in force, files open in a new tab) | Built and used in a browser |
+| Progression charts in the chat, drawn from stored scores only | Built and run |
+| Class view (counts only) | Built and **locked**: off, and not listed, unless switched on. It was run once with the switch on. Its automated tests are slow and not all confirmed |
+| Public page and reverse proxy | Run on a bare IP address over plain http for the demo (no domain, no certificate) |
 | `make demo` (the one command) | **Planned** until it has passed from a fresh clone on a clean machine |
-| Evaluation results | None yet. `EVALS.md` will quote real runs only |
+| Evaluation results | Three real runs in `EVALS.md` (the latest: 49 of 50), with the one failure recorded |
 
 **All data in this repository is synthetic.** There are no real learners, names, photos or
 schools.
@@ -234,10 +236,10 @@ before anything is released.
 
 ## Evaluation
 
-**Planned.** Eleven tests in two layers, described in
-[`docs/TESTS.md`](docs/TESTS.md): a deterministic core layer that runs on every push, and an
-agent layer that runs five times each and reports the spread. Results will be committed under
-`evals/results/` and quoted in `EVALS.md`. Failures are recorded as failures.
+Eleven tests in two layers, described in [`docs/TESTS.md`](docs/TESTS.md): a deterministic core
+layer (the 71 contract tests) and an agent layer that runs each scenario five times and reports the
+spread. The real runs are quoted in [`EVALS.md`](EVALS.md) and saved under `evals/results/`. Failures
+are recorded as failures, and the failure that was found is described there.
 
 ## Safety rules
 

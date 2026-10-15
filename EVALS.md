@@ -112,6 +112,32 @@ by the screen or in its own words, and does not rank anyone. In run 3 each passe
 and one day. The rule is a text pattern: the answers are saved in the result file and should be read,
 not only counted.
 
+## Reading a teacher's report cards
+
+A teacher supplied 10 made-up learners' report cards (51 files, Form 1 to Form 5, 2018/19 to 2027/28).
+They are loaded into the author's server only and are not in this repository. One file is HTML, not a
+PDF, and was left alone by design. The other 50 are PDFs in the same layout as the sample card.
+
+| Attempt | Read | Failed | What the failures were |
+| --- | --- | --- | --- |
+| First | 22 of 50 | 28 | 21 `row_unreadable`, 7 `layout_unrecognised` |
+| After the first reader fix | 34 of 50 | 16 | 9 `row_unreadable`, 7 `layout_unrecognised` |
+| After the second and third fixes | **50 of 50** | 0 | none |
+
+The causes, each found from the card's own text (`make card-lines` prints what the reader sees):
+- an annual score ending in `*`, the card's mark for an average over the terms that have a result;
+- a teacher's remark that says "Term 2" moved the term columns, so words of the remark were read as scores;
+- a long title that wraps onto two lines ("... (FIRST SITTING) · ACADEMIC / YEAR 2025/2026").
+
+This is a finding about the reader, not a pass for free: each fix is a change to the reader's code, and
+the tests for it were written with the fix. What this does not show is that any other layout will
+read. The reader is built for this card's layout.
+
+Reading is not the same as computing. These cards print stages ("Form 4 Science", "(First Sitting)") and
+subjects (Additional Mathematics, Food and Nutrition, Economics) the loaded rulebook has no values for.
+The cards are read and the questions are asked, but a level against a stage's range for those stages is
+refused until a rulebook version names them, with values the school confirms.
+
 ## The failure we did not fix
 
 **E-01, run 5, in run 3 (`evals/results/agent-2026-10-15-1443.json`): the agent reached its step limit
