@@ -9,6 +9,11 @@ Lucent AI reads one learner's school records across subjects, terms and years, a
 data shows against a **criteria template the school supplies**. Every finding cites the records
 and the template clauses behind it. A **named human approver** must release every report.
 
+**Demo sign-in** (the demo server holds synthetic data only):
+
+- Approver email: `approver@example.com`
+- Approver password: `564663220b9508b9ecab3cf060f1177ab818f71b9614efa2`
+
 | Part | Status |
 | --- | --- |
 | Design, tool contracts, test plan | Written (`docs/`) |
@@ -21,7 +26,7 @@ and the template clauses behind it. A **named human approver** must release ever
 | Class view (counts only) | Built and **locked**: off, and not listed, unless switched on. I ran it once with the switch on. Its automated tests are slow and not all confirmed |
 | Public page and reverse proxy | I run it on a bare IP address over plain http for the demo (no domain, no certificate) |
 | `make demo` (the one command) | **Planned** until it has passed from a fresh clone on a clean machine |
-| Evaluation results | Three real runs in `EVALS.md` (the latest: 49 of 50), with the one failure recorded |
+| Evaluation results | Five real runs in `EVALS.md`: ten scenarios, five attempts each. Run 3 scored 49 of 50 (one step-limit miss, recorded), run 4 scored 50 of 50, and run 5 re-ran the one failing scenario (5 of 5, a small sample) |
 
 **All data in this repository is synthetic.** There are no real learners, names, photos or
 schools.
@@ -72,7 +77,8 @@ unchanged.
 ## Architecture
 
 Every part is a container, and they talk to each other over private Docker networks. Only the
-Open WebUI port and the upload page port are published to your machine, on the local address.
+Open WebUI port and the upload page port are published, on the local address by default. The
+optional proxy puts both behind one port when you set it up on purpose.
 
 ![Lucent AI architecture: the foundation built first, and the full design with the optional parts marked](docs/img/architecture-full.svg)
 
@@ -81,7 +87,7 @@ is trusted with are in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 - **The gateway** knows who is signed in, signs the approver token and calls the orchestrator. No calculation and no model code.
 - **The orchestrator** (LangGraph) runs the sequence and the ask-and-resolve loop. It does no calculation.
-- **n8n** runs automations outside the agent, such as an annotated explainer for a released report. It reads released content through views, writes drafts for review, and cannot release anything.
+- **n8n** is running beside the agent but has no workflow yet. It is kept for seasonal automations outside the agent (see Future improvements) and has no access to learner data.
 - **The model** plans, calls tools and writes the summary text. It never produces a number that
   a tool did not return.
 - **The Lucent AI server** does every calculation, check and release, and makes no model calls.
@@ -165,8 +171,8 @@ code change. The tool tests show it; that is the proof that rules live in the te
 | Layer | Choice |
 | --- | --- |
 | Interface | Open WebUI, behind a small FastAPI gateway |
-| Orchestration | LangGraph (Python, open source) runs the agent in its own `orchestrator` container, with a plain tool loop as the fallback. n8n (open source) runs automations beside it |
-| Optional second check | Jev (`typesafe/jev-1.13`) through OpenRouter. Third-party, not open-weights, off by default. It can only hold a draft |
+| Orchestration | LangGraph (Python, open source) runs the agent in its own `orchestrator` container, with a plain tool loop as the fallback. n8n (open source) runs beside it, with no workflow built yet |
+| Second check (planned, not built) | A third-party model (Jev, through OpenRouter) that could only place a hold on a draft. The settings exist and are off; no code calls it. Everything the demo shows is checked by deterministic code alone |
 | Model | A pinned open-weights model through OpenRouter (provider order fixed, fallbacks off, data collection denied). The model slug is pinned in the environment file |
 | My MCP server | Python 3.12 and the official MCP Python SDK, Streamable HTTP |
 | Borrowed MCP server | A read-only Postgres MCP server |
@@ -182,11 +188,19 @@ code change. The tool tests show it; that is the proof that rules live in the te
 One agent loop, orchestrated by LangGraph, using tools. It is not a chatbot wrapper: the model cannot
 produce a finding except through a tool call, and the gate sits on the only irreversible action.
 
-- **Plan and call:** the model chooses which tools to call and in what order for the request.
+- **Screen:** before any model call, the question is checked against the refusal rules.
+- **Plan and call:** the model chooses which tools to call and in what order for the request, up
+  to 12 model steps in one run. Independent lookups are asked for together. If it runs out of
+  steps it stops and says so.
 - **Ask and resolve:** a blocking data issue stops the affected subject. The agent asks the
   approver, then records the answer. It does not guess.
 - **Draft and check:** the model writes the summary text; a deterministic checker accepts or
-  rejects it.
+  rejects it. A draft that fails is written again up to twice, then the agent stops and says why.
+- **Answer:** the final reply is put together by code from the tool results, not by the model:
+  the chart, a caption, the report-card files the figures came from, the rules applied in the
+  rulebook's own words, and any assumption made, such as a missing stage weight.
+- **Second check:** the graph has a step reserved for a hold-only second-check model. It is a
+  pass-through today.
 - **Gate:** release needs a human approver taken from the signed-in session. The model cannot
   name or change the approver.
 - **Refuse:** requests to rank, compare learners, put a judgement on a child or suggest a pathway are refused
@@ -232,11 +246,10 @@ check only accepts numbers that the school's own tools returned.
 pgvector, llama.cpp with the nomic-embed-text-v1.5 embedding model, n8n (automations beside the
 agent), LangGraph (the agent graph), the official MCP Python SDK, FastAPI and uvicorn, psycopg,
 pydantic, PyYAML, httpx, pdfplumber (reads the report cards), Caddy (the optional public proxy),
-and for development pytest, ruff and fpdf2 (draws the practice report cards). The optional Jev
-check is a third-party model reached through OpenRouter. It is not open-weights, it is off by
-default, and it can only hold a draft. One more tool, `record_verification`, stores its result. It is
-not in the model's tool list. The orchestrator calls the model with plain HTTP and the MCP SDK; it
-does not use LangChain's model or MCP adapters.
+and for development pytest, ruff and fpdf2 (draws the practice report cards). The orchestrator
+calls the model with plain HTTP and the MCP SDK; it does not use LangChain's model or MCP adapters.
+The second-check model (Jev) named in the design is not part of this build, so no third-party
+model is reused.
 
 ## Human-in-the-loop workflow
 

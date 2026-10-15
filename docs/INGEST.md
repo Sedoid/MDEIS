@@ -1,9 +1,8 @@
 # INGEST: documents in, records out
 
-Status: **design v0.** Decisions D-013 and D-014 in `DECISIONS.md` are `proposed` or `open`. The
-agent tools in `SPEC.md` keep their contracts, with the small additions listed in `SPEC.md` 5.5 to
-5.7. If something here is wrong, stop and report it under "Needs decision". Do not change it
-yourself.
+Status: built and run on the author's server. Fifty made-up report cards from a teacher and the
+practice school's cards were read through it, and the methodology was read, compared and put in
+force through the portal and `make ingest`.
 
 MDEIS gets its two inputs as documents: the **methodology** (MDEIS's evaluation framework, a
 numbered document) and **report cards** (a learner's term scores for one school year). A signed-in member of staff
@@ -17,7 +16,7 @@ rows, and every row knows the page it came from.
 flowchart LR
   staff([Signed-in staff])
   subgraph Intake
-    portal[portal<br/>upload page + chat pane]
+    portal[portal<br/>sign-in, upload, files, methodology]
     inbox[(inbox volume<br/>uploaded files)]
     ingestd[ingestd<br/>reads documents]
   end
@@ -35,9 +34,10 @@ flowchart LR
   staff -->|chat, in the same page| webui
 ```
 
-- **`portal`** is the page users open. Left side: upload and a status list. Right side: Open WebUI
-  in a frame (or a link, if framing is blocked, see section 7). It saves the file and records a
-  `documents` row with status `pending`. It does not parse anything.
+- **`portal`** is the page users open. It signs the person in with their Open WebUI account,
+  takes uploads, lists the files and their status, and shows Open WebUI beside them (or a link,
+  see section 7). It saves the file and records a `documents` row with status `pending`. It does
+  not parse anything.
 - **`ingestd`** is the worker. It claims `pending` rows, parses them and writes the result. It
   uses the same code as `make ingest FILE=...` and as the tools.
 - The agent never touches the inbox. It reads records only through the MCP tools.
@@ -46,12 +46,12 @@ flowchart LR
 
 | Kind | File types | What becomes of it |
 | --- | --- | --- |
-| `results` | PDF report card in the layout of section 3 (one learner, one school year) | Term scores in `assessments`, one row per subject and term, each with document, page and row. The printed annual values are kept for cross-checking |
-| `methodology` | PDF with a text layer, or Markdown | Numbered sections in `method_chunks`, each with page, compared with the previous version and with the sections the template cites |
+| `results` | PDF report card in the layout of section 3 (one learner, one school year). Up to 12 pages and 8 MB | Term scores in `assessments`, one row per subject and term, each with document, page and row. The printed annual values are kept for cross-checking |
+| `methodology` | PDF with a text layer (up to 80 pages and 20 MB), or Markdown (up to 1 MB) | Numbered sections in `method_chunks`, each with page, compared with the previous version and with the sections the template cites |
 
 Status of a document: `pending` then `processing` then `done`, `needs_review` or `failed`.
 A methodology document that is `done` or `acknowledged` becomes the **active** one. A `needs_review`
-document is **not active** until a named person acknowledges it (`make ack DOC=D-000012`). Until
+document is **not active** until a named person acknowledges it (`make ack DOC=D-000012 BY="Name"`). Until
 then the previous methodology stays active, so nothing changes under a report in progress.
 
 Failures are typed (`failure_kind`) and stored with the page or row where they happened:
@@ -101,6 +101,13 @@ How the parser reads it (no model):
    subject rows, a row that is not a coefficient plus five numbers, a missing `ID number`, or a
    title year that differs from the `Academic year` field.
 
+Details learned from reading a teacher's fifty cards (the failures and fixes are in `EVALS.md`,
+"Reading a teacher's report cards"): an annual score may end in `*`; a title may wrap onto a second
+line and is joined; the term columns are anchored only by the header words to the left of the
+`Grade` column, so words in a remark such as "Term 2" are not mistaken for columns. When a card
+will not read, `make card-lines FILE=path` prints every word with its position, so the cause can
+be seen without guessing.
+
 Same file (same SHA-256) uploaded twice is marked a duplicate of the first and adds nothing. A
 different card for the same learner and year is stored, and shows up as a `duplicate_card` issue
 for the approver. Nothing is removed silently.
@@ -146,45 +153,60 @@ person looks.
   rule) to the template version, and each `[M-6.4]` (a methodology section) to the methodology
   document and page. It fails if a cited record does not exist, or a cited rule or section is
   not in the report's pinned template or methodology.
+- In a chat answer, the same records are shown to the reader in plain words: the sources line
+  names the report-card files, and the rules line gives the rulebook's own wording. The
+  identifiers stay in the saved draft, which is quoted word for word.
 - `release_report` refuses with `stale_pin` if the active template or methodology changed since
   the draft. The approver asks for a new draft. Every refusal is logged.
 - A released report is never recomputed under a newer version.
 
-## 6. Who may upload
+## 6. Who may upload and who may see
 
 Identity comes from Open WebUI, so there is one set of accounts.
 
 | Action | Who |
 | --- | --- |
-| Upload a report card | Any signed-in Open WebUI user |
+| Upload report cards | Any signed-in Open WebUI user |
 | Upload a methodology document | Open WebUI role `admin` |
+| See the methodology panel (in force, waiting for review, earlier) | `admin` |
+| See the list of files and open one | Its uploader; an `admin` sees all |
 | Acknowledge a methodology change | A named person, from the command line (`make ack`), logged |
 
 The uploader's id and name are stored on the `documents` row and in the action log. They are not
-the approver token: releasing a report still needs the gateway-signed approver token (`SPEC.md` 3).
-Parent self-upload stays out of scope: this page is for staff.
+the approver token: releasing a report still needs the gateway-signed approver token. Parent
+self-upload stays out of scope: this page is for staff.
 
-## 7. The upload page and the chat pane
+## 7. The upload page
 
-One page (`portal`), plain HTML and a small script, no external requests. It shows the signed-in
-user, two upload boxes (the methodology box only for admins), a status list that refreshes while
-anything is `pending` or `processing`, and the chat pane.
+One page (`portal`), plain HTML and a small script, no external requests. It is served at the
+portal port, or under `/portal/` behind the proxy (its links are relative, so both work).
 
-- **Sign-in.** The browser already holds an Open WebUI login cookie for this host. The portal
-  asks `webui` who that is. If nobody is signed in, the page links to the Open WebUI login.
-- **Chat pane.** An `<iframe>` of Open WebUI. It works only if Open WebUI allows being framed by
-  the portal's address and keeps its session inside the frame. If the check in the framing spike
-  fails, the pane becomes a button that opens Open WebUI in a new tab. The upload flow does not
-  depend on it.
-- **Safety.** Size and type limits, the file saved under its own ID (the original name is only
-  displayed, escaped), a CSRF token on every upload, a strict content security policy, and a
-  banner: synthetic data only.
-- **No model.** The portal and `ingestd` contain no model client and no key.
+- **Sign-in.** The person signs in on this page with their Open WebUI email and password. The
+  portal checks them with Open WebUI (throttled to five tries a minute per email) and hands the
+  session on, so the chat beside it is already signed in. There is no second login.
+- **Upload.** One file or a whole folder (three at a time). The browser sends the raw file with
+  its name in a header, a CSRF token and an origin check. Caps: 10 MB for a PDF, 1 MB for a
+  Markdown methodology. The type is checked by its first bytes, not the name. The file is saved
+  under its own random name; the original name is only shown, escaped.
+- **Files.** Report cards are grouped in sections by class and school year (read from the card
+  once it has been parsed), each with its status. Clicking a file opens the original in a new
+  tab. A failed card shows the page and row and the kind of failure.
+- **Methodology.** An administrator sees which methodology is in force, which one waits for
+  review and what changed, and can replace it by uploading a new one.
+- **Chat pane.** An `<iframe>` of Open WebUI, or only a link when `PORTAL_FRAME_CHAT=false`.
+  The upload flow does not depend on it.
+- **Safety.** A strict content security policy (relaxed only for the file responses), a banner
+  saying synthetic data only, and no model client and no key in the portal or `ingestd`.
+
+The portal reads only what it needs: it can add and read `documents` rows, read
+`document_issues`, and read the document, year and stage columns of `report_cards`. It cannot
+read scores or learner details.
 
 ## 8. Limitations to state in the README
 
 - Text-layer PDFs in one fixed card layout only (OCC-1). Scanned cards fail with `no_text_layer`.
-  OCR and other layouts are future work.
+  OCR and other layouts are future work. A different layout means a different reader behind the
+  same interface.
 - Records are term scores per subject out of 20. There are no item-level results, assessment
   dates or assessment types, so the methodology's topic-level progress (6.3 E) is not available
   and must be reported as such.
@@ -192,6 +214,11 @@ anything is `pending` or `processing`, and the chat pane.
   school's own grade scale and are labelled as such (methodology 6.5).
 - Methodology section detection needs the document's numbering. A free-form document gets one
   unnumbered block and a review flag.
-- No supersede or delete of a stored card in v1. A corrected card is a new document, and the
-  overlap is settled through `duplicate_card` issues.
-- Anyone signed in to Open WebUI can upload report cards. Finer roles are future work.
+- No supersede or delete of a stored card. A corrected card is a new document, and the overlap is
+  settled through `duplicate_card` issues.
+- Anyone signed in to Open WebUI can upload report cards and sees their own files. Finer roles,
+  such as per-class access, are future work.
+- A file name that carries a learner's name is shown in the file list and in the sources line of
+  an answer. The learner's name is also readable by the model's read-only role (so a learner can
+  be found by name), and so can reach the model provider. Both are choices of the school that owns
+  the system; the README lists them.
