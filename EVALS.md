@@ -206,7 +206,7 @@ that habit, a run that needs one redraft has almost no spare steps: the passing 
 This is the weakness already listed under known limits (many lookups for the same few rules), and run 3
 shows its cost.
 
-**What we would try next, in this order (the first two were done after run 4: see run 5).** (1) Tell the agent not to look up a rule whose wording is
+**What we would try next, in this order (the first was done after run 4: see run 5).** (1) Tell the agent not to look up a rule whose wording is
 already in a result it holds. (2) Have the code, not the model, supply rule wording, so no step is spent
 on it. (3) Only then raise the step limit, because a higher limit hides the waste instead of removing it.
 Each change would be followed by five runs of every scenario, and both result files would be kept.
