@@ -21,7 +21,7 @@ services:
       WEBUI_PUBLIC_URL: ${WEBUI_PUBLIC_URL:-http://127.0.0.1:${WEBUI_PORT:-3000}}
       PORTAL_PUBLIC_URL: ${PORTAL_PUBLIC_URL:-}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
-      # Show the chat inside the page. Switch off if Open WebUI refuses to be framed (step 19 spike).
+      # Show the chat inside the page. Switch off if Open WebUI refuses to be framed.
       PORTAL_FRAME_CHAT: ${PORTAL_FRAME_CHAT:-true}
       INBOX_DIR: /inbox
     volumes:

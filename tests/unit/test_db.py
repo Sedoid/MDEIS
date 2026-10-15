@@ -1,4 +1,4 @@
-"""T-003: migration 001, the migration runner, the diary, the rulebook tables, the roles.
+"""Migration 001: the migration runner, the diary, the rulebook tables, the roles.
 
 Marked `integration`: needs DATABASE_URL (a Postgres with pgvector, the app role).
 Run on the server:  make test   (or: pytest -m integration)

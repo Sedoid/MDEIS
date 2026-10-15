@@ -1,5 +1,5 @@
 # Image for the gateway. Build context is the repo root. It installs the same package as mdeis-mcp,
-# because the approver-token module is shared (src/mdeis/core/approver_token.py, T-029).
+# because the approver-token module is shared (src/mdeis/core/approver_token.py).
 ARG PYTHON_IMAGE=python:3.12.15-slim-bookworm
 
 FROM ${PYTHON_IMAGE}

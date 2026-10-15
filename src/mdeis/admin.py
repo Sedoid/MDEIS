@@ -1,4 +1,4 @@
-"""The admin steps a person runs from the command line. The agent never calls these (SPEC.md 5.9).
+"""The admin steps a person runs from the command line. The agent never calls these.
 
     python -m mdeis.admin load-criteria templates/v2-strict.yaml templates/v1.yaml --by "Ada"
     python -m mdeis.admin ingest --kind results --file card.pdf --as "Ada Teacher"

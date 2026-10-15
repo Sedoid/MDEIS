@@ -1,4 +1,4 @@
-"""The practice school and its answer key (T-002, part of T-032).
+"""The practice school and its answer key.
 
 These tests need no database and none of the system's code. They check that the generator is
 repeatable, that the cohort has the shape the brief asks for, that every fixture has a worked
@@ -169,7 +169,7 @@ def test_the_hand_check_notices_a_wrong_key(key):
 
 
 def test_the_same_data_gives_different_answers_under_the_stricter_template(key):
-    """E-06 and E-10 need the two templates to disagree on the same data."""
+    """The two templates must disagree on the same data."""
     _, entry = by_handle(key)["FX-01"]
     v1, v2 = (entry["by_template"][t]["subjects"]["English"] for t in TEMPLATES)
     assert (v1["change"], v2["change"]) == ("-2.00", "-3.00")

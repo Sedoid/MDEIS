@@ -1,4 +1,4 @@
-"""E-16 and E-17 (docs/TESTS.md): the version pins and the source references (docs/step-09.md).
+"""The version pins and the source references.
 
 A draft is written under one rulebook and one methodology. If either is replaced before the draft is
 released, the release is refused with `stale_pin` and a fresh draft is needed. A citation leads to

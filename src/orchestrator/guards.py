@@ -1,7 +1,7 @@
 """Checks that run in code before the model or a tool is reached. The model cannot argue with them.
 
 * `refusal_for`: a request to rank or compare learners, or to suggest a pathway or a career, is
-  refused with a reason and the model is not called (docs/TESTS.md E-08; non-negotiables 5 and 6).
+  refused with a reason and the model is not called.
   The patterns are data in `prompts/refusals.json`, not code. It is a first filter: the system
   prompt and the citation check are the others.
 * `release_blocked`: `release_report` runs in a later turn than the draft, after the approver has

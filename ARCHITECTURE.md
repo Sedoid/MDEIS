@@ -24,11 +24,11 @@ report, and releases it. Nothing else is needed for that.
 | **Open WebUI** (`webui`) | The chat screen. Signs the approver in | Talks to a model or to the data |
 | **Portal** (`portal`) | The page a user opens first: upload boxes, a status list, the chat beside it | Parses a file. It saves the file and records a `documents` row |
 | **Gateway** (`gateway`) | Looks like an OpenAI endpoint to Open WebUI. Reads who is signed in, signs a short-lived approver token, streams the answer back | Calls a model, calculates anything, or holds a model key |
-| **Orchestrator** (`orchestrator`) | Runs the agent: calls the pinned model through OpenRouter, calls tools, asks the approver about open issues. A plain tool-calling loop first, the LangGraph graph on top (D-015) | Calculates, or reads learner data except through a tool |
+| **Orchestrator** (`orchestrator`) | Runs the agent: calls the pinned model through OpenRouter, calls tools, asks the approver about open issues. A plain tool-calling loop first, the LangGraph graph on top | Calculates, or reads learner data except through a tool |
 | **mdeis-mcp** | Our MCP server. Every calculation, citation check and release. Clause search over pgvector | Calls a model. A reviewer can search the repo and find the model client in one place only |
 | **Postgres + pgvector** | Records, parsed template rules, the clause index, the action log | |
-| **ingestd** | Reads uploaded documents and writes records with page references (D-013) | Calls a model. It has no key |
-| **Embedder** | Turns text into 768-dimension vectors for the clause index (D-012) | |
+| **ingestd** | Reads uploaded documents and writes records with page references | Calls a model. It has no key |
+| **Embedder** | Turns text into 768-dimension vectors for the clause index | |
 | **OpenRouter** | Serves the pinned open-weights model | |
 
 The orange box is the gate. `resolve_issue` and `release_report` are the only tools that act. Both
@@ -52,13 +52,13 @@ The full design adds four things to the foundation. None of them can release a r
   fallback (`ORCHESTRATOR_MODE=linear`, the default until the graph has run on the server).
 - **A borrowed MCP server** (`pg-mcp-ro`): a read-only Postgres server, run with a role that can
   only `SELECT`. It is the borrowed server the challenge asks for.
-- **Jev, a second check (optional, D-016).** A small decision model, reached through OpenRouter,
+- **Jev, a second check (optional).** A small decision model, reached through OpenRouter,
   asks yes-or-no questions about each draft sentence (does it treat a result as a verdict on the
   child, rank or compare learners, or suggest a pathway). Its answer can only **add a hold**. It
   cannot approve, cannot replace a deterministic check, and cannot clear one that failed. It
   ships off by default, then in shadow mode, and holds only after its threshold is set from a
   measured run.
-- **n8n, for automations that are not the agent (optional, D-017).** Today's workflow writes an
+- **n8n, for automations that are not the agent (optional).** Today's workflow writes an
   annotated explainer for a report that is already released: it reads four views, asks a model
   for plain-language notes on terms, and writes a draft. The draft passes a deterministic
   `check_annotation`, then waits for a named person to approve it. n8n cannot read raw learner

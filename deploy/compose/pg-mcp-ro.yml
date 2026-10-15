@@ -1,7 +1,7 @@
 services:
   # The borrowed MCP server: crystaldba/postgres-mcp ("Postgres MCP Pro", MIT licence).
   # Restricted access mode (read-only transactions) AND a database role that can only SELECT,
-  # so a write is refused twice. Pending the human's pick in T-027.
+  # so a write is refused twice. The owner picks the server.
   pg-mcp-ro:
     image: ${PG_MCP_IMAGE:?set PG_MCP_IMAGE in .env}
     container_name: pg-mcp-ro-${STACK_SUFFIX:?set STACK_SUFFIX in .env}

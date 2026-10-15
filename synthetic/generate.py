@@ -10,7 +10,7 @@ What it writes under --out:
 
     cards/*.pdf            report cards (--cards demo or all), each with a .truth.json beside it
     cards_bad/             six cards that must be refused, and expected_failures.json
-    methodology/           changed copies of the methodology and what differs (E-15)
+    methodology/           changed copies of the methodology and what differs
     cohort/learners.json   who the learners are (no tags, nothing about the planted pattern)
     cohort/cards.json      every card as printed: term scores, annual scores, totals, remarks
     cohort/records.csv     one row per term score, flat

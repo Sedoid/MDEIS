@@ -29,7 +29,7 @@ def resolve_issue(
 ):
     """Record the approver's answer to one problem. The approver is the signed-in person.
 
-    The answer must fit the kind of problem (see docs/step-08.md for the table). `use_value` needs a
+    The answer must fit the kind of problem. `use_value` needs a
     value; no other answer takes one. The stored scores are never changed: the answer only changes
     which scores the tools use. Refused, and logged, when nobody is signed in.
     """

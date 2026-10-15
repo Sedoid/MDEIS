@@ -1,4 +1,4 @@
-"""The plain tool-calling loop (ORCHESTRATOR_MODE=linear, docs/SPEC.md section 7).
+"""The plain tool-calling loop (ORCHESTRATOR_MODE=linear).
 
 One run: call the model with the tools it may see, run the tool calls it asks for, give it the
 results, and stop when it answers without a tool call or the step limit is reached. The conversation

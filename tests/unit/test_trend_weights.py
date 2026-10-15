@@ -1,4 +1,4 @@
-"""A stage the rulebook has no weight for (E-24). Expected values are worked out by hand from
+"""A stage the rulebook has no weight for. Expected values are worked out by hand from
 templates/v1.yaml: scale out of 20, three scores needed (TR-1), the window is the last three terms,
 a move is more than 1 point (TR-2), stage weights 1, 1, 2, 2, 2 for Form 1 to Form 5 (SW-1), and no
 weight at all for "Form 5 Science"."""

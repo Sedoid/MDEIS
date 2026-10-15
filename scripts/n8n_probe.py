@@ -3,7 +3,7 @@
 
     docker compose exec -T mdeis-mcp python - < scripts/n8n_probe.py   (`make probe-n8n` does this)
 Works only while the echo workflow (deploy/n8n/echo/) is the one imported, which is the case
-until the real workflow lands in workflows/ (T-011). Exit 1 on any failure.
+until the real workflow lands in workflows/. Exit 1 on any failure.
 """
 import json
 import os
@@ -21,7 +21,7 @@ def main() -> int:
         with urllib.request.urlopen(req, timeout=15) as resp:
             body = resp.read().decode()
     except urllib.error.HTTPError as e:
-        print(f"FAIL: {URL} answered {e.code}. If 404, the workflow is imported but not active (spike T-024).")
+        print(f"FAIL: {URL} answered {e.code}. If 404, the workflow is imported but not active (the workflow must be both imported and active).")
         return 1
     except OSError as e:
         print(f"FAIL: {URL}: {e}")

@@ -1,4 +1,4 @@
-"""Read one report card (layout OCC-1, docs/INGEST.md section 3). No model, no network, no database.
+"""Read one report card (layout OCC-1). No model, no network, no database.
 
 `parse_report_card(path)` opens the PDF with pdfplumber and hands the words (each with its position)
 to `parse_pages`, which is pure: the same words always give the same card, or one typed failure.
@@ -37,7 +37,7 @@ MAX_BYTES = 8_000_000
 MAX_PAGES = 12
 PDF_HEADER = b"%PDF-"
 
-# --- failure kinds (docs/INGEST.md section 2) --------------------------------------------------
+# --- failure kinds --------------------------------------------------
 NOT_A_PDF = "not_a_pdf"
 NO_TEXT_LAYER = "no_text_layer"
 TOO_LARGE = "too_large"

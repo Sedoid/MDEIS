@@ -1,7 +1,7 @@
 #!/bin/sh
 # Runs once, on the first start of an empty data volume (Postgres image convention).
 # Creates the databases, the roles, and the vector extension. Table-level grants come with
-# the migrations (T-003, T-030, T-046). Everything is named by environment variables from .env.
+# the migrations. Everything is named by environment variables from .env.
 #
 # An existing data volume does not run this again. After changing this file, run `make clean`
 # (or `make dev-reset`) and start again. Nothing is lost while there is no real data.

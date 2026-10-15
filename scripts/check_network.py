@@ -85,7 +85,7 @@ def main() -> int:
     code, out = run(["docker", "network", "inspect", "-f", "{{.Internal}}", f"{project}_data"])
     record("PASS" if out == "true" else "FAIL", "data network is internal", out if code else "")
 
-    # 4. secrets sit only where CONTAINERS.md section 8 says (names only, no values)
+    # 4. secrets sit only where the container notes say (names only, no values)
     leaks = []
     for svc in SERVICES:
         code, out = run(["docker", "inspect", "-f", "{{json .Config.Env}}", cname[svc]])
@@ -105,7 +105,7 @@ def main() -> int:
         code, out = run(["docker", "exec", cname[svc], "id", "-u"])
         record("PASS" if code == 0 and out != "0" else "FAIL", f"{svc}: runs as non-root", f"uid {out}" if code == 0 else out)
 
-    # 6. database roles: each role reaches only what CONTAINERS.md section 6 says
+    # 6. database roles: each role reaches only what the container notes say
     def psql(user_key: str, pw_key: str, db: str, sql: str) -> int:
         code, _ = run(["docker", "exec", "-e", f"PGPASSWORD={env.get(pw_key, '')}", cname["postgres"],
                        "psql", "-h", "postgres", "-U", env.get(user_key, ""), "-d", db, "-v", "ON_ERROR_STOP=1",

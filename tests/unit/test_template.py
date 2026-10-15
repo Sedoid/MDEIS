@@ -1,4 +1,4 @@
-"""Unit tests for the criteria template loader (T-001).
+"""Unit tests for the criteria template loader.
 
 Expected values here are typed by hand from the sample report card
 (data/synthetic/samples/amara_nfor_form1_2022-2023.pdf) and from docs/TEMPLATE.md.
@@ -22,7 +22,7 @@ V1 = ROOT / "templates" / "v1.yaml"
 V2 = ROOT / "templates" / "v2-strict.yaml"
 LOADER_SOURCE = ROOT / "src" / "mdeis" / "core" / "template.py"
 
-# Section key in the YAML -> clause ID area (docs/TEMPLATE.md).
+# Section key in the YAML -> clause ID area.
 SECTIONS = {
     "scales": "SC",
     "coefficients": "WT",

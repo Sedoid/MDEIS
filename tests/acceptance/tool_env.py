@@ -1,4 +1,4 @@
-"""Set-up for the tool contract tests (docs/step-07.md).
+"""Set-up for the tool contract tests.
 
 It builds a throwaway schema from the migrations, loads both rulebook versions, and loads the
 practice cohort the way the card reader will eventually load it: one `documents` row per printed

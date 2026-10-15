@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Step 19 spike (T-039): does the upload page's sign-in check work with the real Open WebUI?
+"""Does the upload page's sign-in check work with the real Open WebUI?
 
 Run on the server, after `make dev-up`:   python3 scripts/probe_signin.py
 Standard library only. It signs in as WEBUI_ADMIN_EMAIL from .env, then prints:

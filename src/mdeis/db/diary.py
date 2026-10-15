@@ -8,7 +8,7 @@ connection that commits at once, so the lock is held for a few milliseconds.
 
 Fail closed: if the line cannot be written (database down, lock not obtained in time), `write`
 raises DiaryUnavailable and the call must be refused. A call that is not in the diary did not happen
-as far as the rules are concerned (non-negotiable 9: every call is logged).
+as far as the rules are concerned.
 
 Two ways to use it:
 

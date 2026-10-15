@@ -3,7 +3,7 @@
 A tool body returns `(result, outcome)`. This wrapper then writes the diary line (the approver is
 read from the context, whatever the outcome), and only then commits the database work. If the diary
 line cannot be written, the work is rolled back and the call fails: a call that is not in the diary
-did not happen (non-negotiable 9).
+did not happen.
 
 A body may also raise `Refusal` (or a rulebook problem). That becomes a normal refused result,
 logged like any other, so a refusal leaves a trace.

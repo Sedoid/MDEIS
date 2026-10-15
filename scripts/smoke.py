@@ -17,7 +17,7 @@ Exit 1 on the first failure, with a plain sentence. It prints no secret and does
 
 The tool called is get_criterion with the rule ID TR-2: it needs the rulebook loaded (`make
 load-criteria`) but no learner data, so the smoke test works on a clean stack before any card is
-uploaded. Step 8 replaced the placeholder `ping` tool with the seven real tools.
+uploaded. The placeholder `ping` tool was replaced by the real tools.
 """
 import json
 import sys

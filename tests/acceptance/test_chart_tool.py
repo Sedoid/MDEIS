@@ -1,4 +1,4 @@
-"""E-23: the chart tool (docs/step-21.md). It prepares what a chart shows from the same records and
+"""The chart tool. It prepares what a chart shows from the same records and
 rulebook as compute_trend, so the scores on a chart are the scores the trend was worked out from.
 
 Runs on the practice cohort in the throwaway schema, like test_tools_contract.py."""

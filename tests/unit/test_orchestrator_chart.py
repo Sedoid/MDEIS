@@ -1,4 +1,4 @@
-"""Charts in the orchestrator (E-23): the model asks for one by naming subjects, the system draws
+"""Charts in the orchestrator: the model asks for one by naming subjects, the system draws
 it under the answer from the tool's result, the model never sees or writes the picture, and a
 picture in the history is not sent on. Scripted fake model and server; no network, no key."""
 

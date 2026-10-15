@@ -1,4 +1,4 @@
-"""E-11 (docs/TESTS.md): the class view, `stage_gap_counts`. LOCKED by default (docs/step-15.md).
+"""The class view, `stage_gap_counts`. LOCKED by default.
 
 The expected counts come from the practice school's answer-key code (synthetic/expected.py), which
 does not import src/mdeis, applied to the same learners and cut at the same stage and term. The

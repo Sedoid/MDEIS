@@ -1,4 +1,4 @@
-"""E-15, the reading half (docs/TESTS.md): the methodology reader against its truth files.
+"""The reading half: the methodology reader against its truth files.
 
 The Markdown copies of the real v2.0 document have a list of the sections a correct reader finds
 (`*.sections.json`) and a list of what differs between them (`methodology-changes.json`), both made

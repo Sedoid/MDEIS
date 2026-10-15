@@ -1,5 +1,5 @@
 """The orchestrator's loop, the tool allow-list and the guards, with a scripted fake model and fake
-tool servers (no network, no key). Written before the code, for docs/step-10.md.
+tool servers (no network, no key). Written before the code.
 """
 
 import asyncio
@@ -95,7 +95,7 @@ def test_the_class_view_is_offered_to_the_model_only_when_it_is_switched_on():
 
 
 def test_the_model_is_never_offered_a_tool_that_takes_an_approver_in_the_real_server_listing():
-    """The eight tools of mdeis-mcp take no approver or user argument (checked in Step 8)."""
+    """The eight tools of mdeis-mcp take no approver or user argument (checked against the real server file)."""
     source = (ROOT / "src" / "mdeis" / "server.py").read_text(encoding="utf-8")
     for bad in sorted(tools.APPROVER_LIKE):
         assert not re.search(rf"def \w+\([^)]*\b{bad}\b", source, re.S), bad

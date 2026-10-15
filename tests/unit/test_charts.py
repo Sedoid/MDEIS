@@ -1,4 +1,4 @@
-"""The chart drawing (E-23): same input gives the same bytes, nothing from outside, text escaped."""
+"""The chart drawing: same input gives the same bytes, nothing from outside, text escaped."""
 
 import base64
 import re

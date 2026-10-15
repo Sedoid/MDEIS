@@ -1,4 +1,4 @@
-"""The gateway between Open WebUI and the orchestrator (docs/CONTAINERS.md section 2).
+"""The gateway between Open WebUI and the orchestrator.
 
 Open WebUI uses it as its model endpoint (`/v1/chat/completions`, OpenAI style). It does three
 things and has no model code in it:

@@ -164,7 +164,7 @@ def release_report(request: Context, report_id: str) -> dict:
     return _run(request, tools.release_report, report_id=report_id)
 
 
-if class_view.enabled():  # locked unless CLASS_VIEW_ENABLED is switched on (docs/SPEC.md 5.8)
+if class_view.enabled():  # locked unless CLASS_VIEW_ENABLED is switched on
 
     @mcp.tool(description=_about(tools.stage_gap_counts))
     def stage_gap_counts(

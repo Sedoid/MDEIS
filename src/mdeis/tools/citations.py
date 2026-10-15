@@ -1,6 +1,6 @@
 """check_citations: every sentence of a draft must be backed by what the tools returned in the run.
 
-The rules, in order of what they catch (docs/step-08.md):
+The rules, in order of what they catch:
   uncited_sentence  a sentence with no [source] marker
   unknown_record    a [A-000123] marker no tool returned in this run
   unknown_clause    a [TR-2] marker no tool returned in this run, or not in the pinned rulebook

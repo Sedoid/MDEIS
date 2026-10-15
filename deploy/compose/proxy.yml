@@ -2,7 +2,7 @@ services:
   # The public reverse proxy. Off unless the "prod" profile is asked for (`make prod-up`). It is the
   # only container meant to be reachable from the internet, and it only forwards to Open WebUI and
   # serves the static page. By default it binds to 127.0.0.1 so that nothing becomes public by
-  # accident: set PROXY_BIND=0.0.0.0 on the server on purpose (docs/step-16.md).
+  # accident: set PROXY_BIND=0.0.0.0 on the server on purpose.
   proxy:
     profiles: ["prod"]
     image: ${CADDY_IMAGE:-caddy:2.8.4-alpine}

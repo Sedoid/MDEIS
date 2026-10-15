@@ -1,4 +1,4 @@
-"""The changed copies of the methodology document and the list of what differs (E-15 data side)."""
+"""The changed copies of the methodology document and the list of what differs."""
 
 import difflib
 import json

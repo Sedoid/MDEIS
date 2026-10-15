@@ -12,7 +12,7 @@ so the output is the same on every machine), and the grading scale uses a plain 
 real card has an en dash.
 
 Each card also gets a truth sheet (the values the card prints, each with its page and row), so a
-parser can be checked field by field (E-12). Same card in, same bytes out.
+parser can be checked field by field. Same card in, same bytes out.
 """
 
 from datetime import UTC, datetime

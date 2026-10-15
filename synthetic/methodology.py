@@ -1,4 +1,4 @@
-"""Changed copies of the methodology document, and exactly what differs (E-15).
+"""Changed copies of the methodology document, and exactly what differs.
 
 The base is `methodology-v2.0.md`, the real v2.0 PDF turned into Markdown with its headings kept
 (see methodology_from_pdf.py). From it:

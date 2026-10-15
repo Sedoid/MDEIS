@@ -1,4 +1,4 @@
-"""The orchestrator service (docs/CONTAINERS.md section 2): the agent behind the gateway.
+"""The orchestrator service: the agent behind the gateway.
 
 `POST /run` takes a conversation and the approver's signed token, runs the loop, and streams the
 events (`status`, `token`, `final`, `error`) as server-sent events. It makes the run's id, opens a

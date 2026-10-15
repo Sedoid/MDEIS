@@ -5,7 +5,7 @@ Runs inside the mdeis-mcp container, which holds the signing secret (the orchest
 
     make token ID=u-ada NAME="Ada Teacher"
 
-The token lasts five minutes (a fourth argument gives other seconds, for a long test run). It is what the gateway will sign for a signed-in user (Step 11); this
+The token lasts five minutes (a fourth argument gives other seconds, for a long test run). It is what the gateway will sign for a signed-in user; this
 stands in for it in a test. Print it, pass it to `make ask TOKEN=...`, and do not keep it.
 """
 import os

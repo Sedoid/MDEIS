@@ -1,4 +1,4 @@
-"""Read the methodology document (docs/INGEST.md section 4). Ordinary code, no model.
+"""Read the methodology document. Ordinary code, no model.
 
 The methodology is MDEIS's own evaluation framework, a numbered document. This module turns it
 into numbered sections with their page, compares it with the version in force and with the
@@ -52,7 +52,7 @@ MEASURE_HEAD = re.compile(r"([A-F])\. (.+)")
 NEW_MARKER = re.compile(r"(\d+\.\d* |Step \d)")
 LIST_ITEM = re.compile(r"(- |\d+\. )")
 
-# --- failure kinds and issue kinds (docs/INGEST.md section 2 and 4) ----------------------------
+# --- failure kinds and issue kinds ----------------------------
 NOT_A_PDF = "not_a_pdf"
 NO_TEXT_LAYER = "no_text_layer"
 TOO_LARGE = "too_large"

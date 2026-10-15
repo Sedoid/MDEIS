@@ -1,9 +1,9 @@
 """Find the problems in a learner's cards and name each one. Nothing is guessed or fixed.
 
-Every oddity becomes a typed problem (docs/SPEC.md 5.1) with a plain question for the approver. The
+Every oddity becomes a typed problem with a plain question for the approver. The
 kinds that block (nothing is worked out for the subject until a person answers) are the ones where a
 number would otherwise have to be guessed. The rest are warnings: they are shown, and the scores
-still count. Which kinds block is the decision recorded in docs/step-07.md (D7-9).
+still count. Which kinds block is a decision of the rulebook's owner.
 """
 
 import hashlib

@@ -1,4 +1,4 @@
-"""Step 5, acceptance 5: a search by meaning finds the right rule, with the REAL embedding model.
+"""A search by meaning finds the right rule, with the REAL embedding model.
 
 Needs the embedder container (EMBEDDER_URL, set by the test service) and a database, so it is
 skipped on a machine without them, and the log must say so. It runs in a throwaway schema.

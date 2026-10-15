@@ -1,4 +1,4 @@
-"""Shared set-up for the acceptance tests of the practice data (T-002, T-032)."""
+"""Shared set-up for the acceptance tests of the practice data."""
 
 import json
 import sys
@@ -59,7 +59,7 @@ def problems(files):
 # --------------------------------------------------------------------------- the tool tests
 @pytest.fixture(scope="session")
 def tool_schema(files, templates_dir):
-    """A throwaway schema with both rulebooks and the practice cohort loaded (docs/step-07.md).
+    """A throwaway schema with both rulebooks and the practice cohort loaded.
 
     Committed once for the session; every test then works on its own connection and rolls back.
     """

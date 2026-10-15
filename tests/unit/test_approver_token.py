@@ -1,4 +1,4 @@
-"""The approver token: signed by the gateway, checked by the toolbox (docs/step-08.md).
+"""The approver token: signed by the gateway, checked by the toolbox.
 
 Pure tests, no database. Every value is typed by hand.
 """

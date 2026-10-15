@@ -1,7 +1,7 @@
 """The chat model: OpenRouter, an open-weights model, called over plain HTTP.
 
-This is the only model client in our Python code (n8n's HTTP node is the one other model call,
-D-017). Which model, which provider, and the two privacy switches (`allow_fallbacks` false,
+This is the only model client in our Python code (n8n's HTTP node is the one other model call).
+Which model, which provider, and the two privacy switches (`allow_fallbacks` false,
 `data_collection` deny) come from the environment through `Settings`, not from code. The reply is
 read whole; the answer is streamed to the gateway in chunks afterwards.
 """

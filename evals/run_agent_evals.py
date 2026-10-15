@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The agent-layer evals (docs/TESTS.md: E-01, E-04, E-05, E-07, E-08 as they run through the agent).
+"""The agent-layer evals.
 
 Runs inside the orchestrator container, through `make evals`, which supplies the learner map, a
 short-lived approver token and the commit:

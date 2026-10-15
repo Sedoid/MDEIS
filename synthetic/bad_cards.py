@@ -1,4 +1,4 @@
-"""Cards that must be refused, one file per kind of failure (E-13), with what each should return.
+"""Cards that must be refused, one file per kind of failure, with what each should return.
 
 Built from one clean card (FX-01's latest). Each file is broken in exactly one way, so a parser
 that reports the right failure kind and place has found the actual fault.

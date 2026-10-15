@@ -23,7 +23,7 @@ from typing import Annotated, Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-# Schema details (docs/TEMPLATE.md), not school rules.
+# Schema details, not school rules.
 # Section key in the YAML -> clause ID area. The order is the order of `Template.clauses()`.
 SECTION_AREAS: dict[str, str] = {
     "scales": "SC",

@@ -1,4 +1,4 @@
-"""E-13 (no row stored), E-14 and E-15, the storing half (docs/TESTS.md, docs/step-09.md).
+"""The storing half: a failed card stores no row, and a good one is stored once.
 
 These run the real worker against a throwaway database schema: a document is put in the inbox and
 in the `documents` table as the portal would, and `worker.run_once` reads it. Each test gets a fresh

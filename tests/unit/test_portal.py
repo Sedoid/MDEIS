@@ -1,4 +1,4 @@
-"""The upload portal (E-18): who may upload, what is kept, and what a hostile request gets.
+"""The upload portal: who may upload, what is kept, and what a hostile request gets.
 
 Open WebUI is replaced by a fake sign-in check and the database by a fake store, so nothing here
 needs a network or Postgres. The service is built with `create_app`, which takes both.

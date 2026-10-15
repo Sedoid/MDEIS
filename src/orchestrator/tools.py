@@ -1,4 +1,4 @@
-"""Which tools the model may see (docs/SPEC.md section 3, D-015).
+"""Which tools the model may see.
 
 An explicit allow-list. A tool that is not on it is never shown to the model and cannot be called,
 even if the model asks for it by name. A tool whose parameters include anything that looks like an

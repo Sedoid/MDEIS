@@ -1,4 +1,4 @@
-"""ingestd: the document worker (docs/INGEST.md section 1).
+"""ingestd: the document worker.
 
 It claims `pending` documents one at a time, reads them with the readers in this package (ordinary
 code, no model), and writes the rows and the document's final status in one transaction. A document

@@ -445,7 +445,7 @@ def build_fixture(spec, gen_id, rules, seed, names):
 
 
 def records_only_card(learner, spec, rules):
-    """A learner who exists only as records (no printable card): E-02, and E-03's out-of-100."""
+    """A learner who exists only as records (no printable card): two scores, or marks out of 100."""
     scores = {}
     for (_, name), triple in spec["only"].items():
         scores[name] = list(triple)

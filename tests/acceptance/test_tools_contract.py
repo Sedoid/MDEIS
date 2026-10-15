@@ -1,15 +1,15 @@
-"""Step 7: what "correct" means for the tools, written before the tools exist (docs/step-07.md).
+"""What "correct" means for the tools, written before the tools existed.
 
 These tests call the tools as plain Python functions, `tool(ctx, **arguments)`, and compare what
-comes back with the answer key made in Step 6 (`data/synthetic/truth/answer_key.json`). The key was
+comes back with the answer key (`data/synthetic/truth/answer_key.json`). The key was
 worked out by hand and by separate code, so these tests do not trust the tools to mark their own
 work.
 
-They are marked `contract`. Until the tools are built they FAIL, each one with the plain reason
-"the tool is not built yet". That is the point of writing them first. `make test` leaves them out;
-`make test-contract` runs them. When Step 8 is done they must all pass, and the marker is dropped.
+They are marked `contract`, so `make test` leaves them out and `make test-contract` runs them on
+their own. They were written first, before any tool existed, so that a tool could not be shaped to
+fit its own tests.
 
-The interface they define (docs/step-07.md, decisions D7-1 to D7-6):
+The interface they define:
 
     mdeis.tools.context.ToolContext(conn, run_id, approver=None, database_url=None, commit=True)
     mdeis.tools.context.Approver(id, name)          set from the verified token, never an argument
@@ -285,7 +285,7 @@ def test_the_strict_rulebook_changes_the_answer_and_cites_the_same_rules(make_ct
 
 
 def test_a_clear_decline_cites_its_records_and_its_rules(make_ctx, fx):
-    """E-01. The window is the last scores that count (TR-1); the result cites those records."""
+    """The window is the last scores that count (TR-1); the result cites those records."""
     for version, records, change in (("v1", 3, "-2.00"), ("v2-strict", 4, "-3.00")):
         result = tool("compute_trend")(
             make_ctx(), learner_id=fx["FX-01"]["gen_id"], skill="English", template_version=version
@@ -297,7 +297,7 @@ def test_a_clear_decline_cites_its_records_and_its_rules(make_ctx, fx):
 
 
 def test_a_score_out_of_100_gives_the_same_trend_as_the_same_score_out_of_20(make_ctx, fx):
-    """E-03. FX-03b's marks are out of 100: converted with a warning, the same result as FX-03a."""
+    """FX-03b's marks are out of 100: converted with a warning, the same result as FX-03a."""
     ctx = make_ctx()  # one context: two open ones would wait on each other's uncommitted rows
     out_of_20 = trend(ctx, fx["FX-03a"]["gen_id"], "Mathematics")
     out_of_100 = trend(ctx, fx["FX-03b"]["gen_id"], "Mathematics")
@@ -310,7 +310,7 @@ def test_a_score_out_of_100_gives_the_same_trend_as_the_same_score_out_of_20(mak
 
 
 def test_the_gap_to_the_stage_standard_has_a_direction_and_no_label(make_ctx, fx):
-    """E-09. Amina's literacy sits below Form 3's range: a gap, a direction, and no label on her."""
+    """Amina's literacy sits below Form 3's range: a gap, a direction, and no label on her."""
     result = tool("compute_trend")(make_ctx(), learner_id=fx["FX-08"]["gen_id"], skill="literacy")
     assert result["stage_gap"]["level_name"] == "below_expected_range"
     assert result["stage_gap"]["gap"] == "0.70"
@@ -389,7 +389,7 @@ def test_a_printed_total_that_is_wrong_is_a_warning_and_the_scores_are_still_use
 
 
 def test_a_remark_that_disagrees_with_the_scores_is_shown_not_settled(make_ctx, fx):
-    """E-05, the data half. The tool reports both: the scores fall, the remark says improving."""
+    """The tool reports both: the scores fall, the remark says improving."""
     ctx = make_ctx()
     learner = fx["FX-05"]["gen_id"]
     ingest = tool("ingest_assessments")(ctx, learner_id=learner)
@@ -400,7 +400,7 @@ def test_a_remark_that_disagrees_with_the_scores_is_shown_not_settled(make_ctx, 
 
 
 def test_too_little_evidence_is_said_plainly_with_no_number(make_ctx, fx):
-    """E-02. Two scores: not enough evidence, TR-1 cited, no change and no level."""
+    """Two scores: not enough evidence, TR-1 cited, no change and no level."""
     result = tool("compute_trend")(make_ctx(), learner_id=fx["FX-02"]["gen_id"], skill="English")
     assert result["status"] == "ok" and result["trend"] == "not_enough_evidence"
     assert not has_number(result, "change", "level")

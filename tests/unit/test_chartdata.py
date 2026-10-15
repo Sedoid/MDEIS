@@ -1,4 +1,4 @@
-"""What a chart shows, worked out from records and a rulebook (E-23). Expected values are typed by
+"""What a chart shows, worked out from records and a rulebook. Expected values are typed by
 hand from templates/v1.yaml: scale out of 20, three scores needed (TR-1), numeracy is Mathematics
 alone, Form 1 numeracy is expected between 10 and 14 (ST-4) and Form 2 between 11 and 15 (ST-5)."""
 

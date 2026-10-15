@@ -117,14 +117,14 @@ demo: ## Check .env and Docker, start, migrate, load data, health, smoke test, p
 	@echo "== 8/8 Done"
 	@python3 scripts/demo_banner.py
 
-# Step 5 of `make demo`: the rulebook, the methodology, and the practice school's report cards. Every
+# The data step of `make demo`: the rulebook, the methodology, and the practice school's report cards. Every
 # part is safe to run twice (the same file again adds nothing). It loads through the same admin
 # commands a person would run, never by direct SQL.
 DEMO_METHODOLOGY ?= data/synthetic/methodology/methodology-v2.0.md
 DEMO_CARDS       ?= data/synthetic/cards
 DEMO_BY          ?= Demo loader
 
-demo-data: $(ENV_FILE) ## Load the rulebook, the methodology and the practice cards (what make demo does in step 5)
+demo-data: $(ENV_FILE) ## Load the rulebook, the methodology and the practice cards (the data step of make demo)
 	@echo "-- rulebook"
 	@$(MAKE) --no-print-directory load-criteria
 	@echo "-- methodology: $(DEMO_METHODOLOGY)"
@@ -248,5 +248,5 @@ prod-check: ## From ANOTHER machine: check the public address:  make prod-check 
 probe-portal: $(ENV_FILE) ## Portal: its health answer, from inside the network
 	@$(COMPOSE) exec -T gateway python -c "import urllib.request; print(urllib.request.urlopen('http://portal:8080/healthz', timeout=10).read().decode())"
 
-probe-signin: $(ENV_FILE) ## Step 19: does the upload page's sign-in check work with the real Open WebUI?
+probe-signin: $(ENV_FILE) ## Does the upload page's sign-in check work with the real Open WebUI?
 	@python3 scripts/probe_signin.py

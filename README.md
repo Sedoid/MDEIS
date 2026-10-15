@@ -150,11 +150,11 @@ data, with no code change. That is the proof that rules live in the template.
 | Interface | Open WebUI, behind a small FastAPI gateway |
 | Orchestration | LangGraph (Python, open source) runs the agent in its own `orchestrator` container, with a plain tool loop as the fallback. n8n (open source) runs automations beside it |
 | Optional second check | Jev (`typesafe/jev-1.13`) through OpenRouter. Third-party, not open-weights, off by default. It can only hold a draft |
-| Model | A pinned open-weights model through OpenRouter (provider order fixed, fallbacks off, data collection denied). The model slug is recorded in D-007 once chosen |
+| Model | A pinned open-weights model through OpenRouter (provider order fixed, fallbacks off, data collection denied). The model slug is pinned in the environment file |
 | Our MCP server | Python 3.12 and the official MCP Python SDK, Streamable HTTP |
 | Borrowed MCP server | A read-only Postgres MCP server |
 | Data | Postgres 16 with pgvector |
-| Embeddings | llama.cpp server with an open embedding model (see D-012) |
+| Embeddings | llama.cpp server with an open embedding model |
 | Packaging | Docker Compose, one container per part |
 | Tracing (optional) | Langfuse |
 | Quality | pytest, ruff, GitHub Actions |
@@ -216,7 +216,7 @@ pgvector, llama.cpp with the nomic-embed-text-v1.5 embedding model, n8n (automat
 agent), LangGraph (the agent graph), the official MCP Python SDK, FastAPI and uvicorn, psycopg,
 pydantic, PyYAML, httpx, pdfplumber (reads the report cards), Caddy (the optional public proxy),
 and for development pytest, ruff and fpdf2 (draws the practice report cards). The optional Jev
-check (D-016) is a third-party model reached through OpenRouter. It is not open-weights, it is off by
+check is a third-party model reached through OpenRouter. It is not open-weights, it is off by
 default, and it can only hold a draft. One more tool, `record_verification`, stores its result. It is
 not in the model's tool list. The orchestrator calls the model with plain HTTP and the MCP SDK; it
 does not use LangChain's model or MCP adapters.
@@ -234,7 +234,7 @@ before anything is released.
 
 ## Evaluation
 
-**Planned.** Eleven tests (E-01 to E-11) in two layers, described in
+**Planned.** Eleven tests in two layers, described in
 [`docs/TESTS.md`](docs/TESTS.md): a deterministic core layer that runs on every push, and an
 agent layer that runs five times each and reports the spread. Results will be committed under
 `evals/results/` and quoted in `EVALS.md`. Failures are recorded as failures.
@@ -303,7 +303,7 @@ docs/           spec, containers, tests, template, decisions
 
 ## Licence
 
-Apache License 2.0, an OSI-approved licence. See [`LICENSE`](LICENSE) and D-002.
+Apache License 2.0, an OSI-approved licence. See [`LICENSE`](LICENSE).
 
 ## Team
 

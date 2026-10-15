@@ -1,8 +1,7 @@
 """stage_gap_counts: how many learners of one stage sit below, within and above the expected range.
 
 LOCKED. This tool is off unless the environment says `CLASS_VIEW_ENABLED=true`, and the server does
-not even list it then. Switching it on is a decision for a named person after the safety tests pass
-(docs/SPEC.md section 5.8). When it is on:
+not even list it then. Switching it on is a decision for a named person after the safety tests pass. When it is on:
 
 * it needs a signed-in approver, and every call, allowed or refused, is in the diary;
 * it covers one school only, and answers with counts only: no names, no learner numbers, no record

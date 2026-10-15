@@ -1,4 +1,4 @@
-"""The short-lived pass that names the signed-in person (docs/SPEC.md section 3).
+"""The short-lived pass that names the signed-in person.
 
 The gateway signs it with a secret that only the gateway and the toolbox hold. The toolbox checks
 the signature and the expiry, and reads the approver from it. It is never a tool argument, and the

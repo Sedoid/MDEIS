@@ -1,4 +1,4 @@
-"""The agent as a graph (ORCHESTRATOR_MODE=graph, docs/SPEC.md section 7, D-015).
+"""The agent as a graph (ORCHESTRATOR_MODE=graph).
 
 The model still chooses which tools to call and writes the words. The graph decides, in code, the
 things that must not depend on the model:
@@ -9,7 +9,7 @@ things that must not depend on the model:
     ask      a problem blocks a subject: ask the approver in plain words and end the turn
     check    after every draft, run the citation check; on a fail, back to the model, at most
              ORCHESTRATOR_MAX_REDRAFTS times, then stop and say what is still wrong
-    verify   a pass-through here; the second-check model (D-016) plugs in at this node
+    verify   a pass-through here; the second-check model plugs in at this node
     finish   send the answer
 
 The turn ends at "draft ready". `release_report` is not offered to the model until an earlier turn
@@ -346,7 +346,7 @@ def build(deps: Deps) -> Machine:
         return update
 
     async def verify(state: State) -> dict:
-        # The second-check model (D-016) is called here, in a later step. For now it passes.
+        # The second-check model is called here, in a later step. For now it passes.
         return {"present": True}
 
     async def finish(state: State) -> dict:

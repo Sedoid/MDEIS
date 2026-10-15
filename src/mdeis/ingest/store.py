@@ -1,4 +1,4 @@
-"""Store a parsed report card (docs/INGEST.md section 3, steps 2 to 5).
+"""Store a parsed report card.
 
 `store_report_card` runs on the connection it is given and does not commit: the caller writes the
 card, the document's new status and the diary line in one transaction, so a failure leaves nothing

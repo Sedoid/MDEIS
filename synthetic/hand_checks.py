@@ -15,7 +15,7 @@ gap direction = last term's gap minus first term's gap against the TR-4 threshol
 
 # (fixture, template, path in the learner's result, expected text)
 HAND = [
-    # --- FX-01 (E-01, E-06): English 15,15,15 then 14,13,12; the other subjects flat at 13
+    # --- FX-01: English 15,15,15 then 14,13,12; the other subjects flat at 13
     # v1: window 3 = 14,13,12.  change = 12 - 14 = -2.00 (more than 1 down).  level = 39/3 = 13.00
     ("FX-01", "v1", ("subjects", "English", "label"), "declining"),
     ("FX-01", "v1", ("subjects", "English", "change"), "-2.00"),
@@ -35,10 +35,10 @@ HAND = [
     ("FX-01", "v2-strict", ("areas", "literacy", "level"), "13.10"),
     ("FX-01", "v2-strict", ("areas", "literacy", "gap"), "1.90"),
     ("FX-01", "v2-strict", ("areas", "literacy", "gap_direction"), "widening"),
-    # --- FX-02 (E-02): two English scores only
+    # --- FX-02: two English scores only
     ("FX-02", "v1", ("subjects", "English", "label"), "not_enough_evidence"),
     ("FX-02", "v2-strict", ("subjects", "English", "label"), "not_enough_evidence"),
-    # --- FX-03a / FX-03b (E-03): Mathematics 10, 12, 14 (out of 20) and 50, 60, 70 (out of 100)
+    # --- FX-03a / FX-03b: Mathematics 10, 12, 14 (out of 20) and 50, 60, 70 (out of 100)
     # 50 x 20/100 = 10, 60 -> 12, 70 -> 14.  change = 14 - 10 = 4.00.  level = 36/3 = 12.00
     ("FX-03a", "v1", ("subjects", "Mathematics", "change"), "4.00"),
     ("FX-03a", "v1", ("subjects", "Mathematics", "level"), "12.00"),
@@ -48,16 +48,16 @@ HAND = [
     ("FX-03b", "v1", ("subjects", "Mathematics", "label"), "improving"),
     # v2-strict needs 4 scores, there are 3
     ("FX-03a", "v2-strict", ("subjects", "Mathematics", "label"), "not_enough_evidence"),
-    # --- FX-04a..d (E-04)
+    # --- FX-04a..d
     ("FX-04a", "v1", ("subjects", "English", "label"), "blocked"),
     ("FX-04a", "v1", ("areas", "literacy", "level_name"), "blocked"),
     ("FX-04b", "v1", ("subjects", "Chemistry", "label"), "blocked"),
     ("FX-04c", "v1", ("subjects", "Mathematics", "label"), "blocked"),
     ("FX-04d", "v1", ("subjects", "History", "label"), "steady"),  # a printed slip blocks nothing
-    # --- FX-05 (E-05): Geography 15, 14, 13 with the remark "Improving; ..."
+    # --- FX-05: Geography 15, 14, 13 with the remark "Improving; ..."
     ("FX-05", "v1", ("subjects", "Geography", "change"), "-2.00"),
     ("FX-05", "v1", ("subjects", "Geography", "label"), "declining"),
-    # --- FX-08 Amina (E-08, E-09, E-10).  Literacy values per term, F2 T3 = (44+42+22)/10 = 10.8,
+    # --- FX-08 Amina.  Literacy values per term, F2 T3 = (44+42+22)/10 = 10.8,
     # F3 T1 (44+44+23)/10 = 11.1, T2 (46+44+23)/10 = 11.3, T3 (48+44+23)/10 = 11.5
     # v1: level = (11.1+11.3+11.5)/3 = 11.30.  Form 3 range 12 to 16 -> gap 0.70.
     # first gap 12 - 11.1 = 0.90, last 12 - 11.5 = 0.50, change -0.40, not more than 0.5: steady

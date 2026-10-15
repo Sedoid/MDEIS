@@ -1,10 +1,10 @@
-"""The printed report cards and their truth sheets (T-032, E-12 data side).
+"""The printed report cards and their truth sheets (the data side of the card reader tests).
 
 A small reader below opens each PDF with pdfplumber and reads what is printed: the header fields,
 every subject row (by the cell rectangles), the remarks (joined across a page break), TOTAL, the
 average, absences and the council decision. What it reads must equal the truth sheet beside the
 card, field by field, with the same page and row. This proves the PDFs say what the truth says.
-It is not the system's parser (that is T-031): it reads by cell geometry; the real parser reads by
+It is not the system's parser (that is the real parser): it reads by cell geometry; the real parser reads by
 the numbers on a line.
 
 Needs pdfplumber and fpdf2 (dev only).

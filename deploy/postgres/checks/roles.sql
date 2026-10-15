@@ -1,4 +1,4 @@
--- Role and privilege checks for the `mdeis` database. Task T-003 / T-030 / T-038 (docs/CONTAINERS.md section 6).
+-- Role and privilege checks for the `mdeis` database. What each database role may and may not do.
 --
 -- Run it as the Postgres superuser, after `make migrate`, from the repo root:
 --
@@ -113,7 +113,7 @@ SELECT pg_temp.denied('read reports', :'portal_role', $$SELECT 1 FROM reports$$)
 SELECT pg_temp.denied('read the diary', :'portal_role', $$SELECT 1 FROM action_log$$);
 SELECT pg_temp.denied('write the diary', :'portal_role', $$INSERT INTO action_log (tool) VALUES ('x')$$);
 
--- ---- n8n's read-only role: nothing yet (its views arrive with T-046) -------------------------
+-- ---- n8n's read-only role: nothing yet (its views come later) -------------------------
 SELECT pg_temp.denied('read learners', :'auto_role', $$SELECT 1 FROM learners$$);
 SELECT pg_temp.denied('read reports', :'auto_role', $$SELECT 1 FROM reports$$);
 SELECT pg_temp.denied('read the diary', :'auto_role', $$SELECT 1 FROM action_log$$);

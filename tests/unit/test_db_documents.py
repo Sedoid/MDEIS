@@ -1,4 +1,4 @@
-"""T-030: migration 002, document intake tables and the version pins.
+"""Migration 002: document intake tables and the version pins.
 
 Marked `integration`: needs DATABASE_URL (a Postgres with pgvector, the app role).
 """

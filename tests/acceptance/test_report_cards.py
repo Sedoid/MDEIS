@@ -1,4 +1,4 @@
-"""E-12 and E-13 (docs/TESTS.md): the report card reader against the truth sheets (docs/step-09.md).
+"""The report card reader against the truth sheets.
 
 Every committed practice card has a truth sheet beside it, made when the card was drawn: each value
 the card prints, with its page and row. The reader must return exactly that, field by field. The
@@ -121,7 +121,7 @@ def test_the_same_card_read_twice_gives_the_same_result():
     assert first.to_dict() == second.to_dict()
 
 
-# --------------------------------------------------------------------------- E-13: strict reading
+# --------------------------------------------------------------------------- strict reading
 EXPECTED = json.loads((BAD / "expected_failures.json").read_text(encoding="utf-8"))
 
 

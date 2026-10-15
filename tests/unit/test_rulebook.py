@@ -1,4 +1,4 @@
-"""Step 5: loading a rulebook version, giving each rule a vector, and searching the rules.
+"""Loading a rulebook version, giving each rule a vector, and searching the rules.
 
 The database tests are marked `integration` and run in a throwaway schema (they COMMIT, and the
 live diary cannot be cleaned up). A fake embedder server stands in for the llama.cpp container, so
