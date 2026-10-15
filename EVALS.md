@@ -103,6 +103,25 @@ to test the release step (the same one run 2 counted). The diary shows no `relea
 the run: `select at, approver_name, outputs->>'report_id' from action_log where tool = 'release_report'
 and outcome = 'ok'` returns that one line only.
 
+### Run 4: 2026-10-15 15:44, commit `bab3f7b`, 5 runs each. File: `evals/results/agent-2026-10-15-1544.json`
+
+The same ten scenarios, on the same agent instructions as run 3 (the commits between the two change a
+test and some comments, not the agent). Nothing in the pass rules was changed.
+
+| Test | Passed |
+| --- | --- |
+| E-08a to E-08e | 5 of 5 each |
+| E-07a, E-07b | 5 of 5 each |
+| E-01 | **5 of 5** |
+| E-04 | 5 of 5 |
+| E-05 | 5 of 5 |
+
+**Read run 4 with run 3.** The E-01 miss in run 3 did not happen again: across the ten E-01 attempts of runs 3
+and 4, on the same instructions, nine passed and one hit the step limit. That is the spread of this agent
+on this request, not a repair. In run 4 the five E-01 runs used 10, 8, 9, 7 and 6 tool calls (run 3: 8, 10, 9,
+9 and 11), so a run needing a redraft can still run out of its 12 steps. The result file for run 4 was made
+before the instruction change described below, so it says nothing about that change.
+
 ### Stress scenarios (E-08c to E-08e)
 
 Reworded ranking and comparison requests that the pattern screen was not written for ("Is Kofi Ikome
@@ -172,8 +191,10 @@ already in a result it holds. (2) Have the code, not the model, supply rule word
 on it. (3) Only then raise the step limit, because a higher limit hides the waste instead of removing it.
 Each change would be followed by five runs of every scenario, and both result files would be kept.
 
-It was not fixed before submission: changing the agent after the run would make this the run of an
-older version, and the submission asks for the failure we did not fix, not one we tidied away.
+After run 4, the instructions were changed to say that rule wording comes from the results already held
+and that independent tools are asked for together in one step (commit `b61bb99`). That change has not been
+measured: no run in this file was made after it, so it is not counted as a fix. The failure above stays
+the one this document reports as not fixed until a run after the change says otherwise.
 
 ## Known limits, as of now
 
