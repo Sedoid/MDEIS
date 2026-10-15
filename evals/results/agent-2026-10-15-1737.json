@@ -1,0 +1,77 @@
+{
+  "date": "2026-10-15T17:37:38+00:00",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "mode": "graph",
+  "commit": "f2922ed",
+  "runs_each": 5,
+  "scenarios": [
+    {
+      "id": "E-01",
+      "ask": "Write a report on learner L-0115's English over the last terms.",
+      "rule": "a draft that passed the citation check, with record markers, after the trend tool",
+      "passed": 5,
+      "of": 5,
+      "runs": [
+        {
+          "passed": true,
+          "error": null,
+          "tools": [
+            "ingest_assessments",
+            "compute_trend",
+            "draft_summary",
+            "check_citations",
+            "draft_summary",
+            "check_citations"
+          ],
+          "answer": "Here is the draft report on learner L-0115's English. It has passed the citation check and is waiting for you.\n\n**Draft \u2014 English, learner L-0115**\n\n- In Form 1 in 2024/2025, English was recorded at 15.00 in term 1, 15.00 in term 2 and 15.00 in term 3.\n- In Form 2 in 2025/2026, English was recorded at 14.00 in term 1, 13.00 in term 2 and 12.00 in term 3.\n- These three Form 2 terms are the window t"
+        },
+        {
+          "passed": true,
+          "error": null,
+          "tools": [
+            "ingest_assessments",
+            "compute_trend",
+            "draft_summary",
+            "check_citations"
+          ],
+          "answer": "Here is the draft report on L-0115's English. It has passed the citation check and is waiting for you.\n\n**Draft \u2014 L-0115, English**\n\nEnglish scores are on record for six terms across two years.\n\n- Form 1, 2024/2025: 15.00 in term 1, 15.00 in term 2, 15.00 in term 3.\n- Form 2, 2025/2026: 14.00 in term 1, 13.00 in term 2, 12.00 in term 3.\n\nThe trend is taken from the last three term scores \u2014 14.00, "
+        },
+        {
+          "passed": true,
+          "error": null,
+          "tools": [
+            "ingest_assessments",
+            "compute_trend",
+            "draft_summary",
+            "check_citations"
+          ],
+          "answer": "Here is the draft report for learner L-0115 on English. It has passed the citation check and is waiting for you.\n\n**English \u2014 L-0115**\n\nEnglish scores are on record for six terms: Form 1 terms 1 to 3 in 2024/2025, and Form 2 terms 1 to 3 in 2025/2026.\n\nIn Form 1 the English score was 15.00 in each of the three terms.\n\nIn Form 2 the English score was 14.00 in term 1, 13.00 in term 2 and 12.00 in te"
+        },
+        {
+          "passed": true,
+          "error": null,
+          "tools": [
+            "ingest_assessments",
+            "compute_trend",
+            "draft_summary",
+            "check_citations"
+          ],
+          "answer": "Here is the draft for learner L-0115's English. It passed the citation check and is waiting for you.\n\n**Draft summary \u2014 English**\n\n- English has six term scores on record: three in Form 1 (2024/2025) and three in Form 2 (2025/2026).\n- The Form 1 scores are 15.00 in term 1, 15.00 in term 2 and 15.00 in term 3.\n- The trend is stated over the last three term scores, and the level is the average of th"
+        },
+        {
+          "passed": true,
+          "error": null,
+          "tools": [
+            "ingest_assessments",
+            "compute_trend",
+            "draft_summary",
+            "check_citations",
+            "draft_summary",
+            "check_citations"
+          ],
+          "answer": "Here is the draft report on learner L-0115, English, from the Form 2 file (chidi_mbah_form2_2025-2026.pdf):\n\n> This report covers English in Form 2, 2025/2026. The three recorded terms are term 1 at 14.00, term 2 at 13.00 and term 3 at 12.00. Over those three terms the trend is declining, with a change of -2.00, from a first value of 14.00 to a last value of 12.00. The level is the average of the "
+        }
+      ]
+    }
+  ]
+}

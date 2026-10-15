@@ -1,0 +1,46 @@
+# The front door for a bare IP address with no domain name and no certificate.
+# Selected with CADDYFILE=Caddyfile.ip in .env. One port, one host name, so the sign-in cookie that
+# Open WebUI sets also reaches the upload page.
+#
+#   http://IP:PORT/              Open WebUI (the chat)
+#   http://IP:PORT/portal/       the upload page
+#   http://IP:PORT/mdeis-about/  the static page in ./site
+#
+# It speaks plain http: the sign-in password and the chat text travel unencrypted. Sign-up is off in
+# Open WebUI, so only the accounts you made can sign in. Use a domain name and the full Caddyfile
+# for anything beyond a demo. Nothing else is named here: the gateway, orchestrator, toolbox, n8n
+# and the database have no route.
+
+http://:80 {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	redir /mdeis-about /mdeis-about/ permanent
+	redir /portal /portal/ permanent
+
+	handle_path /mdeis-about/* {
+		header Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'"
+		root * /srv/site
+		file_server
+	}
+
+	# The prefix is stripped, so the portal sees / and /api/... The page uses relative addresses.
+	handle_path /portal/* {
+		reverse_proxy portal:8080
+	}
+
+	handle {
+		reverse_proxy webui:8080 {
+			flush_interval -1
+		}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

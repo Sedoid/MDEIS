@@ -1,0 +1,51 @@
+{
+  "base": "methodology-v2.0.md",
+  "copies": {
+    "methodology-v2.1-full.md": {
+      "added": [
+        {
+          "section": "5.6",
+          "title": "Small groups"
+        }
+      ],
+      "changed": [
+        {
+          "now": "MDEIS must not label a learner as improving or declining based only on two results, or on results from assessments that cannot reasonably be compared.",
+          "section": "6.4",
+          "title": "Trend labels",
+          "was": "MDEIS must not label a learner as improving or declining based only on two results from assessments that cannot reasonably be compared."
+        }
+      ],
+      "removed": [
+        {
+          "section": "6.6",
+          "title": "Example"
+        }
+      ],
+      "template_rules_resting_on_changed_or_removed_sections": {
+        "6.4": [
+          "TR-1"
+        ],
+        "6.6": []
+      }
+    },
+    "methodology-v2.1-small.md": {
+      "added": [],
+      "changed": [
+        {
+          "now": "MDEIS must not label a learner as improving or declining based only on two results, or on results from assessments that cannot reasonably be compared.",
+          "section": "6.4",
+          "title": "Trend labels",
+          "was": "MDEIS must not label a learner as improving or declining based only on two results from assessments that cannot reasonably be compared."
+        }
+      ],
+      "removed": [],
+      "template_rules_resting_on_changed_or_removed_sections": {
+        "6.4": [
+          "TR-1"
+        ]
+      }
+    }
+  },
+  "note": "Section ids use the document's own numbering. A rule 'rests on' a section when its method_ref in the template is that section or a part of it."
+}

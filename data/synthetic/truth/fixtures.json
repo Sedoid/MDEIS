@@ -1,0 +1,119 @@
+[
+  {
+    "gen_id": "L-0001",
+    "handle": "FX-01",
+    "name": "Chidi Mbah",
+    "records_only": false,
+    "school_ref": "OCC/2024/0211",
+    "stage": "Form 2",
+    "tests": "E-01 E-06"
+  },
+  {
+    "gen_id": "L-0002",
+    "handle": "FX-02",
+    "name": "Efua Wirba",
+    "records_only": true,
+    "school_ref": "OCC/2025/0302",
+    "stage": "Form 1",
+    "tests": "E-02"
+  },
+  {
+    "gen_id": "L-0003",
+    "handle": "FX-03a",
+    "name": "Joel Achu",
+    "records_only": false,
+    "school_ref": "OCC/2025/0318",
+    "stage": "Form 1",
+    "tests": "E-03"
+  },
+  {
+    "gen_id": "L-0004",
+    "handle": "FX-03b",
+    "name": "Naomi Achu",
+    "records_only": true,
+    "school_ref": "OCC/2025/0319",
+    "stage": "Form 1",
+    "tests": "E-03"
+  },
+  {
+    "gen_id": "L-0005",
+    "handle": "FX-04a",
+    "name": "Bih Takang",
+    "records_only": false,
+    "school_ref": "OCC/2024/0227",
+    "stage": "Form 2",
+    "tests": "E-04 (missing term)"
+  },
+  {
+    "gen_id": "L-0006",
+    "handle": "FX-04b",
+    "name": "Collins Eyong",
+    "records_only": false,
+    "school_ref": "OCC/2024/0233",
+    "stage": "Form 2",
+    "tests": "E-04 (score above 20)"
+  },
+  {
+    "gen_id": "L-0007",
+    "handle": "FX-04c",
+    "name": "Ndeh Kamga",
+    "records_only": false,
+    "school_ref": "OCC/2024/0240",
+    "stage": "Form 2",
+    "tests": "E-04 (two cards, one year)"
+  },
+  {
+    "gen_id": "L-0008",
+    "handle": "FX-04d",
+    "name": "Moses Fomum",
+    "records_only": false,
+    "school_ref": "OCC/2025/0325",
+    "stage": "Form 1",
+    "tests": "E-04 (printed annual does not match)"
+  },
+  {
+    "gen_id": "L-0009",
+    "handle": "FX-05",
+    "name": "Mireille Chia",
+    "records_only": false,
+    "school_ref": "OCC/2024/0251",
+    "stage": "Form 2",
+    "tests": "E-05"
+  },
+  {
+    "gen_id": "L-0010",
+    "handle": "FX-08",
+    "name": "Amina Fonyuy",
+    "records_only": false,
+    "school_ref": "OCC/2023/0188",
+    "stage": "Form 3",
+    "tests": "E-08 E-09 E-10 (steady under v1, widening under v2)"
+  },
+  {
+    "gen_id": "L-0011",
+    "handle": "FX-09a",
+    "name": "Kofi Ikome",
+    "records_only": false,
+    "school_ref": "OCC/2023/0192",
+    "stage": "Form 3",
+    "tests": "E-09 (gap widening)"
+  },
+  {
+    "gen_id": "L-0012",
+    "handle": "FX-09b",
+    "name": "Esther Lyonga",
+    "records_only": false,
+    "school_ref": "OCC/2023/0197",
+    "stage": "Form 3",
+    "tests": "E-09 (gap closing)"
+  },
+  {
+    "gen_id": "L-0013",
+    "handle": "FX-22",
+    "name": "Brice Manga",
+    "records_only": false,
+    "school_ref": "OCC/2025/0331",
+    "stage": "Form 1",
+    "tests": "E-22"
+  }
+]

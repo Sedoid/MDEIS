@@ -1,0 +1,795 @@
+{
+  "absences": 7,
+  "academic_year": "2024/2025",
+  "annual_average": "13.22",
+  "card_id": "C-0001-2024-1",
+  "card_version": 1,
+  "class": "Form 1",
+  "conduct": "Chidi is a polite and respectful student who gets along with classmates and teachers. He is punctual and completes work on time. He should be encouraged to take part more in class discussions.",
+  "council_decision": "Promoted to Form 2",
+  "date_of_birth": "2013-01-09",
+  "gender": "Male",
+  "grade": "C",
+  "grade_word": "Fairly Good",
+  "learner_ref": "OCC/2024/0211",
+  "name": "Chidi Mbah",
+  "pages": 2,
+  "records": [
+    {
+      "coefficient": 4,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "13.00",
+      "row": 1,
+      "stage": "Form 1",
+      "subject": "Mathematics",
+      "term": 1,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 4,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "13.00",
+      "row": 1,
+      "stage": "Form 1",
+      "subject": "Mathematics",
+      "term": 2,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 4,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "13.00",
+      "row": 1,
+      "stage": "Form 1",
+      "subject": "Mathematics",
+      "term": 3,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 4,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "15.00",
+      "row": 2,
+      "stage": "Form 1",
+      "subject": "English",
+      "term": 1,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 4,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "15.00",
+      "row": 2,
+      "stage": "Form 1",
+      "subject": "English",
+      "term": 2,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 4,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "15.00",
+      "row": 2,
+      "stage": "Form 1",
+      "subject": "English",
+      "term": 3,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 4,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "12.50",
+      "row": 3,
+      "stage": "Form 1",
+      "subject": "French",
+      "term": 1,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 4,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "12.50",
+      "row": 3,
+      "stage": "Form 1",
+      "subject": "French",
+      "term": 2,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 4,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "12.50",
+      "row": 3,
+      "stage": "Form 1",
+      "subject": "French",
+      "term": 3,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "14.00",
+      "row": 4,
+      "stage": "Form 1",
+      "subject": "Biology",
+      "term": 1,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "14.00",
+      "row": 4,
+      "stage": "Form 1",
+      "subject": "Biology",
+      "term": 2,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "14.00",
+      "row": 4,
+      "stage": "Form 1",
+      "subject": "Biology",
+      "term": 3,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "12.00",
+      "row": 5,
+      "stage": "Form 1",
+      "subject": "Physics",
+      "term": 1,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "12.00",
+      "row": 5,
+      "stage": "Form 1",
+      "subject": "Physics",
+      "term": 2,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "12.00",
+      "row": 5,
+      "stage": "Form 1",
+      "subject": "Physics",
+      "term": 3,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "13.50",
+      "row": 6,
+      "stage": "Form 1",
+      "subject": "Chemistry",
+      "term": 1,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "13.50",
+      "row": 6,
+      "stage": "Form 1",
+      "subject": "Chemistry",
+      "term": 2,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "13.50",
+      "row": 6,
+      "stage": "Form 1",
+      "subject": "Chemistry",
+      "term": 3,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "13.00",
+      "row": 7,
+      "stage": "Form 1",
+      "subject": "Geography",
+      "term": 1,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "13.00",
+      "row": 7,
+      "stage": "Form 1",
+      "subject": "Geography",
+      "term": 2,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "13.00",
+      "row": 7,
+      "stage": "Form 1",
+      "subject": "Geography",
+      "term": 3,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "12.50",
+      "row": 8,
+      "stage": "Form 1",
+      "subject": "History",
+      "term": 1,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "12.50",
+      "row": 8,
+      "stage": "Form 1",
+      "subject": "History",
+      "term": 2,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 1,
+      "raw_score": "12.50",
+      "row": 8,
+      "stage": "Form 1",
+      "subject": "History",
+      "term": 3,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 1,
+      "denominator": 20,
+      "missing": false,
+      "page": 2,
+      "raw_score": "13.00",
+      "row": 9,
+      "stage": "Form 1",
+      "subject": "Citizenship",
+      "term": 1,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 1,
+      "denominator": 20,
+      "missing": false,
+      "page": 2,
+      "raw_score": "13.00",
+      "row": 9,
+      "stage": "Form 1",
+      "subject": "Citizenship",
+      "term": 2,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 1,
+      "denominator": 20,
+      "missing": false,
+      "page": 2,
+      "raw_score": "13.00",
+      "row": 9,
+      "stage": "Form 1",
+      "subject": "Citizenship",
+      "term": 3,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 2,
+      "raw_score": "13.50",
+      "row": 10,
+      "stage": "Form 1",
+      "subject": "Literature in English",
+      "term": 1,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 2,
+      "raw_score": "13.50",
+      "row": 10,
+      "stage": "Form 1",
+      "subject": "Literature in English",
+      "term": 2,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 2,
+      "raw_score": "13.50",
+      "row": 10,
+      "stage": "Form 1",
+      "subject": "Literature in English",
+      "term": 3,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 2,
+      "raw_score": "12.50",
+      "row": 11,
+      "stage": "Form 1",
+      "subject": "Home Economics",
+      "term": 1,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 2,
+      "raw_score": "12.50",
+      "row": 11,
+      "stage": "Form 1",
+      "subject": "Home Economics",
+      "term": 2,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 2,
+      "denominator": 20,
+      "missing": false,
+      "page": 2,
+      "raw_score": "12.50",
+      "row": 11,
+      "stage": "Form 1",
+      "subject": "Home Economics",
+      "term": 3,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 1,
+      "denominator": 20,
+      "missing": false,
+      "page": 2,
+      "raw_score": "14.00",
+      "row": 12,
+      "stage": "Form 1",
+      "subject": "Logic",
+      "term": 1,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 1,
+      "denominator": 20,
+      "missing": false,
+      "page": 2,
+      "raw_score": "14.00",
+      "row": 12,
+      "stage": "Form 1",
+      "subject": "Logic",
+      "term": 2,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 1,
+      "denominator": 20,
+      "missing": false,
+      "page": 2,
+      "raw_score": "14.00",
+      "row": 12,
+      "stage": "Form 1",
+      "subject": "Logic",
+      "term": 3,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 1,
+      "denominator": 20,
+      "missing": false,
+      "page": 2,
+      "raw_score": "12.00",
+      "row": 13,
+      "stage": "Form 1",
+      "subject": "Physical Education",
+      "term": 1,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 1,
+      "denominator": 20,
+      "missing": false,
+      "page": 2,
+      "raw_score": "12.00",
+      "row": 13,
+      "stage": "Form 1",
+      "subject": "Physical Education",
+      "term": 2,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 1,
+      "denominator": 20,
+      "missing": false,
+      "page": 2,
+      "raw_score": "12.00",
+      "row": 13,
+      "stage": "Form 1",
+      "subject": "Physical Education",
+      "term": 3,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 1,
+      "denominator": 20,
+      "missing": false,
+      "page": 2,
+      "raw_score": "13.50",
+      "row": 14,
+      "stage": "Form 1",
+      "subject": "Manual Labor",
+      "term": 1,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 1,
+      "denominator": 20,
+      "missing": false,
+      "page": 2,
+      "raw_score": "13.50",
+      "row": 14,
+      "stage": "Form 1",
+      "subject": "Manual Labor",
+      "term": 2,
+      "year": "2024/2025"
+    },
+    {
+      "coefficient": 1,
+      "denominator": 20,
+      "missing": false,
+      "page": 2,
+      "raw_score": "13.50",
+      "row": 14,
+      "stage": "Form 1",
+      "subject": "Manual Labor",
+      "term": 3,
+      "year": "2024/2025"
+    }
+  ],
+  "rows": [
+    {
+      "annual_score": "13.00",
+      "coefficient": 4,
+      "grade": "C",
+      "grade_word": "Fairly Good",
+      "page": 1,
+      "remark": "Fair work. Ask questions when a method is unclear.",
+      "remark_pages": [
+        1
+      ],
+      "row": 1,
+      "subject": "Mathematics",
+      "terms": [
+        "13.00",
+        "13.00",
+        "13.00"
+      ],
+      "weighted_score": "52.00"
+    },
+    {
+      "annual_score": "15.00",
+      "coefficient": 4,
+      "grade": "B",
+      "grade_word": "Good",
+      "page": 1,
+      "remark": "Good work. Spend more time on vocabulary and grammar.",
+      "remark_pages": [
+        1
+      ],
+      "row": 2,
+      "subject": "English",
+      "terms": [
+        "15.00",
+        "15.00",
+        "15.00"
+      ],
+      "weighted_score": "60.00"
+    },
+    {
+      "annual_score": "12.50",
+      "coefficient": 4,
+      "grade": "C",
+      "grade_word": "Fairly Good",
+      "page": 1,
+      "remark": "Understands the main ideas but makes some errors. Read more widely and practise writing full answers.",
+      "remark_pages": [
+        1
+      ],
+      "row": 3,
+      "subject": "French",
+      "terms": [
+        "12.50",
+        "12.50",
+        "12.50"
+      ],
+      "weighted_score": "50.00"
+    },
+    {
+      "annual_score": "14.00",
+      "coefficient": 2,
+      "grade": "B",
+      "grade_word": "Good",
+      "page": 1,
+      "remark": "Solid results this year. Keep practising calculations and show every step.",
+      "remark_pages": [
+        1
+      ],
+      "row": 4,
+      "subject": "Biology",
+      "terms": [
+        "14.00",
+        "14.00",
+        "14.00"
+      ],
+      "weighted_score": "28.00"
+    },
+    {
+      "annual_score": "12.00",
+      "coefficient": 2,
+      "grade": "C",
+      "grade_word": "Fairly Good",
+      "page": 1,
+      "remark": "Fair work. Keep practising calculations and show every step.",
+      "remark_pages": [
+        1
+      ],
+      "row": 5,
+      "subject": "Physics",
+      "terms": [
+        "12.00",
+        "12.00",
+        "12.00"
+      ],
+      "weighted_score": "24.00"
+    },
+    {
+      "annual_score": "13.50",
+      "coefficient": 2,
+      "grade": "C",
+      "grade_word": "Fairly Good",
+      "page": 1,
+      "remark": "Results are satisfactory. Ask questions when a method is unclear.",
+      "remark_pages": [
+        1
+      ],
+      "row": 6,
+      "subject": "Chemistry",
+      "terms": [
+        "13.50",
+        "13.50",
+        "13.50"
+      ],
+      "weighted_score": "27.00"
+    },
+    {
+      "annual_score": "13.00",
+      "coefficient": 2,
+      "grade": "C",
+      "grade_word": "Fairly Good",
+      "page": 1,
+      "remark": "Fair work. Plan essays before writing.",
+      "remark_pages": [
+        1
+      ],
+      "row": 7,
+      "subject": "Geography",
+      "terms": [
+        "13.00",
+        "13.00",
+        "13.00"
+      ],
+      "weighted_score": "26.00"
+    },
+    {
+      "annual_score": "12.50",
+      "coefficient": 2,
+      "grade": "C",
+      "grade_word": "Fairly Good",
+      "page": 1,
+      "remark": "Understands the main ideas but makes some errors. Revise dates, places and key terms regularly.",
+      "remark_pages": [
+        1
+      ],
+      "row": 8,
+      "subject": "History",
+      "terms": [
+        "12.50",
+        "12.50",
+        "12.50"
+      ],
+      "weighted_score": "25.00"
+    },
+    {
+      "annual_score": "13.00",
+      "coefficient": 1,
+      "grade": "C",
+      "grade_word": "Fairly Good",
+      "page": 2,
+      "remark": "Results are satisfactory. Plan essays before writing.",
+      "remark_pages": [
+        2
+      ],
+      "row": 9,
+      "subject": "Citizenship",
+      "terms": [
+        "13.00",
+        "13.00",
+        "13.00"
+      ],
+      "weighted_score": "13.00"
+    },
+    {
+      "annual_score": "13.50",
+      "coefficient": 2,
+      "grade": "C",
+      "grade_word": "Fairly Good",
+      "page": 2,
+      "remark": "Understands the main ideas but makes some errors. Spend more time on vocabulary and grammar.",
+      "remark_pages": [
+        2
+      ],
+      "row": 10,
+      "subject": "Literature in English",
+      "terms": [
+        "13.50",
+        "13.50",
+        "13.50"
+      ],
+      "weighted_score": "27.00"
+    },
+    {
+      "annual_score": "12.50",
+      "coefficient": 2,
+      "grade": "C",
+      "grade_word": "Fairly Good",
+      "page": 2,
+      "remark": "Results are satisfactory. Keep up regular practice.",
+      "remark_pages": [
+        2
+      ],
+      "row": 11,
+      "subject": "Home Economics",
+      "terms": [
+        "12.50",
+        "12.50",
+        "12.50"
+      ],
+      "weighted_score": "25.00"
+    },
+    {
+      "annual_score": "14.00",
+      "coefficient": 1,
+      "grade": "B",
+      "grade_word": "Good",
+      "page": 2,
+      "remark": "A good grasp of most topics. Review past exercises before each test.",
+      "remark_pages": [
+        2
+      ],
+      "row": 12,
+      "subject": "Logic",
+      "terms": [
+        "14.00",
+        "14.00",
+        "14.00"
+      ],
+      "weighted_score": "14.00"
+    },
+    {
+      "annual_score": "12.00",
+      "coefficient": 1,
+      "grade": "C",
+      "grade_word": "Fairly Good",
+      "page": 2,
+      "remark": "Understands the main ideas but makes some errors. Keep up regular practice.",
+      "remark_pages": [
+        2
+      ],
+      "row": 13,
+      "subject": "Physical Education",
+      "terms": [
+        "12.00",
+        "12.00",
+        "12.00"
+      ],
+      "weighted_score": "12.00"
+    },
+    {
+      "annual_score": "13.50",
+      "coefficient": 1,
+      "grade": "C",
+      "grade_word": "Fairly Good",
+      "page": 2,
+      "remark": "Fair work. Keep up regular practice.",
+      "remark_pages": [
+        2
+      ],
+      "row": 14,
+      "subject": "Manual Labor",
+      "terms": [
+        "13.50",
+        "13.50",
+        "13.50"
+      ],
+      "weighted_score": "13.50"
+    }
+  ],
+  "stage": "Form 1",
+  "title_year": "2024/2025",
+  "total_coefficients": 30,
+  "total_weighted": "396.50"
+}

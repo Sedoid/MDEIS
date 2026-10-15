@@ -1,0 +1,81 @@
+# ── Secrets and local config ─────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+deploy/.env
+
+# ── Claude development tools and plans: LOCAL ONLY, never committed ──
+# These stay on the owner's machine. Back them up somewhere private.
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+docs/PLAN.md
+docs/WORKFLOW.md
+docs/PUBLISH.md
+docs/SPEC.md
+docs/STRUCTURE.md
+docs/TESTS.md
+docs/DECISIONS.md
+docs/VISION.md
+docs/TEMPLATE.md
+docs/LOG.md
+docs/log/
+docs/tasks/
+
+# ── Python ───────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# ── Node (n8n helpers, tooling) ──────────────────────────────────────
+node_modules/
+
+# ── Docker and local service data ────────────────────────────────────
+pgdata/
+models/
+*.gguf
+postgres-data/
+n8n-data/
+open-webui-data/
+langfuse-data/
+clickhouse-data/
+minio-data/
+*.log
+
+# ── Generated data and run output ────────────────────────────────────
+# Synthetic fixtures are small and committed (data/synthetic/).
+# Scratch output from generators and eval runs is not.
+data/tmp/
+# The whole practice school, every card (make class-data). Made on demand, never committed.
+data/full-class/
+# The teacher's own files (made-up cards and her methodology). Loaded into the server, never committed.
+data/incoming/
+data/MDEIS SYNTHETIC REPORT CARDS*
+data/Methodology of MDEIS*
+.claude/hooks/debug.log
+evals/tmp/
+# Committed eval results live in evals/results/ and are NOT ignored:
+# EVALS.md must be backed by real runs.
+
+# ── Editors and OS ───────────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+
+# Third-party skill installs, kept off the repo
+.agents/
+skills-lock.json

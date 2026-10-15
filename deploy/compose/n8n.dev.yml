@@ -1,0 +1,6 @@
+# Adds the n8n editor port to the host, on localhost only. The Makefile includes this file while
+# DEV_EDITOR=1 (the default). Run `make dev-up DEV_EDITOR=0` to leave it out.
+services:
+  n8n:
+    ports:
+      - "${HOST_BIND:-127.0.0.1}:${N8N_EDITOR_PORT:-5678}:5678"

@@ -1,0 +1,126 @@
+services:
+  # One-shot step: applies the SQL migrations as the app role, then exits 0.
+  # mdeis-mcp starts only after it has finished. `make migrate` runs it by hand.
+  migrate:
+    build:
+      context: .
+      dockerfile: deploy/docker/mdeis-mcp.Dockerfile
+      target: runtime
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?set PYTHON_IMAGE in .env}
+    image: mdeis-mcp:local
+    container_name: migrate-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    command: ["python", "-m", "mdeis.db.migrate"]
+    environment:
+      DATABASE_URL: postgresql://${MDEIS_APP_USER:?set MDEIS_APP_USER in .env}:${MDEIS_APP_PASSWORD:?set MDEIS_APP_PASSWORD in .env}@postgres:5432/${MDEIS_DB_NAME:?set MDEIS_DB_NAME in .env}
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # One-shot tool: loads the rulebook versions in ./templates into the database, then makes the
+  # vectors for their rules. `make load-criteria` runs it. Profile "tools": `make dev-up` does not
+  # start it. Safe to run twice. It writes to the database as the app role, nothing else.
+  rules:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: deploy/docker/mdeis-mcp.Dockerfile
+      target: runtime
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?set PYTHON_IMAGE in .env}
+    image: mdeis-mcp:local
+    container_name: rules-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    # The strict version first, so that v1 (the last one loaded) is the active one.
+    command:
+      - python
+      - -m
+      - mdeis.rulebook
+      - load
+      - /templates/v2-strict.yaml
+      - /templates/v1.yaml
+      - --require-embeddings
+    environment:
+      DATABASE_URL: postgresql://${MDEIS_APP_USER:?set MDEIS_APP_USER in .env}:${MDEIS_APP_PASSWORD:?set MDEIS_APP_PASSWORD in .env}@postgres:5432/${MDEIS_DB_NAME:?set MDEIS_DB_NAME in .env}
+      EMBEDDER_URL: http://embedder:8081
+      EMBED_DIM: ${EMBED_DIM:-768}
+      EMBED_MODEL_FILE: ${EMBED_MODEL_FILE:?set EMBED_MODEL_FILE in .env}
+    volumes:
+      - ./templates:/templates:ro
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      embedder:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  # One-shot admin commands (profile "tools"): `make ingest` and `make ack` run it. It reads a
+  # document with the same code as the worker, so it needs the inbox (to store the file) and the
+  # database. Like the worker it holds no model key and no approver-token secret.
+  admin:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: deploy/docker/mdeis-mcp.Dockerfile
+      target: runtime
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?set PYTHON_IMAGE in .env}
+    image: mdeis-mcp:local
+    container_name: admin-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    entrypoint: ["python", "-m", "mdeis.admin"]
+    environment:
+      DATABASE_URL: postgresql://${MDEIS_APP_USER:?set MDEIS_APP_USER in .env}:${MDEIS_APP_PASSWORD:?set MDEIS_APP_PASSWORD in .env}@postgres:5432/${MDEIS_DB_NAME:?set MDEIS_DB_NAME in .env}
+      # Optional: without the embedder a methodology's sections are stored without vectors.
+      EMBEDDER_URL: http://embedder:8081
+      EMBED_DIM: ${EMBED_DIM:-768}
+      EMBED_MODEL_FILE: ${EMBED_MODEL_FILE:-}
+      INBOX_DIR: /inbox
+    volumes:
+      - inbox:/inbox
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  mdeis-mcp:
+    build:
+      context: .
+      dockerfile: deploy/docker/mdeis-mcp.Dockerfile
+      target: runtime
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?set PYTHON_IMAGE in .env}
+    image: mdeis-mcp:local
+    container_name: mdeis-mcp-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    restart: unless-stopped
+    # No OPENROUTER variable here, ever: this server makes no model calls.
+    environment:
+      DATABASE_URL: postgresql://${MDEIS_APP_USER}:${MDEIS_APP_PASSWORD}@postgres:5432/${MDEIS_DB_NAME}
+      EMBEDDER_URL: http://embedder:8081
+      EMBED_DIM: ${EMBED_DIM:-768}
+      APPROVER_TOKEN_SECRET: ${APPROVER_TOKEN_SECRET:?set APPROVER_TOKEN_SECRET in .env}
+      # The class view (stage_gap_counts) is locked. Only a named person switches it on.
+      CLASS_VIEW_ENABLED: ${CLASS_VIEW_ENABLED:-false}
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8100"
+    networks: [agent, data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      embedder:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # No ports: the orchestrator reaches it at http://mdeis-mcp:8100/mcp over the agent network.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s

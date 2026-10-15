@@ -1,0 +1,53 @@
+services:
+  # Test and lint runner. Not started by `make dev-up` (profile "test"); `make test` and `make lint`
+  # run it. It uses the live ./src and ./tests, so no rebuild is needed after an edit.
+  # Integration tests run because DATABASE_URL is set.
+  test:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: deploy/docker/mdeis-mcp.Dockerfile
+      target: dev
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?set PYTHON_IMAGE in .env}
+    image: mdeis-test:local
+    working_dir: /app
+    environment:
+      DATABASE_URL: postgresql://${MDEIS_APP_USER}:${MDEIS_APP_PASSWORD}@postgres:5432/${MDEIS_DB_NAME}
+      EMBED_DIM: ${EMBED_DIM:-768}
+      # Only the search-quality test uses this; it skips itself when the embedder is not up.
+      EMBEDDER_URL: http://embedder:8081
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./data:/app/data:ro
+      - ./templates:/app/templates:ro
+      - ./synthetic:/app/synthetic:ro
+      - ./site:/app/site:ro
+      - ./deploy/compose:/app/deploy/compose:ro
+      - ./deploy/caddy:/app/deploy/caddy:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+    networks: [data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["pytest"]
+
+  # Makes the practice school (data/synthetic) with the container's Python, so the bytes are the
+  # same on every machine. `make practice-data` runs it. It needs no database. Only ./data is
+  # writable; the generator and the templates are read-only.
+  practice-data:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: deploy/docker/mdeis-mcp.Dockerfile
+      target: dev
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?set PYTHON_IMAGE in .env}
+    image: mdeis-test:local
+    working_dir: /app
+    volumes:
+      - ./synthetic:/app/synthetic:ro
+      - ./templates:/app/templates:ro
+      - ./data:/app/data
+    command: ["python", "synthetic/generate.py", "--seed", "42", "--out", "data/synthetic"]

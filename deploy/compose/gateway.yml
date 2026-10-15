@@ -1,0 +1,31 @@
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: deploy/docker/gateway.Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?set PYTHON_IMAGE in .env}
+    image: mdeis-gateway:local
+    container_name: gateway-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    restart: unless-stopped
+    # No OPENROUTER variable here: the model is called by the orchestrator. This container signs
+    # the approver token, so no model-driven code runs beside the secret.
+    environment:
+      GATEWAY_API_KEY: ${GATEWAY_API_KEY:?set GATEWAY_API_KEY in .env}
+      APPROVER_TOKEN_SECRET: ${APPROVER_TOKEN_SECRET:?set APPROVER_TOKEN_SECRET in .env}
+      ORCHESTRATOR_URL: http://orchestrator:8300
+      ORCHESTRATOR_API_KEY: ${ORCHESTRATOR_API_KEY:?set ORCHESTRATOR_API_KEY in .env}
+      MDEIS_MCP_URL: http://mdeis-mcp:8100/mcp
+    networks: [edge, agent]
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+      mdeis-mcp:
+        condition: service_healthy
+    # No ports. Only webui and portal, on the edge network, can reach it.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s

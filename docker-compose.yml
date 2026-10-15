@@ -1,0 +1,22 @@
+# MDEIS base: networks and volumes only. Each service lives in deploy/compose/<service>.yml.
+# Do not run `docker compose` by hand: use `make`, which merges the right files in the right order
+# (this file must stay first, because paths in the service files are relative to it).
+# Design: docs/CONTAINERS.md. Every value comes from .env (names in .env.example).
+
+name: ${COMPOSE_PROJECT_NAME:-mdeis}
+
+networks:
+  # Open WebUI and the gateway. Open WebUI's published port needs a network that is not internal.
+  edge: {}
+  # Gateway, n8n, mdeis-mcp, pg-mcp-ro. n8n reaches OpenRouter through this one.
+  agent: {}
+  # Postgres and everything that talks to it. No route to the internet.
+  data:
+    internal: true
+
+volumes:
+  pgdata: {}
+  n8n_data: {}
+  webui_data: {}
+  # Uploaded documents. The portal writes, ingestd reads. Both images create /inbox with group 10010.
+  inbox: {}

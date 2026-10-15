@@ -1,0 +1,58 @@
+services:
+  # A side lane for automations that are not the agent (for example the annotated explainer of a
+  # released report). The orchestrator calls its webhook with N8N_WEBHOOK_KEY. n8n has no approver
+  # token and no APPROVER_TOKEN_SECRET, and it holds no OPENROUTER_* variable. It reads released
+  # data through a read-only database role and writes nothing to the mdeis database.
+  n8n:
+    image: ${N8N_IMAGE:?set N8N_IMAGE in .env}
+    container_name: n8n-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    restart: unless-stopped
+    # Imports workflows/ (or the echo workflow when that is empty), publishes them, then starts n8n.
+    entrypoint: ["/bin/sh", "/mdeis/entrypoint.sh"]
+    environment:
+      # Its own database and role for its own tables.
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: "5432"
+      DB_POSTGRESDB_DATABASE: ${N8N_DB_NAME:?set N8N_DB_NAME in .env}
+      DB_POSTGRESDB_USER: ${N8N_DB_USER:?set N8N_DB_USER in .env}
+      DB_POSTGRESDB_PASSWORD: ${N8N_DB_PASSWORD:?set N8N_DB_PASSWORD in .env}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?set N8N_ENCRYPTION_KEY in .env}
+      N8N_HOST: n8n
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://n8n:5678/
+      N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE:-false}
+      GENERIC_TIMEZONE: ${TZ:-UTC}
+      TZ: ${TZ:-UTC}
+      # No telemetry, no update nags, no template gallery.
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_TEMPLATES_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      # The workflows read the values below with $env. n8n blocks that by default.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      # The key a caller must send in a header. The workflow's webhook rejects anything else.
+      N8N_WEBHOOK_KEY: ${N8N_WEBHOOK_KEY:?set N8N_WEBHOOK_KEY in .env}
+      # Read-only role in the mdeis database: released-report views only (granted by a migration).
+      MDEIS_VIEW_HOST: postgres
+      MDEIS_VIEW_DB: ${MDEIS_DB_NAME:?set MDEIS_DB_NAME in .env}
+      MDEIS_VIEW_USER: ${N8N_AUTO_DB_USER:?set N8N_AUTO_DB_USER in .env}
+      MDEIS_VIEW_PASSWORD: ${N8N_AUTO_DB_PASSWORD:?set N8N_AUTO_DB_PASSWORD in .env}
+      # n8n's own model key, if a workflow needs one. Empty by default. Not the orchestrator's key.
+      N8N_OPENROUTER_API_KEY: ${N8N_OPENROUTER_API_KEY:-}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workflows:/workflows:ro
+      - ./deploy/n8n:/mdeis:ro
+    networks: [agent, data]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # No ports here. The editor port is added by n8n.dev.yml, which the Makefile includes in dev.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5678/healthz >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
