@@ -42,6 +42,7 @@ SHAPE = {
     "source_max_chars": COUNT,
 }
 LIMIT_KEYS = ("wall_s", "cpu_s", "memory_mb", "input_kb", "output_kb")
+RUNNER_KEYS = ("connect_s", "reply_slack_s")  # how the client of the runner waits
 
 
 def _words(value: Any) -> bool:
@@ -93,6 +94,7 @@ class Rules:
     literals: frozenset[int]
     source_max_chars: int
     limits: dict  # wall_s, cpu_s, memory_mb, input_kb, output_kb
+    runner: dict  # connect_s, reply_slack_s
 
     @classmethod
     def from_dict(cls, data: Any) -> Rules:
@@ -108,6 +110,14 @@ class Rules:
             if not _count(limits.get(key)):
                 raise SandboxRulesError(
                     f"`limits.{key}` is missing or is not a whole number above zero"
+                )
+        runner = data.get("runner")
+        if not isinstance(runner, dict):
+            raise SandboxRulesError("`runner` is missing or is not a mapping")
+        for key in RUNNER_KEYS:
+            if not _count(runner.get(key)):
+                raise SandboxRulesError(
+                    f"`runner.{key}` is missing or is not a whole number above zero"
                 )
         unknown = [n for n in data["allowed_node_types"] if not hasattr(ast, n)]
         if unknown:
@@ -130,4 +140,27 @@ class Rules:
             literals=frozenset(data["allowed_literals"]),
             source_max_chars=data["source_max_chars"],
             limits={k: limits[k] for k in LIMIT_KEYS},
+            runner={k: runner[k] for k in RUNNER_KEYS},
         )
+
+    def to_dict(self) -> dict:
+        """The same shape `from_dict` reads, in a fixed order, as plain JSON values. This is what
+        the client sends to the runner, so the runner never reads a file."""
+        return {
+            "sandbox_version": self.version,
+            "entry_function": self.entry_function,
+            "entry_parameters": list(self.entry_parameters),
+            "output_kind_constant": self.output_kind_constant,
+            "output_kinds": list(self.output_kinds),
+            "allowed_modules": {m: list(members) for m, members in sorted(self.modules.items())},
+            "allowed_builtins": sorted(self.builtins),
+            "float_names": sorted(self.float_names),
+            "forbidden_name_prefix": self.name_prefix,
+            "forbidden_attribute_prefix": self.attribute_prefix,
+            "forbidden_attributes": sorted(self.forbidden_attributes),
+            "allowed_node_types": sorted(self.node_types),
+            "allowed_literals": sorted(self.literals),
+            "source_max_chars": self.source_max_chars,
+            "limits": dict(self.limits),
+            "runner": dict(self.runner),
+        }

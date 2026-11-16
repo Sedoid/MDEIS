@@ -146,11 +146,19 @@ allowed_literals: [0, 1]                       # PROPOSED: owner to confirm
 # The largest source the check will read, in characters.
 source_max_chars: 20000                        # PROPOSED: owner to confirm
 
-# Limits for one run. They are read by the runner (slice 2); the smaller of these and the
-# container's own ceilings applies, so a bad file cannot raise a limit.
+# Limits for one run. The client sends them with each request, and the runner cuts each one to the
+# container's own ceiling, so a bad file cannot raise a limit.
 limits:
   wall_s: 5                                    # PROPOSED: owner to confirm
   cpu_s: 2                                     # PROPOSED: owner to confirm
   memory_mb: 256                               # PROPOSED: owner to confirm
   input_kb: 1024                               # PROPOSED: owner to confirm
   output_kb: 256                               # PROPOSED: owner to confirm
+
+# How the client of the runner (in mdeis-mcp) waits. The runner itself holds no copy of these: the
+# client reads them from this file and the rules travel in each request. The container has its own
+# ceilings for the five limits above (environment variables set by the compose file), and the
+# smaller number applies.
+runner:
+  connect_s: 2                                 # PROPOSED: owner to confirm (seconds to connect to the socket)
+  reply_slack_s: 5                             # PROPOSED: owner to confirm (seconds to wait past wall_s for the answer)

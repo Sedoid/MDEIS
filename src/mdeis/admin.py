@@ -4,6 +4,7 @@
     python -m mdeis.admin ingest --kind results --file card.pdf --as "Ada Teacher"
     python -m mdeis.admin ingest-dir --kind results --dir data/synthetic/cards --as "Demo loader"
     python -m mdeis.admin ack-methodology D-000012 --by "Ada Teacher" --note "checked 6.4"
+    python -m mdeis.admin grant-reviewer --user-id U --name "Ms Teacher" --role teacher [--revoke]
 
 `load-criteria` does what `python -m mdeis.rulebook load` does, and takes the same options. The
 rulebook module also has embed, activate, status and search.
@@ -11,6 +12,10 @@ rulebook module also has embed, activate, status and search.
 `ingest` copies a file into the inbox, records it as a document, and reads it in this process with
 the same code the worker uses. `ack-methodology` puts a methodology that needed review in force; it
 needs the name of the person who checked it. Both write the diary.
+
+`grant-reviewer` records who may decide in the measure registry (a developer clears a hold, a
+teacher confirms a measure), or ends that with `--revoke`. The server operator runs it; the operator
+is read from the account, never from an argument. It is not a tool and the model cannot call it.
 """
 
 from __future__ import annotations
@@ -27,6 +32,7 @@ import psycopg
 from mdeis import rulebook
 from mdeis.db import diary
 from mdeis.ingest import methodology, worker
+from mdeis.registry import reviewers
 
 # the admin name -> the rulebook command it runs
 COMMANDS = {"load-criteria": "load"}
@@ -36,7 +42,9 @@ USAGE = (
     "  python -m mdeis.admin load-criteria FILE [FILE ...] [--by NAME] [--no-activate]\n"
     '  python -m mdeis.admin ingest --kind results|methodology --file PATH --as "Name"\n'
     '  python -m mdeis.admin ingest-dir --kind results --dir FOLDER --as "Name" [--recursive]\n'
-    '  python -m mdeis.admin ack-methodology D-000012 --by "Name" [--note "..."]'
+    '  python -m mdeis.admin ack-methodology D-000012 --by "Name" [--note "..."]\n'
+    '  python -m mdeis.admin grant-reviewer --user-id ID --name "Name" --role teacher|developer\n'
+    "      [--revoke]   (--name is not needed with --revoke)"
 )
 
 
@@ -176,6 +184,41 @@ def ack_methodology(argv: list[str]) -> int:
     return 0
 
 
+def grant_reviewer(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="python -m mdeis.admin grant-reviewer")
+    parser.add_argument("--user-id", required=True, help="the Open WebUI user id of the person")
+    parser.add_argument("--name", help="the name to record (needed to grant, not to revoke)")
+    parser.add_argument("--role", required=True, choices=reviewers.ROLES)
+    parser.add_argument("--revoke", action="store_true", help="end the grant instead")
+    args = parser.parse_args(argv)
+    if not args.revoke and not args.name:
+        parser.error("--name is needed to grant a reviewer")
+    url = os.environ["DATABASE_URL"]
+    by = reviewers.operator()
+    with psycopg.connect(url) as conn:
+        try:
+            if args.revoke:
+                done = reviewers.revoke_reviewer(conn, args.user_id, args.role, by=by, url=url)
+            else:
+                done = reviewers.grant_reviewer(
+                    conn, args.user_id, args.name, args.role, by=by, url=url
+                )
+            conn.commit()
+        except reviewers.ReviewerRefused as refusal:
+            conn.rollback()
+            print(f"Refused: {refusal}", file=sys.stderr)
+            return 1
+    who, role = done["user_id"], done["role"]
+    if not done["changed"]:
+        print(f"{who} was already {'revoked' if args.revoke else 'recorded'} as a {role}: "
+              "nothing changed.")
+    elif args.revoke:
+        print(f"{who} is no longer recorded as a {role} (ended by {by}).")
+    else:
+        print(f"{who} is now recorded as a {role} ({done['name']}), granted by {by}.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:
@@ -190,6 +233,8 @@ def main(argv: list[str] | None = None) -> int:
         return ingest_dir(rest)
     if command == "ack-methodology":
         return ack_methodology(rest)
+    if command == "grant-reviewer":
+        return grant_reviewer(rest)
     print(USAGE, file=sys.stderr)
     return 2
 
