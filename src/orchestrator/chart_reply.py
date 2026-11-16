@@ -17,6 +17,7 @@ from mdeis import chart_image
 
 # Record, document and result numbers mean nothing to a person. The files they came from do.
 NUMBERS = re.compile(r"\s*\[(?:A|D)-\d+[^\]]*\]|\s*\[[0-9a-f]{6,}[^\]]*\]")
+FINDING_NUMBER = re.compile(r"\s*\[?\bCF-[0-9a-f]{8}\b\]?")  # a class result's finding number
 RULE_MARKERS = re.compile(r"\s*\[[A-Z]{1,2}-\d[0-9A-Za-z.]*\]")  # [ST-3], [GM-1], [M-6.4]
 EMPTY_SOURCES = re.compile(r"(?im)^[ \t]*[*_]*sources?[*_]*[ \t]*:[ \t]*\.?[ \t]*$\n?")
 SOURCES_SHOWN = 12  # files named in one answer, then "and n more"
@@ -165,7 +166,7 @@ def compose(
     when the rulebook's wording came with them: a footer names the files and says what the rules
     say.
     Without them the words are left as written."""
-    out = strip_images(text)
+    out = FINDING_NUMBER.sub("", strip_images(text))
     if sources:
         out = NUMBERS.sub("", out)
     if rules:

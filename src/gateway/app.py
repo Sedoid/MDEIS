@@ -7,7 +7,9 @@ things and has no model code in it:
    user means 401: there is no anonymous approver. The identity comes from those headers only, never
    from anything written in the chat.
 2. It signs the approver token (five minutes) with the secret that only this service and the
-   toolbox hold, and sends it to the orchestrator beside the conversation.
+   toolbox hold, and sends it to the orchestrator beside the conversation. The token also carries
+   the school code this gateway is set up with (`GATEWAY_SCHOOL_CODE`), when there is one. The
+   school never comes from the request.
 3. It turns the orchestrator's events (`status`, `token`, `final`, `error`) into OpenAI replies,
    streaming or whole. If the orchestrator fails it says so in the chat in plain words; it never
    makes up an answer.
@@ -59,6 +61,7 @@ class Settings:
     orchestrator_key: str
     user_id_header: str
     user_name_header: str
+    school: str = ""  # the school code this gateway serves (GATEWAY_SCHOOL_CODE); "" means none
 
 
 def load_settings(env=None) -> Settings:
@@ -70,6 +73,7 @@ def load_settings(env=None) -> Settings:
         orchestrator_key=env.get("ORCHESTRATOR_API_KEY", ""),
         user_id_header=env.get("GATEWAY_USER_ID_HEADER") or USER_ID_HEADER,
         user_name_header=env.get("GATEWAY_USER_NAME_HEADER") or USER_NAME_HEADER,
+        school=(env.get("GATEWAY_SCHOOL_CODE") or "").strip(),
     )
 
 
@@ -197,7 +201,9 @@ def create_app(client_factory=None) -> FastAPI:
         if is_background(messages):
             return reply_whole(request_id, "") if not stream else stream_text(request_id, "")
         try:
-            token = approver_token.sign(settings.secret, user_id, user_name)
+            token = approver_token.sign(
+                settings.secret, user_id, user_name, school=settings.school or None
+            )
         except approver_token.TokenError:
             return JSONResponse(
                 status_code=500,
@@ -273,6 +279,7 @@ STEPS = {  # what a step is called to a person, not to a programmer
     "check_citations": "Checking the sources…",
     "resolve_issue": "Recording your answer…",
     "release_report": "Releasing the report…",
+    "class_baseline": "Counting the class…",
     "stage_gap_counts": "Counting the class…",
     "execute_sql": "Looking up a learner number…",
 }

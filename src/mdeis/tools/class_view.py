@@ -5,8 +5,10 @@ not even list it then. Switching it on is a decision for a named person after th
 pass. When it is on:
 
 * it needs a signed-in approver, and every call, allowed or refused, is in the diary;
-* it covers one school only, and answers with counts only: no names, no learner numbers, no record
-  numbers, nothing that compares one learner with another;
+* it covers one school only. When the session carries a school, a different `school_id` is refused.
+  (`class_baseline` takes the school from the session alone and is the tool the assistant uses.)
+  It answers with counts only: no names, no learner numbers, no record numbers, nothing that
+  compares one learner with another;
 * a group smaller than the rulebook's group minimum (GM-1) is not shown at all: the answer says the
   group is too small and gives neither the counts nor the size.
 
@@ -74,6 +76,8 @@ def stage_gap_counts(
         raise Refusal("class_view_locked: the class view has not been switched on")
     if ctx.approver is None:
         raise Refusal("no approver is signed in, so the class view cannot be shown")
+    if ctx.school is not None and school_id != ctx.school:
+        raise Refusal("school_mismatch: this session's school is not the school asked about")
     rules = load_rules(ctx.conn, template_version)
     if rules.min_group is None:
         raise Refusal(f"the rulebook {rules.version} sets no group minimum, so no group is shown")

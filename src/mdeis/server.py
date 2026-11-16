@@ -1,4 +1,5 @@
-"""The MDEIS MCP server (Streamable HTTP): eight tools, no model, no model key.
+"""The MDEIS MCP server (Streamable HTTP): eight tools (two more when the class view is on), no
+model and no model key.
 
 Each tool here only translates an MCP call into a call of the plain function in `mdeis.tools`.
 The two things the model must not control are read from the HTTP headers the orchestrator sets,
@@ -6,6 +7,8 @@ and never from tool arguments:
 
     X-Approver-Token   the signed-in person, signed by the gateway (mdeis.core.approver_token).
                        Missing, forged or expired: there is no approver, so acting tools refuse.
+                       It may also carry the school (`sch`); that is the only place a school comes
+                       from, and a tool that needs one refuses when it is missing.
     X-Run-Id           the run the call belongs to; the diary and the citation check group by it.
 
 Every call opens its own database connection, so no call sees another's half-finished work.
@@ -48,15 +51,25 @@ def _headers(request: Context) -> dict:
         return {}
 
 
-def _approver(headers: dict) -> Approver | None:
+def _identity(headers: dict) -> approver_token.Identity | None:
     token = headers.get(APPROVER_HEADER)
     if not token:
         return None
     try:
-        who = approver_token.verify(os.environ.get("APPROVER_TOKEN_SECRET", ""), token)
+        return approver_token.verify(os.environ.get("APPROVER_TOKEN_SECRET", ""), token)
     except approver_token.TokenError:
         return None  # a bad token is the same as no token
-    return Approver(id=who.id, name=who.name)
+
+
+def _approver(headers: dict) -> Approver | None:
+    who = _identity(headers)
+    return None if who is None else Approver(id=who.id, name=who.name)
+
+
+def _school(headers: dict) -> str | None:
+    """The school code in the verified token. No token, a bad token or an old one: None."""
+    who = _identity(headers)
+    return None if who is None else who.school
 
 
 def _run(request: Context, tool, **arguments) -> dict:
@@ -68,6 +81,7 @@ def _run(request: Context, tool, **arguments) -> dict:
             run_id=headers.get(RUN_HEADER) or f"RUN-{uuid.uuid4()}",
             approver=_approver(headers),
             database_url=url,
+            school=_school(headers),
         )
         return tool(ctx, **arguments)
 
@@ -165,6 +179,11 @@ def release_report(request: Context, report_id: str) -> dict:
 
 
 if class_view.enabled():  # locked unless CLASS_VIEW_ENABLED is switched on
+
+    @mcp.tool(description=_about(tools.class_baseline))
+    def class_baseline(request: Context, stage: str, term: int) -> dict:
+        # No school, approver, user or rulebook argument: the school is in the verified token.
+        return _run(request, tools.class_baseline, stage=stage, term=term)
 
     @mcp.tool(description=_about(tools.stage_gap_counts))
     def stage_gap_counts(

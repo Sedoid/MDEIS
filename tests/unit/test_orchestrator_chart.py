@@ -265,3 +265,15 @@ def test_nothing_is_said_when_nothing_was_assumed():
     model = FakeModel(ask("compute_trend", {"learner_id": "L-1", "skill": "Mathematics"}),
                       say("Steady."))
     assert "Assumed" not in final(run_graph(USER, model, server))["answer"]
+
+
+def test_a_finding_number_the_model_writes_is_taken_out_of_the_answer():
+    words = "Form 1 numeracy is shown for the class [CF-a1b2c3d4]. Also CF-0123abcd here."
+    out = chart_reply.compose(words, [])
+    assert "CF-" not in out
+    assert out == "Form 1 numeracy is shown for the class. Also here."
+
+
+def test_the_finding_number_pattern_does_not_touch_rule_markers_or_other_words():
+    words = "The range is [ST-4]. CF-12 is not a finding number. A CF- prefix alone stays."
+    assert chart_reply.compose(words, []) == words

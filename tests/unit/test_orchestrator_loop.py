@@ -85,13 +85,41 @@ def test_a_tool_with_an_approver_or_user_parameter_is_dropped():
 
 
 def test_the_class_view_is_offered_to_the_model_only_when_it_is_switched_on():
-    listing = [spec("stage_gap_counts"), spec("get_criterion")]
+    listing = [spec("class_baseline"), spec("stage_gap_counts"), spec("get_criterion")]
     off, _, _ = tools.bind({tools.MDEIS: listing}, ())
     on, _, _ = tools.bind({tools.MDEIS: listing}, (), True)
     assert [d["function"]["name"] for d in off] == ["get_criterion"]
-    assert {d["function"]["name"] for d in on} == {"get_criterion", "stage_gap_counts"}
+    assert {d["function"]["name"] for d in on} == {"get_criterion", "class_baseline"}
     assert load_settings({}).class_view is False
     assert load_settings({"CLASS_VIEW_ENABLED": "true"}).class_view is True
+
+
+def test_the_older_class_tool_is_never_offered_to_the_model_even_with_the_view_on():
+    listing = [spec("stage_gap_counts", {"school_id": {}, "skill": {}}), spec("class_baseline")]
+    for flag in (False, True):
+        offered, owner, dropped = tools.bind({tools.MDEIS: listing}, (), flag)
+        assert "stage_gap_counts" not in {d["function"]["name"] for d in offered}
+        assert "stage_gap_counts" not in owner and "stage_gap_counts" not in dropped
+    assert tools.CLASS_VIEW_TOOL == "class_baseline"
+
+
+def test_the_model_has_twelve_tools_with_the_view_off_and_thirteen_with_it_on():
+    full = {
+        tools.MDEIS: [*MDEIS_LISTING, spec("class_baseline"), spec("stage_gap_counts")],
+        tools.PG: [spec(n) for n in SETTINGS.pg_tools],
+    }
+    off, _, _ = tools.bind(full, SETTINGS.pg_tools, False)
+    on, _, _ = tools.bind(full, SETTINGS.pg_tools, True)
+    off_names = {d["function"]["name"] for d in off}
+    on_names = {d["function"]["name"] for d in on}
+    assert len(off) == 12 and len(on) == 13
+    assert on_names - off_names == {"class_baseline"} and off_names <= on_names
+
+
+def test_the_class_tool_has_no_school_argument_for_the_model_to_write():
+    """The server file defines it with only a stage and a term: the school is in the session."""
+    source = (ROOT / "src" / "mdeis" / "server.py").read_text(encoding="utf-8")
+    assert "def class_baseline(request: Context, stage: str, term: int) -> dict:" in source
 
 
 def test_the_model_is_never_offered_a_tool_that_takes_an_approver_in_the_real_server_listing():
@@ -115,7 +143,9 @@ def test_the_instructions_say_what_a_batch_is_how_to_list_one_and_that_a_batch_i
     assert "first_stage" in text and "stays in the batch they started with" in text
     assert "class of 2021" in text and "ask which" in text  # entered or finished: do not guess
     # a batch is a way to find learners, never a group to describe, order or compare
-    assert "as a whole" in text and "one learner at a time" in text and "class view is off" in text
+    assert "as a whole" in text and "one learner at a time" in text
+    assert "a batch is not a class" in text, "the same words whether the class view is on or off"
+    assert "class view is off" not in text and "class_baseline" not in text
     # it is what the cards show, not an enrolment date, and it can move when an older card arrives
     assert "not when the learner enrolled" in text and 'never say a learner "entered"' in text
     assert "taken from the cards held now" in text and "Every time you name a batch" in text
@@ -324,3 +354,89 @@ def test_the_system_prompt_is_a_file_that_forbids_what_the_rules_forbid():
     for required in ("never work out", "rank", "pathway", "do not call `release_report`"):
         assert required in text, required
     assert "[a-000123]" in text
+
+
+# --------------------------------------------------------------------------- the class-view notes
+PROMPTS = ROOT / "src" / "orchestrator" / "prompts"
+
+
+def test_the_main_prompt_does_not_say_whether_the_class_view_is_on():
+    text = (PROMPTS / "system.md").read_text(encoding="utf-8")
+    assert "class_baseline" not in text and "stage_gap_counts" not in text
+    assert "class view is off" not in text and "class view is on" not in text
+
+
+def test_the_prompt_is_the_main_text_plus_the_note_the_flag_chooses():
+    main = (PROMPTS / "system.md").read_text(encoding="utf-8")
+    off_note = (PROMPTS / "class_view_off.md").read_text(encoding="utf-8")
+    on_note = (PROMPTS / "class_view_on.md").read_text(encoding="utf-8")
+    assert loop.system_prompt(class_view=False) == main + off_note
+    assert loop.system_prompt(class_view=True) == main + on_note
+    assert loop.system_prompt() == loop.system_prompt(class_view=False), "off is the default"
+    graph_note = (PROMPTS / "graph_note.md").read_text(encoding="utf-8")
+    assert loop.system_prompt(graph=True, class_view=True) == main + graph_note + on_note
+    assert loop.system_prompt(graph=True, class_view=False) == main + graph_note + off_note
+
+
+def test_the_off_note_says_the_view_is_off_and_names_no_class_tool():
+    text = loop.system_prompt(class_view=False)
+    assert "class view is off" in text
+    assert "class_baseline" not in text
+    note = (PROMPTS / "class_view_off.md").read_text(encoding="utf-8")
+    assert "one learner at a time" in note and "offer to look at one learner" in note.lower()
+
+
+def test_the_on_note_tells_the_model_how_to_use_the_class_tool_and_what_it_must_never_do():
+    on = loop.system_prompt(class_view=True)
+    note = (PROMPTS / "class_view_on.md").read_text(encoding="utf-8")
+    assert "class view is off" not in on
+    assert "`class_baseline`" in note and "stage and the term" in note
+    # no school, version or person is named by the model
+    assert "never" in note.lower() and "school" in note.lower()
+    lowered = note.lower()
+    for required in (
+        "never write a count that is hidden",   # a hidden count
+        "never list or name learners",           # no names
+        "never rank",                            # no ranking
+        "never compare",                         # no comparing learners
+        "pathway",                               # no pathway
+        "not enough evidence",                   # say so plainly
+        "withheld",                              # coverage withheld when counts are hidden
+        "school year",                           # the year is named
+        "rulebook version",                      # the version is named
+        "`cf-`",                                 # finding numbers are not printed
+    ):
+        assert required in lowered, required
+
+
+def test_the_on_note_forbids_the_old_tool_and_a_class_view_for_a_batch():
+    note = (PROMPTS / "class_view_on.md").read_text(encoding="utf-8").lower()
+    assert "stage_gap_counts" not in note
+    assert "batch" in note and "not a class" in note
+
+
+def test_neither_note_holds_a_number_a_school_name_or_a_banned_word():
+    for name in ("class_view_on.md", "class_view_off.md"):
+        text = (PROMPTS / name).read_text(encoding="utf-8")
+        assert not re.search(r"\d", text), name + ": a number the model could copy"
+        assert "OCC" not in text and "Outliers" not in text
+
+
+def test_the_graph_mode_asks_for_the_same_note_as_the_plain_loop():
+    source = (ROOT / "src" / "orchestrator" / "graph.py").read_text(encoding="utf-8")
+    assert "loop.system_prompt(graph=True, class_view=settings.class_view)" in source
+    plain = (ROOT / "src" / "orchestrator" / "loop.py").read_text(encoding="utf-8")
+    assert "system_prompt(class_view=settings.class_view)" in plain
+
+
+def test_a_run_gives_the_model_the_note_for_the_flag_and_the_class_tool_only_when_on():
+    listing = [*MDEIS_LISTING, spec("class_baseline"), spec("stage_gap_counts")]
+    for flag, expect in (("true", True), ("false", False)):
+        settings = load_settings({**ENV, "CLASS_VIEW_ENABLED": flag})
+        model = FakeModel(say("ok"))
+        run(user("How is Form 1 doing?"), model, FakeServer(listing), settings=settings)
+        system = model.seen[0][0][0]["content"]
+        offered = {d["function"]["name"] for d in model.seen[0][1]}
+        assert ("`class_baseline`" in system) is expect
+        assert ("class view is off" in system) is (not expect)
+        assert ("class_baseline" in offered) is expect and "stage_gap_counts" not in offered

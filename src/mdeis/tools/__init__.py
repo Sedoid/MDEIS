@@ -1,8 +1,9 @@
-"""The eight tools. Each is a plain function `tool(ctx, **arguments)`. The server wraps them.
+"""The tools. Each is a plain function `tool(ctx, **arguments)`. The server wraps them.
 
 The approver is in `ctx`, set from the verified token. No tool takes one as an argument.
 """
 
+from .baseline import class_baseline
 from .chart import make_chart
 from .citations import check_citations
 from .class_view import stage_gap_counts
@@ -14,6 +15,7 @@ from .resolve import resolve_issue
 from .trend import compute_trend
 
 __all__ = [
+    "class_baseline",
     "check_citations",
     "compute_trend",
     "draft_summary",

@@ -364,6 +364,7 @@ POWERS = {
     "processes": ["subprocess", "sys", "multiprocessing", "threading", "ctypes"],
     "tools": [
         "ingest_assessments", "resolve_issue", "get_criterion", "compute_trend", "stage_gap_counts",
+        "class_baseline",
         "draft_summary", "check_citations", "make_chart", "release_report", "compute_measure",
         "list_measures",
     ],

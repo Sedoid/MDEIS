@@ -7,7 +7,7 @@ module holds no school value. It finds each rule by the field it carries (the ru
 ID of each rule so results can cite it.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from fractions import Fraction
 
 from .numbers import exact
@@ -37,6 +37,15 @@ class Rules:
     clause: dict  # purpose -> clause id: evidence, move, missing, gap_direction, stage_weights,
     #               window_average, skill_value, gap, and group_minimum when the rulebook has one
     min_group: int | None = None  # the smallest group a class view may show (GM-1), if set
+    # The class-view rules (GM-2, GM-3). All None in a rulebook that has none; the class view then
+    # refuses. `clause` gains "cell_minimum" and "complementary" when they are present.
+    min_cell: int | None = None  # a count above 0 and below this is hidden (GM-2)
+    bin_order: list | None = None  # the five bins in the order they are shown (GM-3)
+    complementary: str | None = None  # how a hidden count's partner is chosen (GM-3)
+    coverage_when_hidden: str | None = None  # what happens to coverage when a count is hidden
+    foundation_areas: list = field(default_factory=list)  # in the template's order
+    level_clause: dict = field(default_factory=dict)  # level name -> LV clause id
+    level_statement: dict = field(default_factory=dict)  # level name -> the template's statement
 
 
 def _find(rules, field):
@@ -68,7 +77,11 @@ def rules_from_content(content: dict, version: str, sha256: str) -> Rules:
         banned = _find(content["wording"], "banned")
     except (KeyError, IndexError) as e:
         raise RulebookProblem(f"the rulebook {version} lacks a section: {e}") from e
-    group = next((r for r in content.get("group_minimum") or [] if r.get("min_group_size")), None)
+    group_rules = content.get("group_minimum") or []
+    group = next((r for r in group_rules if r.get("min_group_size")), None)
+    cell = next((r for r in group_rules if r.get("min_cell_size")), None)
+    complementary = next((r for r in group_rules if r.get("complementary_suppression")), None)
+    levels = content.get("levels") or []
     return Rules(
         version=version,
         sha256=sha256,
@@ -98,8 +111,17 @@ def rules_from_content(content: dict, version: str, sha256: str) -> Rules:
             "skill_value": skill_value["id"],
             "gap": gap["id"],
             **({"group_minimum": group["id"]} if group else {}),
+            **({"cell_minimum": cell["id"]} if cell else {}),
+            **({"complementary": complementary["id"]} if complementary else {}),
         },
         min_group=int(group["min_group_size"]) if group else None,
+        min_cell=int(cell["min_cell_size"]) if cell else None,
+        bin_order=list(complementary["bin_order"]) if complementary else None,
+        complementary=complementary["complementary_suppression"] if complementary else None,
+        coverage_when_hidden=complementary.get("coverage_when_hidden") if complementary else None,
+        foundation_areas=list(content.get("foundation_areas") or []),
+        level_clause={lv["name"]: lv["id"] for lv in levels},
+        level_statement={lv["name"]: lv["statement"] for lv in levels},
     )
 
 

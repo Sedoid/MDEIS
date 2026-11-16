@@ -39,6 +39,20 @@ SECTION_AREAS: dict[str, str] = {
     "group_minimum": "GM",
 }
 
+# The five counts a class view shows for a learning area. Schema, not a school rule: the code
+# knows these five and no others; the template (GM-3) says in what order they are shown.
+BIN_NAMES: tuple[str, ...] = (
+    "below_expected_range",
+    "within_expected_range",
+    "above_expected_range",
+    "not_enough_evidence",
+    "blocked",
+)
+
+# The one way the template may say a small count's partner is chosen (GM-3). The code that applies
+# it is in mdeis.core.class_baseline; the name says what it does.
+COMPLEMENTARY_METHOD = "smallest_shown_above_zero_then_first_in_order"
+
 # Scale types the loader understands. Anything else is rejected.
 SCALE_TYPES: tuple[str, ...] = ("out_of",)
 
@@ -221,7 +235,24 @@ class WordingRule(_Rule):
 
 
 class GroupMinimumRule(_Rule):
+    """GM-1 sets the smallest group that may be shown. GM-2 and GM-3 are the class-view rules: the
+    smallest count that may be shown, and what is hidden along with a small count. They come
+    together or not at all (checked on the whole template)."""
+
     min_group_size: PosInt | None = None
+    min_cell_size: PosInt | None = None
+    complementary_suppression: Literal[COMPLEMENTARY_METHOD] | None = None
+    bin_order: list[Name] | None = None
+    coverage_when_hidden: Literal["withheld"] | None = None
+
+    @model_validator(mode="after")
+    def _bins(self) -> GroupMinimumRule:
+        if self.bin_order is not None and sorted(self.bin_order) != sorted(BIN_NAMES):
+            raise ValueError(
+                f"bin_order of {self.id} must be the five names {', '.join(BIN_NAMES)}, "
+                "each once, in the order the class view shows them"
+            )
+        return self
 
 
 class Institution(_Model):
@@ -297,6 +328,7 @@ class Template(_Model):
         self._check_stages(max_score)
         self._check_stage_weights()
         self._check_required_params()
+        self._check_class_view_rules()
         self._check_dates_and_window(max_score)
         return self
 
@@ -449,6 +481,35 @@ class Template(_Model):
                     raise ValueError(f"no {section} rule sets {param}")
                 if len(setters) != 1:
                     raise ValueError(f"{param} is set by both {setters[0]} and {setters[1]}")
+
+    def _check_class_view_rules(self) -> None:
+        """GM-2 and GM-3 together or not at all, each parameter set once, and a cell never larger
+        than the smallest group that may be shown."""
+        params = ("min_cell_size", "complementary_suppression", "bin_order", "coverage_when_hidden")
+        setters = {
+            p: [r.id for r in self.group_minimum if getattr(r, p) is not None] for p in params
+        }
+        if not any(setters.values()):
+            return  # an older rulebook: no class view
+        for param in params:
+            if not setters[param]:
+                raise ValueError(f"no group_minimum rule sets {param}")
+            if len(setters[param]) != 1:
+                raise ValueError(
+                    f"{param} is set by both {setters[param][0]} and {setters[param][1]}"
+                )
+        together = {setters[p][0] for p in params[1:]}
+        if len(together) != 1:
+            raise ValueError(
+                "complementary_suppression, bin_order and coverage_when_hidden must be set by "
+                f"the same rule, but are set by {', '.join(sorted(together))}"
+            )
+        cell = next(r.min_cell_size for r in self.group_minimum if r.min_cell_size is not None)
+        group = next(r.min_group_size for r in self.group_minimum if r.min_group_size is not None)
+        if cell > group:
+            raise ValueError(
+                f"min_cell_size ({cell}) must not be larger than min_group_size ({group})"
+            )
 
     # -- reading the template ---------------------------------------------------------------------
 

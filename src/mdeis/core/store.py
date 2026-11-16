@@ -39,6 +39,17 @@ def sync_issues(conn, learner_id, issues, run_id) -> None:
         issue["issue_id"] = row[0]
 
 
+def attach_issue_ids(conn, issues) -> None:
+    """The read-only twin of `sync_issues`: sets issue["issue_id"] for a problem already saved, and
+    None for one not saved yet. It writes nothing. A problem that is not saved has no answer, so
+    None is right for it."""
+    for issue in issues:
+        row = conn.execute(
+            "SELECT issue_id FROM issues WHERE fingerprint = %s", (issue["fingerprint"],)
+        ).fetchone()
+        issue["issue_id"] = row[0] if row else None
+
+
 def load_answers(conn, learner_id) -> dict:
     """The latest answer to each of the learner's problems: {issue_id: {...}}."""
     rows = conn.execute(

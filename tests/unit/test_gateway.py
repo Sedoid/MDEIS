@@ -224,6 +224,91 @@ def test_a_missing_display_name_falls_back_to_the_id(make):
     assert approver_token.verify(SECRET, token).name == "u-ada"
 
 
+def test_the_class_tool_has_a_plain_progress_line_and_the_old_one_keeps_its_own():
+    assert gateway.STEPS["class_baseline"] == "Counting the class…"
+    assert gateway.STEPS["stage_gap_counts"] == "Counting the class…"
+    assert gateway.progress_words("Used class_baseline.") == "Counting the class…"
+    assert "class_baseline" not in gateway.progress_words("Used class_baseline.")
+
+
+def test_a_class_step_is_shown_in_plain_words_while_the_agent_works(make):
+    working = events(
+        ("status", {"text": "Used class_baseline."}),
+        ("final", {"answer": "Done.", "tools": [], "run_id": "R"}),
+    )
+    response = post(make(Orchestrator(working)), {**BODY, "stream": True})
+    assert reasoning_of(response) == ["Counting the class…\n"]
+
+
+# --------------------------------------------------------------------------- the school claim
+def school_of(orchestrator):
+    sent = json.loads(orchestrator.runs()[0].content)
+    return approver_token.verify(SECRET, sent["approver_token"]).school
+
+
+def claim_keys(orchestrator):
+    import base64
+
+    text = json.loads(orchestrator.runs()[0].content)["approver_token"].split(".")[0]
+    return set(json.loads(base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))))
+
+
+def test_the_token_carries_the_school_code_the_gateway_is_set_up_with(make, monkeypatch):
+    monkeypatch.setenv("GATEWAY_SCHOOL_CODE", "OCC")
+    orchestrator = Orchestrator()
+    post(make(orchestrator))
+    assert school_of(orchestrator) == "OCC"
+    assert "sch" in claim_keys(orchestrator)
+
+
+def test_with_no_school_code_set_the_token_has_no_school_claim_and_chat_still_works(
+    make, monkeypatch
+):
+    monkeypatch.delenv("GATEWAY_SCHOOL_CODE", raising=False)
+    orchestrator = Orchestrator()
+    response = post(make(orchestrator))
+    assert response.status_code == 200
+    assert school_of(orchestrator) is None
+    assert "sch" not in claim_keys(orchestrator)
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_an_empty_school_code_is_the_same_as_none_set(make, monkeypatch, value):
+    monkeypatch.setenv("GATEWAY_SCHOOL_CODE", value)
+    orchestrator = Orchestrator()
+    assert post(make(orchestrator)).status_code == 200
+    assert school_of(orchestrator) is None
+
+
+def test_the_school_code_is_trimmed(make, monkeypatch):
+    monkeypatch.setenv("GATEWAY_SCHOOL_CODE", "  OCC ")
+    orchestrator = Orchestrator()
+    post(make(orchestrator))
+    assert school_of(orchestrator) == "OCC"
+
+
+def test_a_school_written_in_the_body_or_a_header_cannot_change_the_claim(make, monkeypatch):
+    lies = {"school": "ZZZ", "school_id": "ZZZ", "sch": "ZZZ", "messages": BODY["messages"]}
+    headers = {**SIGNED_IN, "X-School": "ZZZ", "school": "ZZZ", "X-OpenWebUI-School": "ZZZ"}
+    monkeypatch.delenv("GATEWAY_SCHOOL_CODE", raising=False)
+    none_set = Orchestrator()
+    post(make(none_set), lies, headers)
+    assert school_of(none_set) is None, "nothing a person sends can give a session a school"
+    monkeypatch.setenv("GATEWAY_SCHOOL_CODE", "OCC")
+    set_up = Orchestrator()
+    post(make(set_up), lies, headers)
+    assert school_of(set_up) == "OCC"
+
+
+def test_the_message_to_the_orchestrator_has_the_same_fields_with_a_school_set(make, monkeypatch):
+    monkeypatch.setenv("GATEWAY_SCHOOL_CODE", "OCC")
+    orchestrator = Orchestrator()
+    post(make(orchestrator))
+    sent = json.loads(orchestrator.runs()[0].content)
+    assert set(sent) == {"conversation_id", "messages", "approver_token"}, "no school field"
+    assert "OCC" not in json.dumps(sent["messages"])
+
+
 # --------------------------------------------------------------------------- the replies
 def test_a_whole_reply_has_the_openai_shape_and_the_final_answer(make):
     response = post(make(Orchestrator()))

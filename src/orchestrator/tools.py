@@ -19,7 +19,9 @@ MDEIS_TOOLS = (
     "release_report",
 )
 APPROVER_LIKE = {"approver", "approver_id", "approver_name", "user", "user_id", "by"}
-CLASS_VIEW_TOOL = "stage_gap_counts"  # offered only when the class view is switched on
+# Offered only when the class view is switched on. It takes a stage and a term: the school is in
+# the signed session. The older `stage_gap_counts` takes a school argument and is never offered.
+CLASS_VIEW_TOOL = "class_baseline"
 MDEIS = "mdeis"
 PG = "pg"
 

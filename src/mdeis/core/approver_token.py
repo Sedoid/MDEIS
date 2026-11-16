@@ -4,11 +4,13 @@ The gateway signs it with a secret that only the gateway and the toolbox hold. T
 the signature and the expiry, and reads the approver from it. It is never a tool argument, and the
 AI writer never sees it. Standard library only.
 
-    token = sign(secret, "u-12", "Ada Teacher")        # the gateway
+    token = sign(secret, "u-12", "Ada Teacher", school="OCC")   # the gateway
     who = verify(secret, token)                         # the toolbox: Identity, or TokenError
 
 A token is `<payload>.<signature>`: the payload is JSON (user id, display name, expiry, a one-time
-number) in URL-safe base64, and the signature is HMAC-SHA256 of that text.
+number, and optionally the school code `sch`) in URL-safe base64, and the signature is HMAC-SHA256
+of that text. The school is written only when the gateway has one; a token without it is still a
+good token and gives `school = None`. A `sch` that is present but not a non-empty string is refused.
 """
 
 import base64
@@ -30,6 +32,7 @@ class TokenError(ValueError):
 class Identity(NamedTuple):
     id: str
     name: str
+    school: str | None = None
 
 
 def _b64(raw: bytes) -> str:
@@ -44,11 +47,19 @@ def _signature(secret: str, payload: str) -> str:
     return _b64(hmac.new(secret.encode("utf-8"), payload.encode("ascii"), hashlib.sha256).digest())
 
 
-def sign(secret, user_id, name, *, now=None, lifetime=TOKEN_LIFETIME_SECONDS, nonce=None) -> str:
+def _valid_school(school) -> bool:
+    return isinstance(school, str) and bool(school.strip())
+
+
+def sign(
+    secret, user_id, name, *, school=None, now=None, lifetime=TOKEN_LIFETIME_SECONDS, nonce=None
+) -> str:
     if not secret:
         raise TokenError("no signing secret")
     if not user_id or not name:
         raise TokenError("a token needs a user id and a name")
+    if school is not None and not _valid_school(school):
+        raise TokenError("a token's school must be a non-empty string")
     issued = time.time() if now is None else now
     body = {
         "uid": user_id,
@@ -56,6 +67,8 @@ def sign(secret, user_id, name, *, now=None, lifetime=TOKEN_LIFETIME_SECONDS, no
         "exp": int(issued) + int(lifetime),
         "nonce": nonce or secrets.token_urlsafe(),
     }
+    if school is not None:
+        body["sch"] = school
     payload = _b64(json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8"))
     return payload + "." + _signature(secret, payload)
 
@@ -77,4 +90,7 @@ def verify(secret, token, *, now=None) -> Identity:
         raise TokenError("the token is missing a field")
     if (time.time() if now is None else now) >= expires:
         raise TokenError("expired")
-    return Identity(uid, name)
+    school = body.get("sch")
+    if "sch" in body and not _valid_school(school):
+        raise TokenError("the token's school is not a non-empty string")
+    return Identity(uid, name, school)

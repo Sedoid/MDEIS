@@ -25,14 +25,21 @@ from .model import ModelError
 
 PROMPT_FILE = Path(__file__).parent / "prompts" / "system.md"
 GRAPH_NOTE = Path(__file__).parent / "prompts" / "graph_note.md"
+CLASS_VIEW_NOTES = {
+    True: Path(__file__).parent / "prompts" / "class_view_on.md",
+    False: Path(__file__).parent / "prompts" / "class_view_off.md",
+}
 CHUNK_WORDS = 8  # words to a `token` event
 KEPT_ROLES = ("user", "assistant")  # the service writes its own system prompt
 
 
-def system_prompt(graph: bool = False) -> str:
-    """Our system prompt. In graph mode a short note says which steps the system does itself."""
+def system_prompt(graph: bool = False, class_view: bool = False) -> str:
+    """Our system prompt. The main text does not say whether the class view is on: a short note
+    chosen by the flag does. In graph mode another note says which steps the system does itself."""
     text = PROMPT_FILE.read_text(encoding="utf-8")
-    return text + GRAPH_NOTE.read_text(encoding="utf-8") if graph else text
+    if graph:
+        text += GRAPH_NOTE.read_text(encoding="utf-8")
+    return text + CLASS_VIEW_NOTES[bool(class_view)].read_text(encoding="utf-8")
 
 
 def event(name: str, **data) -> dict:
@@ -105,7 +112,9 @@ async def run(*, messages: list, token: str | None, run_id: str, settings, model
         return
     listed = {name: await server.list_tools() for name, server in servers.items()}
     definitions, owner, _dropped = tools.bind(listed, settings.pg_tools, settings.class_view)
-    conversation = [{"role": "system", "content": system_prompt()}]
+    conversation = [
+        {"role": "system", "content": system_prompt(class_view=settings.class_view)}
+    ]
     conversation += conversation_from(messages, token)
     called, drafted, charts, sources, rules, assumed = [], set(), [], [], [], []
     for step in range(settings.max_steps):

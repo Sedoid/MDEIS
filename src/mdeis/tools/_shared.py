@@ -29,13 +29,22 @@ class Situation:
     records: list  # the records the tools use, answers applied
 
 
-def situation(ctx: ToolContext, learner_id: str, template_version: str | None) -> Situation:
+def situation(
+    ctx: ToolContext, learner_id: str, template_version: str | None, sync: bool = True
+) -> Situation:
+    """Everything worked out about one learner. With `sync=False` nothing is written: the problems
+    found are not saved as issue rows (a read of many learners, such as the class view, must not
+    write). The numbers are the same either way, because a saved answer is found by the problem's
+    fingerprint."""
     if not store.learner_exists(ctx.conn, learner_id):
         raise Refusal(f"there is no learner {learner_id}")
     rules = load_rules(ctx.conn, template_version)
     cards = load_cards(ctx.conn, learner_id)
     issues = detect(learner_id, cards, rules)
-    store.sync_issues(ctx.conn, learner_id, issues, ctx.run_id)
+    if sync:
+        store.sync_issues(ctx.conn, learner_id, issues, ctx.run_id)
+    else:
+        store.attach_issue_ids(ctx.conn, issues)
     answers = store.load_answers(ctx.conn, learner_id)
     return Situation(
         learner_id=learner_id,
