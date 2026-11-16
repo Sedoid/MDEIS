@@ -1,8 +1,9 @@
 """The portal's only database access: add a document, and read documents back.
 
-It connects as `portal_app`, which may INSERT and SELECT on `documents`, SELECT on `document_issues`
-and SELECT on three columns of `report_cards` (document, school year, stage), and nothing else. The
-queries are plain functions of a connection, so a test can run them inside a transaction.
+It connects as `portal_app`, which may INSERT and SELECT on `documents`, SELECT on
+`document_issues`, SELECT on three columns of `report_cards` (document, school year, stage) and on
+the `card_batches` view (document, batch), and nothing else. The queries are plain functions of a
+connection, so a test can run them inside a transaction.
 """
 
 from __future__ import annotations
@@ -13,9 +14,12 @@ from psycopg.rows import dict_row
 SHOWN = (
     "d.document_id, d.kind, d.original_name, d.status, d.failure_kind, d.failure_detail, "
     "d.failure_page, d.failure_row, d.duplicate_of, d.uploader_name, d.created_at, d.finished_at, "
-    "d.acknowledged_by, d.acknowledged_at, d.active, rc.stage, rc.academic_year"
+    "d.acknowledged_by, d.acknowledged_at, d.active, rc.stage, rc.academic_year, cb.batch"
 )
-FROM = "documents d LEFT JOIN report_cards rc ON rc.document_id = d.document_id"
+FROM = (
+    "documents d LEFT JOIN report_cards rc ON rc.document_id = d.document_id "
+    "LEFT JOIN card_batches cb ON cb.document_id = d.document_id"
+)
 # A card that could not be read, and was later read from the same file, is not a problem any more.
 NOT_SUPERSEDED = (
     "NOT (d.status = 'failed' AND EXISTS (SELECT 1 FROM documents o WHERE o.kind = d.kind "

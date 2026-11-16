@@ -193,6 +193,15 @@ td .btn { min-height: 2rem; padding: 0.25rem 0.8rem; font-size: 0.85rem; }
 .group[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .group .table-wrap { border-top: 0; border-top-left-radius: 0; border-top-right-radius: 0;
                      box-shadow: none; }
+.batch { margin: 0 0 1rem; }
+.batch > summary { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+                   padding: 0.4rem 0.2rem; color: var(--ink); font-size: 1.05rem; list-style: none;
+                   cursor: pointer; border-bottom: 2px solid var(--line); margin-bottom: 0.75rem; }
+.batch > summary::-webkit-details-marker { display: none; }
+.batch > summary::before { content: "\203A"; margin-right: 0.6rem; color: var(--muted);
+                           transition: transform 150ms; display: inline-block; }
+.batch[open] > summary::before { transform: rotate(90deg); }
+.batch > summary .g-title { flex: 1; }
 .g-title { font-weight: 600; }
 .g-count { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
 .folder-line { margin: 0.5rem 0 0; font-size: 0.875rem; color: var(--muted); }

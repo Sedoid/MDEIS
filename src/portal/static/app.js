@@ -343,7 +343,7 @@ function renderMethod(state, documents) {
     : "Choose a PDF or Markdown file or drop it here";
 }
 
-// ---- the files, grouped by class and school year -------------------------------------------------
+// ---- the files, grouped by batch, then class and school year -------------------------------------
 function groupOf(doc) {
   if (doc.status === "pending" || doc.status === "processing") {
     return { key: "~reading", title: "Being read", rank: 0, open: true };
@@ -359,12 +359,12 @@ function groupOf(doc) {
   }
   const year = doc.academic_year || "";
   return { key: doc.stage + "|" + year, title: doc.stage + " · " + yearShort(year), rank: 5,
-    open: null, year, stage: doc.stage };
+    open: null, year, stage: doc.stage, batch: doc.batch || "" };
 }
 
-function byGroup(a, b) {
+function byGroup(a, b) {  // inside a batch the oldest school year comes first
   if (a.rank !== b.rank) return a.rank - b.rank;
-  if (a.year !== b.year) return a.year < b.year ? 1 : -1;
+  if (a.year !== b.year) return a.year < b.year ? -1 : 1;
   return (a.stage || "").localeCompare(b.stage || "", undefined, { numeric: true });
 }
 
@@ -416,6 +416,38 @@ function groupBox(group, wanted) {
   return box;
 }
 
+// A batch is the school year of a learner's first report card on file (a filing label, not a rule).
+// The newest batch is shown first. A card with no batch is listed last, under its own heading.
+function batchesOf(groups) {
+  const found = new Map();
+  for (const group of groups) {
+    if (!found.has(group.batch)) found.set(group.batch, []);
+    found.get(group.batch).push(group);
+  }
+  const named = [...found.keys()].filter((name) => name).sort().reverse();
+  return (found.has("") ? [...named, ""] : named).map((name) => ({ name, groups: found.get(name) }));
+}
+
+function batchBox(batch, wanted, only) {
+  const key = "batch|" + batch.name;
+  const box = document.createElement("details");
+  box.className = "batch";
+  const initially = only || wanted;
+  box.open = choices.has(key) ? choices.get(key) : initially;
+  const cards = batch.groups.reduce((sum, g) => sum + g.docs.length, 0);
+  const summary = document.createElement("summary");
+  summary.appendChild(text("span", batch.name ? "Batch " + yearShort(batch.name) : "Batch not known",
+    "g-title"));
+  summary.appendChild(text("span", cards + (cards === 1 ? " card" : " cards"), "g-count"));
+  box.appendChild(summary);
+  for (const group of [...batch.groups].sort(byGroup)) box.appendChild(groupBox(group, wanted));
+  box.addEventListener("toggle", () => {
+    if (box.open === initially) choices.delete(key);
+    else choices.set(key, box.open);
+  });
+  return box;
+}
+
 function renderFiles(documents) {
   const cards = documents.filter((doc) => doc.kind === "results");
   const groups = new Map();
@@ -425,10 +457,14 @@ function renderFiles(documents) {
     groups.get(found.key).docs.push(doc);
   }
   const ordered = [...groups.values()].sort(byGroup);
-  const few = ordered.filter((g) => g.rank === 5).length <= 3;
+  const read = ordered.filter((g) => g.rank === 5);
+  const few = read.length <= 3;
+  const batches = batchesOf(read);
   const area = $("groups");
   area.replaceChildren();
-  for (const group of ordered) area.appendChild(groupBox(group, group.open === null ? few : group.open));
+  for (const group of ordered.filter((g) => g.rank < 5)) area.appendChild(groupBox(group, group.open));
+  for (const batch of batches) area.appendChild(batchBox(batch, few, batches.length === 1));
+  for (const group of ordered.filter((g) => g.rank > 5)) area.appendChild(groupBox(group, group.open));
   const count = (status) => cards.filter((d) => d.status === status).length;
   const waiting = count("pending") + count("processing");
   const parts = [cards.length + (cards.length === 1 ? " file" : " files"), count("done") + " read"];

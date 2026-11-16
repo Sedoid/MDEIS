@@ -136,3 +136,19 @@ def test_a_document_detail_lists_what_changed_or_went_wrong(db):
     found = store.document_detail(AsDicts(db), doc)
     assert found["issues"] == [{"kind": "section_changed", "ref_id": "M-6.4", "page": None,
                                 "row": None, "detail": "the wording of 6.4 changed"}]
+
+
+def test_every_card_of_a_learner_carries_the_batch_of_their_first_card_even_after_a_repeat(db):
+    learner = make_learner(db, "TEST", "T/repeater")
+    for i, (year, stage) in enumerate([("2021/2022", "Form 1"), ("2022/2023", "Form 2"),
+                                       ("2023/2024", "Form 2")]):
+        doc = make_document(db, original_name=f"r{i}.pdf", status="done", sha256=f"{i + 1:064x}")
+        db.execute(
+            "INSERT INTO report_cards (document_id, learner_id, academic_year, stage) "
+            "VALUES (%s, %s, %s, %s)", (doc, learner, year, stage))
+    card(db, "later-batch.pdf", "2023/2024", "Form 1", sha="7" * 64)
+    make_document(db, original_name="waiting.pdf", status="pending", sha256="8" * 64)
+    rows = {r["original_name"]: r for r in store.list_documents(AsDicts(db))}
+    assert [rows[f"r{i}.pdf"]["batch"] for i in range(3)] == ["2021/2022"] * 3
+    assert rows["later-batch.pdf"]["batch"] == "2023/2024"
+    assert rows["waiting.pdf"]["batch"] is None

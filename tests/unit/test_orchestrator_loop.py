@@ -108,6 +108,19 @@ def test_the_instructions_say_how_to_find_a_learner_by_name_and_not_to_guess():
     assert "Never write out a name you did not get" in text
 
 
+def test_the_instructions_say_what_a_batch_is_how_to_list_one_and_that_a_batch_is_not_assessed():
+    text = (ROOT / "src" / "orchestrator" / "prompts" / "system.md").read_text(encoding="utf-8")
+    assert "first report card on file" in text and "'2021/2022'" in text
+    assert "FROM learner_batches WHERE batch =" in text and "ORDER BY school_ref" in text
+    assert "first_stage" in text and "stays in the batch they started with" in text
+    assert "class of 2021" in text and "ask which" in text  # entered or finished: do not guess
+    # a batch is a way to find learners, never a group to describe, order or compare
+    assert "as a whole" in text and "one learner at a time" in text and "class view is off" in text
+    # it is what the cards show, not an enrolment date, and it can move when an older card arrives
+    assert "not when the learner enrolled" in text and 'never say a learner "entered"' in text
+    assert "taken from the cards held now" in text and "Every time you name a batch" in text
+
+
 # --------------------------------------------------------------------------- the tool loop
 def test_a_tool_the_model_asks_for_is_called_and_its_result_is_given_back():
     server = FakeServer(MDEIS_LISTING, {"compute_trend": {"status": "ok", "trend": "declining"}})
