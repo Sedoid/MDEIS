@@ -1,0 +1,22 @@
+[
+  {"id": "F-01", "scenario": "Grades 6, 7, 8, 8 in one subject", "expected": "Improving (Δg = +2, no fall of 2 or more)"},
+  {"id": "F-02", "scenario": "Grades 7, 8, 7, 7", "expected": "Relatively stable (range 1)"},
+  {"id": "F-03", "scenario": "Grades 6, 8, 5, 6", "expected": "Fluctuating"},
+  {"id": "F-04", "scenario": "Grades 7, 9, 8, 7", "expected": "Unresolved pattern: grades shown, no label"},
+  {"id": "F-05", "scenario": "Only two valid grades, 7 and 8", "expected": "Insufficient evidence"},
+  {"id": "F-06", "scenario": "Grades 7, not assessed, 8, 8", "expected": "Three valid grades, one gap permitted. Δg = +1, range 1: Relatively stable. The missing grade is not treated as zero"},
+  {"id": "F-07", "scenario": "Request to average a Mathematics 8 and a Biology 6", "expected": "Declined: no average is defined. Grades shown separately"},
+  {"id": "F-08", "scenario": "Request to convert grade 5 into a score out of 20", "expected": "Blocked: no approved conversion exists"},
+  {"id": "F-09", "scenario": "Grade 9 end-of-year grade 8, then an upper secondary Year 1 course grade 7", "expected": "No trend across the boundary. The two sets of grades are analysed separately"},
+  {"id": "F-10", "scenario": "Course grade 5 retaken, new grade 7", "expected": "Course grade is 7. Original 5 stays visible and the retake is flagged"},
+  {"id": "F-11", "scenario": "Competence moves from Emerging to Developing", "expected": "Narrative only. No number and no trend label"},
+  {"id": "F-12", "scenario": "Cohort of 40 with 34 valid grades", "expected": "Coverage 85%, report allowed. Show 34 and the 6 excluded"},
+  {"id": "F-13", "scenario": "Cohort of 40 with 30 valid grades", "expected": "Coverage 75%, below 80%: limited result with the limitation stated"},
+  {"id": "F-14", "scenario": "Group of 9 learners", "expected": "Statistics suppressed. Suppression recorded without revealing values"},
+  {"id": "F-15", "scenario": "Group of 12 with a subgroup of 3", "expected": "Subgroup suppressed, and a complementary cell suppressed so it cannot be recovered by subtraction"},
+  {"id": "F-16", "scenario": "Same records and configuration processed twice", "expected": "Identical results and labels both times"},
+  {"id": "W-1", "scenario": "Grades 6, 7, 8, 8", "expected": "Δg = +2, no consecutive fall of 2 or more. Label: Improving."},
+  {"id": "W-2", "scenario": "Grades 7, 8, 7, 7", "expected": "range 1. Label: Relatively stable."},
+  {"id": "W-3", "scenario": "Grades 6, 8, 5, 6", "expected": "Δg = 0, a rise of 2 and a fall of 3. Label: Fluctuating."},
+  {"id": "W-4", "scenario": "Grades 7, 9, 8, 7", "expected": "Δg = 0, range 2, a rise of 2 but no fall of 2. Label: Unresolved pattern, so the grades are shown with no label."}
+]
