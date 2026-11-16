@@ -16,6 +16,13 @@ services:
       ORCHESTRATOR_URL: http://orchestrator:8300
       ORCHESTRATOR_API_KEY: ${ORCHESTRATOR_API_KEY:?set ORCHESTRATOR_API_KEY in .env}
       MDEIS_MCP_URL: http://mdeis-mcp:8100/mcp
+      # The school every signed token carries (the class view reads it from the session). Empty
+      # means no school, and the class view then refuses.
+      GATEWAY_SCHOOL_CODE: ${GATEWAY_SCHOOL_CODE:-}
+      # The lesson page's human-only routes. HUMAN_ROUTE_KEY is the same value the tool server holds;
+      # GATEWAY_PORTAL_KEY is what the portal presents to the gateway. Unset, those routes answer 503.
+      HUMAN_ROUTE_KEY: ${HUMAN_ROUTE_KEY:-}
+      GATEWAY_PORTAL_KEY: ${GATEWAY_PORTAL_KEY:-}
     networks: [edge, agent]
     depends_on:
       orchestrator:

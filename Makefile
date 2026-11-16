@@ -30,7 +30,7 @@ SERVICE_FILES := $(filter-out %.dev.yml,$(SERVICE_FILES))
 endif
 COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yml $(addprefix -f ,$(SERVICE_FILES))
 
-.PHONY: help env-init env-sync check-env check-docker models dev-config dev-build dev-up dev-down up down dev-ps \
+.PHONY: help env-init env-sync check-env check-docker models dev-config dev-build dev-up dev-down dev-src up down dev-ps \
         dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules ingest ingest-dir card-lines ack token ask evals probe-gateway prod-config prod-up prod-down prod-check \
         test test-contract gate lint check practice-data class-data \
         demo demo-data smoke clean \
@@ -73,6 +73,17 @@ dev-up: check-env check-docker models ## Build and start everything, wait until 
 
 dev-down: $(ENV_FILE) ## Stop everything, keep the data
 	$(COMPOSE) down
+
+# Runs the app services from ./src (deploy/dev-src.yml), so new code is live without an image rebuild.
+# For development only: `make demo` and `make dev-up` use the code baked into the images.
+dev-src: check-env ## Run the app services from ./src with no image rebuild: migrate, load rulebooks, recreate
+	@echo "== 1/3 Applying the database migrations from ./src"
+	$(COMPOSE) -f deploy/dev-src.yml run --rm migrate
+	@echo "== 2/3 Loading the rulebook versions in ./templates (the last one listed becomes active)"
+	$(COMPOSE) -f deploy/dev-src.yml --profile tools run --rm rules
+	@echo "== 3/3 Recreating the app services with the mounted source"
+	$(COMPOSE) -f deploy/dev-src.yml up -d --no-deps --force-recreate mdeis-mcp orchestrator gateway portal
+	@$(COMPOSE) -f deploy/dev-src.yml ps
 
 up: dev-up ## Alias of dev-up
 down: dev-down ## Alias of dev-down

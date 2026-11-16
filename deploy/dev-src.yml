@@ -1,0 +1,33 @@
+# Development override: run the app services from ./src instead of the code baked into their images.
+#
+# Why: the images install the code into site-packages, so a code change needs an image rebuild, and a
+# rebuild downloads every dependency. This file bind-mounts the repository's packages (read only)
+# over the installed ones, so a change is live after the services are recreated. The images are still
+# needed for the dependencies; no dependency is added or changed here.
+#
+# Not part of `make dev-up` and not for the public demo (`make demo` uses the images). Use it with
+# `make dev-src`. To go back to the baked-in code: `make dev-up`.
+#
+# The mount paths are the interpreter's site-packages in the python:3.12 images we use.
+services:
+  migrate:
+    volumes:
+      - ./src/mdeis:/usr/local/lib/python3.12/site-packages/mdeis:ro
+  rules:
+    volumes:
+      - ./src/mdeis:/usr/local/lib/python3.12/site-packages/mdeis:ro
+  mdeis-mcp:
+    volumes:
+      - ./src/mdeis:/usr/local/lib/python3.12/site-packages/mdeis:ro
+  gateway:
+    volumes:
+      - ./src/mdeis:/usr/local/lib/python3.12/site-packages/mdeis:ro
+      - ./src/gateway:/usr/local/lib/python3.12/site-packages/gateway:ro
+  orchestrator:
+    volumes:
+      - ./src/mdeis:/usr/local/lib/python3.12/site-packages/mdeis:ro
+      - ./src/orchestrator:/usr/local/lib/python3.12/site-packages/orchestrator:ro
+  portal:
+    volumes:
+      - ./src/mdeis:/usr/local/lib/python3.12/site-packages/mdeis:ro
+      - ./src/portal:/usr/local/lib/python3.12/site-packages/portal:ro

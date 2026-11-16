@@ -24,6 +24,9 @@ services:
       # Show the chat inside the page. Switch off if Open WebUI refuses to be framed.
       PORTAL_FRAME_CHAT: ${PORTAL_FRAME_CHAT:-true}
       INBOX_DIR: /inbox
+      # The Lessons page talks to the gateway. Unset key: the page answers 503 and says it is off.
+      GATEWAY_URL: http://gateway:8000
+      GATEWAY_PORTAL_KEY: ${GATEWAY_PORTAL_KEY:-}
     volumes:
       - inbox:/inbox
     networks: [edge, data]

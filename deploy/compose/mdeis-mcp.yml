@@ -32,7 +32,8 @@ services:
         PYTHON_IMAGE: ${PYTHON_IMAGE:?set PYTHON_IMAGE in .env}
     image: mdeis-mcp:local
     container_name: rules-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
-    # The strict version first, so that v1 (the last one loaded) is the active one.
+    # The strict versions first, so that v1.1 (the last one loaded) is the active one. v1 and
+    # v2-strict stay loaded, unchanged, for reports pinned to them.
     command:
       - python
       - -m
@@ -40,6 +41,8 @@ services:
       - load
       - /templates/v2-strict.yaml
       - /templates/v1.yaml
+      - /templates/v2.1-strict.yaml
+      - /templates/v1.1.yaml
       - --require-embeddings
     environment:
       DATABASE_URL: postgresql://${MDEIS_APP_USER:?set MDEIS_APP_USER in .env}:${MDEIS_APP_PASSWORD:?set MDEIS_APP_PASSWORD in .env}@postgres:5432/${MDEIS_DB_NAME:?set MDEIS_DB_NAME in .env}
@@ -109,6 +112,9 @@ services:
       APPROVER_TOKEN_SECRET: ${APPROVER_TOKEN_SECRET:?set APPROVER_TOKEN_SECRET in .env}
       # The class view (stage_gap_counts) is locked. Only a named person switches it on.
       CLASS_VIEW_ENABLED: ${CLASS_VIEW_ENABLED:-false}
+      # The human-only approve and reject routes for lesson plans. Unset, those routes answer 503.
+      # Only the gateway also holds this value. Never give it to the orchestrator or the web UI.
+      HUMAN_ROUTE_KEY: ${HUMAN_ROUTE_KEY:-}
       MCP_HOST: 0.0.0.0
       MCP_PORT: "8100"
     volumes:
