@@ -105,3 +105,22 @@ def test_the_loaded_version_can_be_made_active_again_by_the_existing_step(url):
     assert rulebook.main(["activate", "v1", "--by", "Ada Teacher"]) == 0
     with psycopg.connect(url) as c:
         assert load_rules(c).version == "v1"
+
+
+def test_the_lesson_rules_are_stored_with_the_new_versions_and_the_lesson_reader_reads_them(url):
+    from mdeis.lessons.rules import LessonsUnavailable, load_lesson_rules
+
+    assert run(V2, V1, V21, V11) == 0
+    for name in ("v1.1", "v2.1-strict"):
+        assert {"WD-2", "WD-3", "LS-1"} <= set(clause_ids(url, name)), name
+    for name in ("v1", "v2-strict"):
+        assert not {"WD-2", "WD-3", "LS-1"} & set(clause_ids(url, name)), name
+    with psycopg.connect(url) as c:
+        active = load_lesson_rules(c)
+        assert active.version == "v1.1"
+        assert (active.max_notes_chars, active.max_edits, active.max_edit_chars) == (8000, 12, 1500)
+        assert (active.min_group, active.min_cell) == (10, 5)
+        assert load_lesson_rules(c, "v2.1-strict").min_group == 15
+        for old in ("v1", "v2-strict"):
+            with pytest.raises(LessonsUnavailable):
+                load_lesson_rules(c, old)

@@ -43,7 +43,13 @@ from pathlib import Path
 import httpx
 import psycopg
 
-from mdeis.core.template import SECTION_AREAS, Template, TemplateError, load_template
+from mdeis.core.template import (
+    OPTIONAL_SECTION_AREAS,
+    SECTION_AREAS,
+    Template,
+    TemplateError,
+    load_template,
+)
 from mdeis.db import diary
 
 # nomic-embed-text-v1.5 is trained with these prefixes; without them the vectors are weaker.
@@ -158,7 +164,7 @@ def _digest(path: Path) -> str:
 def _rule_rows(template: Template) -> list[tuple[str, str, str, str | None, dict]]:
     """(clause id, area code, text, methodology reference, the rule's own values) for every rule."""
     rows = []
-    for section, area in SECTION_AREAS.items():
+    for section, area in {**SECTION_AREAS, **OPTIONAL_SECTION_AREAS}.items():
         for rule in getattr(template, section):
             values = rule.model_dump(mode="json")
             params = {k: v for k, v in values.items() if k not in ("id", "text", "method_ref")}

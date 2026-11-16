@@ -39,6 +39,13 @@ SECTION_AREAS: dict[str, str] = {
     "group_minimum": "GM",
 }
 
+# Sections a template may leave out. A template without one still loads (v1 and v2-strict have no
+# `lessons`); when present, its rules are checked and cited like every other rule.
+OPTIONAL_SECTION_AREAS: dict[str, str] = {"lessons": "LS"}
+
+# Limits a `lessons` section must set, each by exactly one rule.
+LESSON_PARAMS: tuple[str, ...] = ("max_notes_chars", "max_edits", "max_edit_chars")
+
 # The five counts a class view shows for a learning area. Schema, not a school rule: the code
 # knows these five and no others; the template (GM-3) says in what order they are shown.
 BIN_NAMES: tuple[str, ...] = (
@@ -231,7 +238,24 @@ class ExceptionRule(_Rule):
 
 
 class WordingRule(_Rule):
+    """`banned` lists words, `banned_phrases` lists phrases. A rule carries either or both."""
+
     banned: Annotated[list[Name], Field(min_length=1)] | None = None
+    banned_phrases: Annotated[list[Name], Field(min_length=1)] | None = None
+
+    @model_validator(mode="after")
+    def _words_or_phrases(self) -> WordingRule:
+        if self.banned is None and self.banned_phrases is None:
+            raise ValueError(f"wording rule {self.id} must carry banned or banned_phrases")
+        return self
+
+
+class LessonRule(_Rule):
+    """Size limits for the lesson adapter (the notes a tutor submits, and the edits proposed)."""
+
+    max_notes_chars: PosInt | None = None
+    max_edits: PosInt | None = None
+    max_edit_chars: PosInt | None = None
 
 
 class GroupMinimumRule(_Rule):
@@ -300,6 +324,7 @@ class Template(_Model):
     exceptions: list[ExceptionRule]
     wording: list[WordingRule]
     group_minimum: list[GroupMinimumRule]
+    lessons: list[LessonRule] = Field(default_factory=list)
 
     # -- rejection of a missing area comes first, with a clear message --------------------------
 
@@ -329,6 +354,7 @@ class Template(_Model):
         self._check_stage_weights()
         self._check_required_params()
         self._check_class_view_rules()
+        self._check_lesson_rules()
         self._check_dates_and_window(max_score)
         return self
 
@@ -337,7 +363,7 @@ class Template(_Model):
 
     def _check_clause_ids(self) -> None:
         seen: set[str] = set()
-        for section, area in SECTION_AREAS.items():
+        for section, area in {**SECTION_AREAS, **OPTIONAL_SECTION_AREAS}.items():
             for rule in self._section(section):
                 match = CLAUSE_ID.match(rule.id)
                 if not match:
@@ -482,6 +508,17 @@ class Template(_Model):
                 if len(setters) != 1:
                     raise ValueError(f"{param} is set by both {setters[0]} and {setters[1]}")
 
+    def _check_lesson_rules(self) -> None:
+        """When there is a `lessons` section, each limit is set by exactly one of its rules."""
+        if not self.lessons:
+            return
+        for param in LESSON_PARAMS:
+            setters = [r.id for r in self.lessons if getattr(r, param) is not None]
+            if not setters:
+                raise ValueError(f"no lessons rule sets {param}")
+            if len(setters) != 1:
+                raise ValueError(f"{param} is set by both {setters[0]} and {setters[1]}")
+
     def _check_class_view_rules(self) -> None:
         """GM-2 and GM-3 together or not at all, each parameter set once, and a cell never larger
         than the smallest group that may be shown."""
@@ -517,7 +554,7 @@ class Template(_Model):
         """Every rule as a citable clause, in section order then file order."""
         return [
             Clause(id=r.id, area=area, text=r.text, method_ref=r.method_ref)
-            for section, area in SECTION_AREAS.items()
+            for section, area in {**SECTION_AREAS, **OPTIONAL_SECTION_AREAS}.items()
             for r in self._section(section)
         ]
 

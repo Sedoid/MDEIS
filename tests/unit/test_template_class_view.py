@@ -74,17 +74,22 @@ def test_the_old_files_are_untouched_and_still_load_without_the_new_rules():
 def test_a_new_file_differs_from_its_old_file_only_by_the_new_rules_and_its_own_record(old, new):
     before, after = raw(old), raw(new)
     changed = {k for k in before if before[k] != after[k]}
-    assert changed == {"version", "change_log", "group_minimum"}
+    # The lesson-adapter rules (WD-2, WD-3 and the `lessons` section) were merged into the same
+    # files later; test_template_lessons.py pins those. Everything else is as it was.
+    assert changed == {"version", "change_log", "group_minimum", "wording"}
+    assert set(after) - set(before) == {"lessons"}
+    assert after["wording"][0] == before["wording"][0], "WD-1 is the same"
+    assert after["wording"][: len(before["wording"])] == before["wording"]
     assert after["group_minimum"][0] == before["group_minimum"][0], "GM-1 is the same"
     assert len(after["change_log"]) == len(before["change_log"]) + 1
     assert after["change_log"][: len(before["change_log"])] == before["change_log"]
     assert after["version"] != before["version"]
 
 
-def test_the_clause_ids_are_the_old_ids_plus_gm_2_and_gm_3():
+def test_the_clause_ids_are_the_old_ids_plus_gm_2_and_gm_3_and_the_lesson_rules():
     old = [c.id for c in load_template(V1).clauses()]
     new = [c.id for c in load_template(V11).clauses()]
-    assert new == old + ["GM-2", "GM-3"]
+    assert [i for i in new if i not in ("WD-2", "WD-3", "LS-1")] == old + ["GM-2", "GM-3"]
     assert [c.id for c in load_template(V21).clauses()] == new
 
 

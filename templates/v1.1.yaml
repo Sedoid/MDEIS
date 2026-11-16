@@ -1,7 +1,8 @@
 # MDEIS criteria template v1.1. Shape: docs/TEMPLATE.md. Loader: src/mdeis/core/template.py.
 # v1.1 is v1.yaml unchanged, plus two rules for the class view: GM-2 (the smallest count that may
-# be shown) and GM-3 (the complementary rule). v1.yaml itself is not edited: a loaded version
-# never changes, so the new rules arrive as a new version.
+# be shown) and GM-3 (the complementary rule), and three for the lesson adapter: WD-2 and WD-3
+# (phrases the wording check refuses) and LS-1 (size limits). v1.yaml itself is not edited: a
+# loaded version never changes, so the new rules arrive as a new version.
 #
 # Three kinds of value are marked in this file:
 #   # FROM SAMPLE CARD OCC 2022/23: teacher to confirm
@@ -23,7 +24,7 @@ review_date: 2027-10-12                   # PLACEHOLDER: teacher to confirm
 approved_by: null                         # stays null until a named person approves these rules
 change_log:
   - {version: 1, date: 2026-10-12, note: "First draft for the demo school. Values marked PLACEHOLDER are not the school's."}
-  - {version: 3, date: 2026-11-16, note: "v1.1: v1 plus GM-2 and GM-3 for the class view. Every other rule is the same as v1."}
+  - {version: 3, date: 2026-11-16, note: "v1.1: v1 plus GM-2 and GM-3 for the class view, and WD-2, WD-3 and LS-1 for the lesson adapter. Every other rule is the same as v1."}
 
 scales:
   - id: SC-1
@@ -232,6 +233,12 @@ wording:
   - id: WD-1
     banned: [weak, remedial, gifted, lazy, slow, failing, brilliant]  # PLACEHOLDER: teacher to confirm
     text: "Describe the data. Never attach a label to the child. Report the grade letter and the score range, not the school's grade label."
+  - id: WD-2
+    banned_phrases: ["top group", "bottom group", "top set", "bottom set", "ability group", "fast track", "slow track", "low ability", "high ability"]  # PLACEHOLDER: teacher to confirm
+    text: "Do not split a class into tracks or ability groups, and do not name a group by ability."
+  - id: WD-3
+    banned_phrases: ["career path", "career pathway", "subject choice", "choose a career", "future career"]  # PLACEHOLDER: teacher to confirm
+    text: "Do not suggest a pathway, a subject choice or a career for any learner."
 
 group_minimum:
   - id: GM-1
@@ -255,3 +262,11 @@ group_minimum:
       count of 0 is shown. The answer says that counts were hidden and never says what they were.
       When any count of a learning area is hidden, the number of learners with enough evidence for
       that area is not shown either.
+
+# Size limits for the lesson adapter. PLACEHOLDER: teacher to confirm every value in this section.
+lessons:
+  - id: LS-1
+    max_notes_chars: 8000                 # PLACEHOLDER: teacher to confirm
+    max_edits: 12                         # PLACEHOLDER: teacher to confirm
+    max_edit_chars: 1500                  # PLACEHOLDER: teacher to confirm
+    text: "Lesson notes may be up to 8000 characters. A lesson plan may hold up to 12 edits. A replacement or a suggestion may be up to 1500 characters."
