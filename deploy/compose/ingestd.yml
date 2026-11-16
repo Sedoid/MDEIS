@@ -20,6 +20,8 @@ services:
       INBOX_DIR: /inbox
     volumes:
       - inbox:/inbox:ro
+      # The clarity gate reads templates/gate-v1.yaml. Without it a methodology upload fails closed.
+      - ./templates:/templates:ro
     networks: [data]
     depends_on:
       postgres:

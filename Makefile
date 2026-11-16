@@ -32,7 +32,7 @@ COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yml $(addpref
 
 .PHONY: help env-init env-sync check-env check-docker models dev-config dev-build dev-up dev-down up down dev-ps \
         dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules ingest ingest-dir card-lines ack token ask evals probe-gateway prod-config prod-up prod-down prod-check \
-        test test-contract lint check practice-data class-data \
+        test test-contract gate lint check practice-data class-data \
         demo demo-data smoke clean \
         probe-embed probe-mcp probe-pg-mcp probe-n8n probe-orchestrator probe-portal probe-signin
 
@@ -177,6 +177,11 @@ test: $(ENV_FILE) ## Run pytest in a container (ARGS="-m integration" to pass op
 
 test-contract: $(ENV_FILE) ## Run only the tool contract tests (Steps 7 and 8). They all must pass; `make test` runs them too
 	$(COMPOSE) --profile test run --rm --build test pytest -m contract tests/acceptance/test_tools_contract.py $(ARGS)
+
+gate: $(ENV_FILE) ## Run the clarity gate on a methodology, no database:  make gate FILE=path.md [TEMPLATE=templates/v1.yaml]
+	@test -n "$(FILE)" || { echo 'usage: make gate FILE=path/to/methodology.md|pdf [TEMPLATE=templates/v1.yaml]' >&2; exit 1; }
+	@test -f "$(FILE)" || { echo "There is no file at $(FILE)." >&2; exit 1; }
+	@$(COMPOSE) --profile test run --rm --no-deps -T -v "$$(cd "$$(dirname "$(FILE)")" && pwd)/$$(basename "$(FILE)"):/upload/$$(basename "$(FILE)"):ro" test python -m mdeis.ingest.methodology --gate "/upload/$$(basename "$(FILE)")" $(if $(TEMPLATE),--template "$(TEMPLATE)")
 
 lint: $(ENV_FILE) ## Run ruff in a container
 	$(COMPOSE) --profile test run --rm --build test ruff check src tests synthetic
