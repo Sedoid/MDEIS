@@ -14,6 +14,12 @@ things and has no model code in it:
    streaming or whole. If the orchestrator fails it says so in the chat in plain words; it never
    makes up an answer.
 
+`POST /lessons` and `GET /lessons/{plan_id}` are a pass-through for the lesson adapter. They take
+the same key and the same signed-in user as chat, sign the same token (with the school), and
+forward what the tutor chose and wrote to the orchestrator. The body is closed (`extra="forbid"`):
+a field that names an author, a school or an approver is refused here. There is no route in this
+file that approves or rejects a plan.
+
 It logs the names of headers and the request number, never their values, keys or message text.
 """
 
@@ -28,8 +34,9 @@ from dataclasses import dataclass
 from typing import Annotated
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Path, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field
 
 from mdeis.core import approver_token
 
@@ -50,7 +57,25 @@ INTERRUPTED = (
     "The assistant stopped before it finished, so there is no answer. Nothing was changed."
 )
 
+PLAN_ID = r"^LP-[0-9]{6,}$"  # the form the database makes for a lesson plan number
+APPROVER_TOKEN_HEADER = "X-Approver-Token"
+LESSON_UNAVAILABLE = (
+    "The lesson service is not available right now. Nothing was saved. "
+    "Please try again in a moment."
+)
+
 log = logging.getLogger("gateway")
+
+
+class LessonBody(BaseModel):
+    """What the tutor chose and wrote. Nothing else is accepted."""
+
+    model_config = ConfigDict(extra="forbid")
+    stage: str = Field(min_length=1)
+    area: str = Field(min_length=1)
+    term: int = Field(strict=True)
+    objective: str = Field(min_length=1)
+    notes: str = Field(min_length=1)
 
 
 @dataclass(frozen=True)
@@ -220,6 +245,66 @@ def create_app(client_factory=None) -> FastAPI:
                 stream_events(request_id, events), media_type="text/event-stream"
             )
         return reply_whole(request_id, await whole_answer(events))
+
+    def signed_in(request: Request, settings: Settings):
+        """(token, None) for the signed-in user, or (None, the 401 reply)."""
+        user_id = request.headers.get(settings.user_id_header, "").strip()
+        user_name = request.headers.get(settings.user_name_header, "").strip() or user_id
+        if not user_id:
+            return None, JSONResponse(
+                status_code=401,
+                content={"error": {"message": "nobody is signed in", "type": "unauthorized"}},
+            )
+        try:
+            token = approver_token.sign(
+                settings.secret, user_id, user_name, school=settings.school or None
+            )
+        except approver_token.TokenError:
+            return None, JSONResponse(
+                status_code=500,
+                content={"error": {"message": "the gateway cannot sign tokens", "type": "server"}},
+            )
+        return token, None
+
+    async def to_orchestrator(settings: Settings, send):
+        """Send one request to the orchestrator; hand its JSON back, or say plainly it is down."""
+        try:
+            async with make_client() as client:
+                reply = await send(client, {"Authorization": f"Bearer {settings.orchestrator_key}"})
+            return JSONResponse(status_code=reply.status_code, content=reply.json())
+        except (httpx.HTTPError, ValueError):
+            return JSONResponse(
+                status_code=httpx.codes.BAD_GATEWAY,
+                content={"outcome": "error", "statement": LESSON_UNAVAILABLE, "plan": None},
+            )
+
+    @app.post("/lessons", dependencies=[Depends(require_key)])
+    async def lessons(request: Request, body: LessonBody):
+        settings = load_settings()
+        token, refusal = signed_in(request, settings)
+        if refusal:
+            return refusal
+        run = {**body.model_dump(), "approver_token": token}
+
+        def send(client, headers):
+            return client.post(f"{settings.orchestrator_url}/lessons", json=run, headers=headers)
+
+        return await to_orchestrator(settings, send)
+
+    @app.get("/lessons/{plan_id}", dependencies=[Depends(require_key)])
+    async def lesson(request: Request, plan_id: Annotated[str, Path(pattern=PLAN_ID)]):
+        settings = load_settings()
+        token, refusal = signed_in(request, settings)
+        if refusal:
+            return refusal
+        headers_in = {APPROVER_TOKEN_HEADER: token}
+
+        def send(client, headers):
+            return client.get(
+                f"{settings.orchestrator_url}/lessons/{plan_id}", headers={**headers, **headers_in}
+            )
+
+        return await to_orchestrator(settings, send)
 
     return app
 

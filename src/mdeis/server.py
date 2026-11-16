@@ -1,5 +1,9 @@
-"""The MDEIS MCP server (Streamable HTTP): eight tools (two more when the class view is on), no
+"""The MDEIS MCP server (Streamable HTTP): eight tools (five more when the class view is on), no
 model and no model key.
+
+The five are `class_baseline`, `stage_gap_counts` and three lesson tools (`guard_lesson_notes`,
+`save_lesson_plan`, `get_lesson_plan`). The chat assistant sees none of the lesson tools: its list
+is an explicit allow-list in the orchestrator. No tool here approves or rejects a lesson plan.
 
 Each tool here only translates an MCP call into a call of the plain function in `mdeis.tools`.
 The two things the model must not control are read from the HTTP headers the orchestrator sets,
@@ -24,6 +28,7 @@ from starlette.responses import JSONResponse
 
 from . import tools
 from .core import approver_token
+from .lessons import store as lesson_store
 from .tools import class_view
 from .tools.context import Approver, ToolContext
 from .tools.criterion import DEFAULT_RESULTS
@@ -203,6 +208,53 @@ if class_view.enabled():  # locked unless CLASS_VIEW_ENABLED is switched on
             term=term,
             template_version=template_version,
         )
+
+
+    # The lesson graph's three tools. They need the class read above, so they share its switch.
+    # The author and the school are the session's (`_run` sets them from the verified token): no
+    # argument names a person or a school. The model's edit list arrives as the text `model_output`.
+    @mcp.tool(description=_about(lesson_store.guard_lesson_notes))
+    def guard_lesson_notes(
+        request: Context, stage: str, area: str, term: int, objective: str, notes: str
+    ) -> dict:
+        return _run(
+            request,
+            lesson_store.guard_lesson_notes,
+            stage=stage,
+            area=area,
+            term=term,
+            objective=objective,
+            notes=notes,
+        )
+
+    @mcp.tool(description=_about(lesson_store.save_lesson_plan))
+    def save_lesson_plan(
+        request: Context,
+        stage: str,
+        area: str,
+        term: int,
+        objective: str,
+        notes: str,
+        model_output: str,
+        model: str,
+        prompt_sha256: str,
+    ) -> dict:
+        return _run(
+            request,
+            lesson_store.save_lesson_plan,
+            stage=stage,
+            area=area,
+            term=term,
+            objective=objective,
+            notes=notes,
+            model_output=model_output,
+            model=model,
+            prompt_sha256=prompt_sha256,
+        )
+
+    @mcp.tool(description=_about(lesson_store.get_lesson_plan))
+    def get_lesson_plan(request: Context, plan_id: str) -> dict:
+        return _run(request, lesson_store.get_lesson_plan, plan_id=plan_id)
 
 
 def main() -> None:

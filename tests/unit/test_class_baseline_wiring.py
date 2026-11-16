@@ -53,7 +53,10 @@ def test_with_the_view_on_the_server_lists_class_baseline_with_only_stage_and_te
     assert "class_baseline" in tools and "stage_gap_counts" in tools
     assert set(tools["class_baseline"].inputSchema["properties"]) == {"stage", "term"}
     assert set(tools["class_baseline"].inputSchema["required"]) == {"stage", "term"}
-    assert len(tools) == 10
+    # The three lesson tools (guard_lesson_notes, save_lesson_plan, get_lesson_plan) share the
+    # class view's switch, so the count with the view on is 8 + 2 + 3. The names are pinned in
+    # test_lesson_graph_boundaries.py.
+    assert len(tools) == 13
 
 
 def test_the_description_says_what_it_is_and_what_it_will_not_do(monkeypatch):
