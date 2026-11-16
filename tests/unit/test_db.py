@@ -460,7 +460,9 @@ def test_the_borrowed_tool_can_only_read(conn, roles):
     assert "default_transaction_read_only=on" in settings
     # It reads every table except the diary, and `learners` only by column: the id, the school, the
     # card's ID number and, since migration 005, the name (so a learner can be found by name).
-    not_whole = {"action_log", "learners"}
+    # Since migration 008 it also reads the registry of generated measures by column only: what a
+    # measure is, never its source code, its tests, or the names of the people who decided.
+    not_whole = {"action_log", "learners", "measure_versions", "registry_reviewers"}
     for table in tables(conn):
         assert can(conn, role, table, "SELECT") == (table not in not_whole), table
         for write in ("INSERT", "UPDATE", "DELETE", "TRUNCATE"):

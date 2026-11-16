@@ -1,0 +1,156 @@
+# The sandbox rules, version 1 (T-052, slice 1).
+#
+# What a generated function may and may not contain. The static check in
+# src/mdeis/sandbox/static_check.py reads this file and holds no list, name or limit of its own. A
+# function that breaks a rule here is rejected, with the finding named, before any test is run.
+#
+# This is not a school rulebook (v1.yaml) and not the methodology gate (gate-v1.yaml). It is the bar
+# a piece of generated code has to clear before it is run at all. The container is the security
+# boundary; this check is the first line and keeps honest code honest.
+#
+# Every value below is a PROPOSAL. The owner confirms or changes each one. A rule is never loosened
+# to let a particular function through.
+#
+# What a function looks like: one module, one entry function with the fixed shape below, one module
+# constant that declares what the function returns, imports only from the modules named here, no
+# number that is a school rule. Division of exact numbers is written Fraction(a, b), because the
+# operator "/" gives a float on whole numbers and a float is never allowed.
+
+sandbox_version: sandbox-v1
+
+# The one function the runner calls, and the names of its two parameters.
+entry_function: measure                        # PROPOSED: owner to confirm
+entry_parameters: [records, params]            # PROPOSED: owner to confirm
+
+# The module constant that declares what the function returns. Its value must equal the kind the
+# registry holds for the version, and the kind must be one of these. Without it the function is
+# rejected.
+output_kind_constant: OUTPUT_KIND              # PROPOSED: owner to confirm
+output_kinds: [number, label, series, table]   # PROPOSED: owner to confirm
+
+# Imports. Only these modules, and only these members of them. `import math` then `math.isqrt` is
+# allowed; `math.sqrt` is not (it gives a float). `decimal.getcontext` is not (it is global state).
+# An import with `as` is not allowed, so a name always says what it is.
+allowed_modules:
+  fractions: [Fraction]                                          # PROPOSED: owner to confirm
+  math: [gcd, isqrt, floor, ceil, comb, prod]                    # PROPOSED: owner to confirm
+  decimal: [Decimal, ROUND_HALF_UP, ROUND_HALF_EVEN, ROUND_DOWN, ROUND_UP, ROUND_FLOOR, ROUND_CEILING]   # PROPOSED: owner to confirm
+
+# Builtins a function may call or read. Anything else that is not defined in the source or imported
+# is refused. `round` is not here on purpose: rounding is a school rule and the fixed tool applies it.
+allowed_builtins: [sum, min, max, len, sorted, range, zip, enumerate, abs, any, all, list, dict, tuple, set, str, int, bool, reversed]   # PROPOSED: owner to confirm
+
+# Names that stand for a number that is not exact. Refused wherever they appear, and so is a float
+# written as a literal.
+float_names: [float, complex]                  # PROPOSED: owner to confirm
+
+# A name that starts with this is refused (the double underscore names reach into the interpreter).
+forbidden_name_prefix: "__"                    # PROPOSED: owner to confirm
+# An attribute that starts with this is refused (a single underscore is a private member).
+forbidden_attribute_prefix: "_"                # PROPOSED: owner to confirm
+# Attributes refused by name. `format` and `format_map` can reach an attribute from inside a format
+# string, where no attribute node shows. The rest are frame and generator internals. `from_float`
+# builds an exact number from a float.
+forbidden_attributes:                          # PROPOSED: owner to confirm
+  - format
+  - format_map
+  - from_float
+  - mro
+  - gi_frame
+  - gi_code
+  - cr_frame
+  - cr_code
+  - ag_frame
+  - tb_frame
+  - tb_next
+  - f_back
+  - f_globals
+  - f_locals
+  - f_builtins
+  - f_code
+  - func_globals
+  - co_code
+
+# The only syntax a function may use, by the name of the node type in Python's `ast` module. A
+# node of any other type is refused. Left out on purpose: While (a bounded loop is a for loop),
+# Div and Pow (a float, and a number with no size limit), Try and Raise, Lambda, class and async
+# definitions, global and nonlocal, Delete, Assert, f-strings, Starred, Yield.
+allowed_node_types:                            # PROPOSED: owner to confirm
+  - Module
+  - FunctionDef
+  - arguments
+  - arg
+  - Return
+  - Assign
+  - AugAssign
+  - AnnAssign
+  - Expr
+  - If
+  - For
+  - Break
+  - Continue
+  - Pass
+  - Import
+  - ImportFrom
+  - alias
+  - Name
+  - Load
+  - Store
+  - Constant
+  - BinOp
+  - UnaryOp
+  - BoolOp
+  - Compare
+  - IfExp
+  - Call
+  - keyword
+  - Attribute
+  - Subscript
+  - Slice
+  - Tuple
+  - List
+  - Dict
+  - Set
+  - ListComp
+  - DictComp
+  - SetComp
+  - GeneratorExp
+  - comprehension
+  - Add
+  - Sub
+  - Mult
+  - FloorDiv
+  - Mod
+  - UAdd
+  - USub
+  - Not
+  - And
+  - Or
+  - Eq
+  - NotEq
+  - Lt
+  - LtE
+  - Gt
+  - GtE
+  - In
+  - NotIn
+  - Is
+  - IsNot
+
+# Whole-number literals a function may write. They are structure (a start at zero, a step of one),
+# not a school rule. Any other number written in the source, or a string that reads as a number, is
+# a hardcoded value and is refused. A value that is in the template is reported with its clause ID.
+# A literal in this list is never reported as a duplicate of a template value.
+allowed_literals: [0, 1]                       # PROPOSED: owner to confirm
+
+# The largest source the check will read, in characters.
+source_max_chars: 20000                        # PROPOSED: owner to confirm
+
+# Limits for one run. They are read by the runner (slice 2); the smaller of these and the
+# container's own ceilings applies, so a bad file cannot raise a limit.
+limits:
+  wall_s: 5                                    # PROPOSED: owner to confirm
+  cpu_s: 2                                     # PROPOSED: owner to confirm
+  memory_mb: 256                               # PROPOSED: owner to confirm
+  input_kb: 1024                               # PROPOSED: owner to confirm
+  output_kb: 256                               # PROPOSED: owner to confirm
