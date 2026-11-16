@@ -22,3 +22,19 @@ It is a document to be judged, so nothing in it was fixed.
 - its settings table is in section 4 (not 3.1)
 - section 6.3 is a list of competences (not a measure)
 - its numbered headings are valid although the PDF's font names do not contain "Bold"
+
+## Amended copy
+
+`methodology-aurora-amended.md` is a copy of `methodology-aurora.md` with only the edits that remove
+the six faults the clarity gate reports on the original. `methodology-aurora-amended.cases.json` is
+the original cases file plus A-1 to A-16, which test the added rules. What was changed:
+
+1. Section 10: a complementary suppression rule as numbered steps, with two worked examples (one matches F-15).
+2. Section 10: the reconstruction check is now a rule as numbered steps (compare with each earlier report of the same school year, suppress a single subgroup smaller than 10), with one example.
+3. Section 2 steps 8 and 10: "important" is replaced by a defined trigger (Declining, Fluctuating or Insufficient evidence goes to the subject teacher; evidence is cited for each statement of a grade, a result or a label).
+4. Section 4: "where feasible" is replaced by a condition (records under both versions exist for the same learner and subject).
+5. Section 12: "where lawful" is replaced by a condition (reviewer, date and corrections are always recorded; a dissenting view is recorded when the reviewer enters one).
+
+The added rules are proposals for testing and were never approved by any school. The clarity gate
+should report 0 faults on the amended copy. The "Mixed" label and "term for courses" issues remain on
+purpose.
