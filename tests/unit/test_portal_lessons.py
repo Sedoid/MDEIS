@@ -591,3 +591,18 @@ def test_the_list_is_shown_newest_first_whatever_order_it_arrives_in():
              {"plan_id": "LP-000002", "created_at": "2026-11-03T10:00:00+00:00"}]
     got = logic(f"L.newestFirst({json.dumps(plans)}).map((p) => p.plan_id)")
     assert got == ["LP-000003", "LP-000002", "LP-000001"]
+
+
+def test_the_start_up_loop_skips_every_boxed_form_that_is_not_an_upload_form():
+    """The page once rendered blank: app.js wired every form of class `box` as an upload form, and
+    the Lessons form, which has the same class but no file field, threw during start-up. Any boxed
+    form without a file field must be skipped by that loop."""
+    forms = re.findall(r"<form\b([^>]*)>(.*?)</form>", PAGE, flags=re.S)
+    boxed = [(attrs, body) for attrs, body in forms if re.search(r'class="[^"]*\bbox\b', attrs)]
+    assert boxed, "no boxed forms found: the test no longer looks at the page"
+    not_uploads = [attrs for attrs, body in boxed if 'type="file"' not in body]
+    assert not_uploads, "expected the Lessons form to be a boxed form with no file field"
+    start_up = APP[APP.index('addEventListener("DOMContentLoaded"'):]
+    loop = start_up[start_up.index('querySelectorAll(".box")'):][:400]
+    assert "if (!form.elements.file) continue;" in loop
+    assert loop.index("continue;") < loop.index("wireDrop(form)")

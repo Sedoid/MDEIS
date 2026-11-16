@@ -677,6 +677,7 @@ function revealPassword() {
 document.addEventListener("DOMContentLoaded", () => {
   applyTheme(savedTheme());
   for (const form of document.querySelectorAll(".box")) {
+    if (!form.elements.file) continue;  // the Lessons form is not an upload form: lessons.js wires it
     form.addEventListener("submit", submit);
     wireDrop(form);
   }
