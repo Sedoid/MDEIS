@@ -113,7 +113,32 @@ def test_two_learners_in_one_batch_and_one_in_another_are_told_apart(db):
 def test_the_assistants_view_has_exactly_these_columns_and_no_score(db):
     cols = [d.name for d in db.execute("SELECT * FROM learner_batches LIMIT 0").description]
     assert cols == ["learner_id", "school_ref", "display_name", "batch", "first_stage",
-                    "last_year", "last_stage", "cards"]
+                    "last_year", "last_stage", "cards", "batch_note"]
+
+
+def test_the_batch_note_states_the_first_card_and_that_it_is_not_an_enrolment_date(db):
+    who = learner(db, "T/9")
+    add_card(db, who, "2023/2024", "Form 3")
+    assert row(db, who)["batch_note"] == (
+        "The first report card on file for this learner is for Form 3, 2023/2024. "
+        "Their batch is that school year; it is not a recorded enrolment date."
+    )
+
+
+def test_the_batch_note_follows_the_earliest_card_when_an_older_one_arrives(db):
+    who = learner(db, "T/10")
+    add_card(db, who, "2022/2023", "Form 2")
+    add_card(db, who, "2020/2021", "Form 1")
+    note = row(db, who)["batch_note"]
+    assert "Form 1, 2020/2021" in note and "2022/2023" not in note
+
+
+def test_the_batch_note_names_no_score_and_no_judgement(db):
+    who = learner(db, "T/11")
+    add_card(db, who, "2021/2022", "Form 1")
+    note = row(db, who)["batch_note"].lower()
+    for word in ("weak", "strong", "gifted", "remedial", "behind", "ahead", "rank", "average"):
+        assert word not in note
 
 
 def test_the_upload_pages_view_has_the_document_and_the_batch_and_no_learner(db):

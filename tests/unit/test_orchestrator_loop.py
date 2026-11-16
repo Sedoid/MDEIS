@@ -110,7 +110,7 @@ def test_the_instructions_say_how_to_find_a_learner_by_name_and_not_to_guess():
 
 def test_the_instructions_say_what_a_batch_is_how_to_list_one_and_that_a_batch_is_not_assessed():
     text = (ROOT / "src" / "orchestrator" / "prompts" / "system.md").read_text(encoding="utf-8")
-    assert "first report card on file" in text and "'2021/2022'" in text
+    assert "first report card on file" in text and "'YYYY/YYYY'" in text
     assert "FROM learner_batches WHERE batch =" in text and "ORDER BY school_ref" in text
     assert "first_stage" in text and "stays in the batch they started with" in text
     assert "class of 2021" in text and "ask which" in text  # entered or finished: do not guess
@@ -119,6 +119,14 @@ def test_the_instructions_say_what_a_batch_is_how_to_list_one_and_that_a_batch_i
     # it is what the cards show, not an enrolment date, and it can move when an older card arrives
     assert "not when the learner enrolled" in text and 'never say a learner "entered"' in text
     assert "taken from the cards held now" in text and "Every time you name a batch" in text
+    # the explanation is written by the database and relayed, not composed by the model
+    assert "cards, batch_note FROM learner_batches" in text
+    # no real-looking school year to copy into an answer; batches that exist come from a count query
+    batch_line = next(x for x in text.splitlines() if "batch is the school year" in x)
+    assert "2021/2022" not in batch_line and "2023/2024" not in batch_line
+    assert "SELECT batch, count(*) AS learners FROM learner_batches GROUP BY batch" in text
+    assert "a batch that is not in a row is not on file" in text and "never name one" in text
+    assert "relay it exactly as written and do not reword it" in text
 
 
 # --------------------------------------------------------------------------- the tool loop
