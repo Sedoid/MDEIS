@@ -87,6 +87,7 @@ def make_ctx(tool_schema):
 
     `make_ctx()` has no approver; `make_ctx(("u-1", "Ada Teacher"))` has one. The approver is part
     of the context, set here the way the verified token will set it. It is never a tool argument.
+    `school` is the same: the school code the token carries (None when it has none).
     The context does not commit, so each test is rolled back.
     """
     import uuid
@@ -95,7 +96,7 @@ def make_ctx(tool_schema):
 
     opened = []
 
-    def make(approver=None, run_id=None):
+    def make(approver=None, run_id=None, school=None):
         try:
             from mdeis.tools.context import Approver, ToolContext
         except ImportError as e:
@@ -108,6 +109,7 @@ def make_ctx(tool_schema):
             approver=Approver(id=approver[0], name=approver[1]) if approver else None,
             database_url=tool_schema,
             commit=False,
+            school=school,
         )
 
     yield make

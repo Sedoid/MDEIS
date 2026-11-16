@@ -71,6 +71,11 @@ def load_cohort(scoped_url, learners, cards):
                 "VALUES (%s, %s, %s, %s)",
                 (ln["gen_id"], SCHOOL_CODE, ln["school_ref"], ln["name"]),
             )
+        # The cohort is loaded with explicit ids (L-0001 ...), which does not move learner_seq. A
+        # later insert that takes the default id would start at L-0001 and collide. In real use the
+        # sequence has advanced with every insert, so move it past the cohort here, once.
+        highest = max(int(ln["gen_id"].split("-")[1]) for ln in learners)
+        conn.execute("SELECT setval('learner_seq', %s)", (highest,))
         by_ref = {ln["school_ref"]: ln["gen_id"] for ln in learners}
         for card in cards:
             learner_id = by_ref[card["learner_id"]]

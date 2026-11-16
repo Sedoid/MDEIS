@@ -132,7 +132,11 @@ def test_the_answer_holds_no_names_no_learner_numbers_and_no_record_numbers(
 
 
 def test_the_same_question_gives_the_same_answer(make_ctx, on):
-    assert view(make_ctx(APPROVER)) == view(make_ctx(APPROVER))
+    # One context, two calls. Two make_ctx() calls would open two connections that never commit:
+    # the first call's data-quality rows (issues, unique fingerprint) sit in an open transaction
+    # and the second connection waits for that lock forever. The assertion is unchanged.
+    ctx = make_ctx(APPROVER)
+    assert view(ctx) == view(ctx)
 
 
 # ------------------------------------------------------------------- small groups, one school
