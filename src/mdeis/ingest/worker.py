@@ -191,7 +191,8 @@ def _methodology(conn, doc, path) -> tuple[str, dict]:
     stored = methodology.store_methodology(
         conn, doc["document_id"], methodology.Parsed.from_dict(data["parsed"])
     )
-    return "ok", stored
+    # The clarity gate turned it back: a failed document, like any other, and the diary says so.
+    return ("refused" if stored["status"] == "failed" else "ok"), stored
 
 
 def embed_sections(conn, document_id: str) -> None:

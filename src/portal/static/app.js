@@ -15,6 +15,8 @@ const FAILURES = {
   unreadable: "The file could not be read.",
   no_text: "The file has no readable text.",
   too_large: "The file is too large.",
+  methodology_unclear: "The methodology is too unclear to build from. Its faults are listed in " +
+    "the methodology panel.",
 };
 let me = null;
 let csrf = null;
@@ -282,6 +284,29 @@ async function review(doc, container, stamp) {
   container.appendChild(box);
 }
 
+// A rejected methodology: each fault with its section, what is needed and the words quoted from
+// the document. All of it is put in with textContent, so nothing in the file can become markup.
+async function showFaults(doc, container, stamp) {
+  const full = await get("api/documents/" + encodeURIComponent(doc.document_id));
+  if (stamp !== methodStamp) return;
+  const faults = full.body.issues || [];
+  const box = document.createElement("div");
+  box.className = "faults";
+  const count = faults.length + (faults.length === 1 ? " fault" : " faults");
+  box.appendChild(text("p", "Not accepted: " + count + " to fix. Upload a corrected file to try " +
+    "again.", "hint"));
+  for (const fault of faults) {
+    const item = document.createElement("div");
+    item.className = "fault";
+    const where = (fault.ref_id ? "Section " + fault.ref_id : "The whole document") +
+      (fault.page ? " (page " + fault.page + ")" : "");
+    item.appendChild(text("strong", where));
+    item.appendChild(text("div", fault.detail || fault.kind, "diff"));
+    box.appendChild(item);
+  }
+  container.appendChild(box);
+}
+
 // ---- the methodology panel: what is in force, what waits for a person, what came before --------
 function renderMethod(state, documents) {
   const panel = $("method-panel");
@@ -323,6 +348,14 @@ function renderMethod(state, documents) {
     review(doc, panel, stamp);
   }
   const earlier = (state && state.earlier) || [];
+  // The newest upload, if it was turned back and is newer than the one in force: show why.
+  const latest = earlier[0];
+  if (latest && latest.failure_kind === "methodology_unclear" &&
+      (!inForce || latest.created_at > inForce.created_at)) {
+    panel.appendChild(line(text("span", "Not accepted", "pill s-failed"), latest,
+      latest.document_id));
+    showFaults(latest, panel, stamp);
+  }
   if (earlier.length) {
     const box = document.createElement("details");
     box.appendChild(text("summary", "Earlier uploads (" + earlier.length + ")"));

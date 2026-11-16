@@ -1,0 +1,210 @@
+# The methodology clarity gate, version 1 (T-051, reader and gate follow-up of 2026-11-16).
+#
+# A methodology upload that is too vague, incomplete or open ended to build from is rejected with a
+# list of faults. Each fault names a section (or the whole document) and the rule here that found
+# it (GT-n). The checks are ordinary code in src/mdeis/ingest/methodology_gate.py; every word list,
+# pattern and limit they use is in this file. No model reads the document and no school value is in
+# this file.
+#
+# This is not a school rulebook (v1.yaml). It is the bar a methodology document has to clear
+# before anything is built from it, so it is loaded by the gate only, never by load-criteria.
+#
+# Formats: a methodology can be uploaded as a PDF or as Markdown. Both are read into the same
+# numbered sections and the same checks run on them. Markdown is the recommended route for
+# development: its headings are explicit, so the sections do not depend on how a PDF was laid out.
+#
+# The checks do not depend on how a document numbers its sections. The settings can be in any
+# section; a measure is found from what its text says, not from where it sits.
+#
+# Every value below is a PROPOSAL. The owner confirms or changes each one. A rule is never loosened
+# to let a particular document through.
+#
+# Not implemented: GT-11 (a notice that the document says it is a draft or illustrative). A notice
+# is not a fault, and the stored faults carry no severity. It waits for a decision (see the T-051
+# log, "Needs decision").
+#
+# Not detectable by rules, left to the later model-assisted review: a label whose meaning is
+# ambiguous, and a word used for two different things (for example "term" for a course).
+
+gate_version: gate-v1
+
+# The longest quote a fault may carry, in characters. A quote is always a piece of the section text,
+# copied as it is. A longer sentence is cut, never reworded.
+quote_max_chars: 200            # PROPOSED: owner to confirm
+
+# What makes a section a measure, for GT-2, GT-3 and GT-5. A lettered measure under a section
+# (the document's own letters A to Z) is always a measure. Any other section that has no
+# sub-section is a measure when its text holds one of these formula marks or one of these phrases
+# that define a calculation. Tables of settings and lists of competences hold neither.
+measure_detection:
+  formula_markers: ["=", "÷", "×", "Δ"]   # PROPOSED: owner to confirm
+  definition_phrases:            # PROPOSED: owner to confirm
+    - percentage of
+    - difference between
+    - divided by
+    - calculated as
+    - worked out as
+    - defined as
+
+# Words and phrases that say where a value comes from. Used by GT-3, GT-4 and GT-10. Matched as
+# whole words, ignoring capitals.
+source_phrases:                  # PROPOSED: owner to confirm
+  - template
+  - configuration
+  - approved
+  - defined by
+  - set by
+  - supplied by
+
+checks:
+  - id: GT-1
+    code: required_setting_missing
+    text: "Every setting the gate requires is defined somewhere in the document, with what it is for."
+    # A setting is defined when a line starts with its name and carries text after it. That is a
+    # table row (the name is the first cell that is not a row number), or a label line such as
+    # "Evaluation type: longitudinal". It can be in any section.
+    # The settings are those in the table of section 3.1 of methodology v2.0, in its own words.
+    required_settings:           # PROPOSED: owner to confirm
+      - Institution and educational context
+      - Evaluation type
+      - Learner or group
+      - Subject or learning area
+      - Learning standards
+      - Assessment rules
+      - Calculation rules
+      - Classification rules
+      - Comparison rules
+      - Reporting preferences
+      - Evidence requirements
+    # A cell that only numbers a table row. It is skipped when looking for the name. A pattern.
+    row_index_cell: '#|\d+'      # PROPOSED: owner to confirm
+    # Other names a school may use for a required setting. A setting counts as defined when its
+    # own name or any name listed here starts a line with text after it. Only these four are
+    # listed: they are the four names the Aurora methodology uses for the settings of v2.0.
+    aliases:                     # PROPOSED: owner to confirm
+      Institution and educational context:
+        - Institution and context            # PROPOSED: owner to confirm
+      Evaluation type:
+        - Analysis design                    # PROPOSED: owner to confirm
+      Subject or learning area:
+        - Subjects and learning areas        # PROPOSED: owner to confirm
+      Reporting preferences:
+        - Reporting, roles and approvals     # PROPOSED: owner to confirm
+    # What a fault says. {name} is the setting.
+    needed: 'Define the setting "{name}", with what it is for, in a table row or on a line that starts with the name.'
+
+  - id: GT-2
+    code: measure_no_inputs
+    text: "Every measure names the inputs it is worked out from."
+    # A measure names its inputs when its text holds one of these words or phrases.
+    input_markers:               # PROPOSED: owner to confirm
+      - where
+      - uses
+      - using
+      - based on
+      - calculated from
+      - considers
+      - inputs
+      - together with
+      - between
+      - percentage of
+      - ÷
+      - let
+
+  - id: GT-3
+    code: measure_no_source_for_values
+    text: "A measure that needs a threshold, a weight or a range says where it comes from, or that the template supplies it."
+    # A measure needs a value when its text holds one of these words.
+    value_words:                 # PROPOSED: owner to confirm
+      - threshold
+      - thresholds
+      - weight
+      - weights
+      - range
+      - ranges
+
+  - id: GT-4
+    code: vague_term
+    text: "A vague word comes with a value, or with where the value comes from, in the same sentence."
+    # A sentence is clear when it holds a number or one of the source phrases above.
+    vague_words:                 # PROPOSED: owner to confirm
+      - suitable
+      - appropriate
+      - as needed
+      - reasonable
+
+  - id: GT-5
+    code: no_example
+    text: "Every measure has a worked example, in its own section or named in the document."
+    # A measure has an example when its own text holds one of these words or phrases.
+    example_markers:             # PROPOSED: owner to confirm
+      - example
+      - for instance
+      - e.g.
+      - suppose
+    # Or when any section of the document names a worked example with one of these phrases. The
+    # check does not look at whether that example is about this measure: it is a floor.
+    document_example_phrases:    # PROPOSED: owner to confirm
+      - worked example
+      - worked examples
+      - worked test case
+      - worked test cases
+    # What a fault says. {id} is the measure's section.
+    needed: "Add a worked example to measure {id}."
+
+  - id: GT-6
+    code: contradiction
+    text: "Two sections do not give different values for the same named setting."
+    # A named setting is a short name, then one of these operators, then a number: "the pass mark
+    # is 12". Only numbers are compared. The name is the last words before the operator.
+    operators: ["=", ":", "is", "are", "must be", "should be", "set to"]   # PROPOSED: owner to confirm
+    max_name_words: 3            # PROPOSED: owner to confirm
+    min_name_words: 2            # PROPOSED: owner to confirm
+    ignore_leading_words: ["the", "a", "an"]   # PROPOSED: owner to confirm
+
+  - id: GT-7
+    code: template_ref_broken
+    text: "Every rule of the school's template that rests on a section of the methodology points at a section that is in the document."
+
+  - id: GT-8
+    code: no_numbering
+    text: "The document has numbered sections. Without them no other check can name a section, so none is run."
+
+  - id: GT-9
+    code: procedure_not_defined
+    text: "A sentence that says a check or a method is applied has, in the same section, the steps or the rule for it."
+    # A sentence says so when it holds one of these phrases.
+    trigger_phrases:             # PROPOSED: owner to confirm
+      - is applied when
+      - are applied when
+      - is applied if
+      - are applied if
+      - is checked for
+      - are checked for
+      - complementary suppression
+    # The section gives a procedure when any other sentence of it holds one of these words, or when
+    # it holds at least this many numbered steps. A floor: it cannot tell whose steps they are.
+    procedure_markers:           # PROPOSED: owner to confirm
+      - step
+      - steps
+      - first
+      - then
+      - algorithm
+      - procedure
+      - formula
+      - method
+      - rule
+    min_numbered_steps: 2        # PROPOSED: owner to confirm
+
+  - id: GT-10
+    code: vague_scope
+    text: "A word that leaves the scope or the condition open comes with a value, or with where it comes from, in the same sentence."
+    # Same condition as GT-4: clear when the sentence holds a number or a source phrase. A number
+    # that only points at another section (see reference_words) is not a value.
+    vague_scope_words:           # PROPOSED: owner to confirm
+      - important
+      - where feasible
+      - where lawful
+      - where possible
+      - where necessary
+    reference_words: [section, sections, see, clause]   # PROPOSED: owner to confirm
