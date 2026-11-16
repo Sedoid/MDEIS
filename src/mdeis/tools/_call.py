@@ -10,7 +10,9 @@ logged like any other, so a refusal leaves a trace.
 """
 
 import functools
+import hashlib
 import inspect
+import json
 
 from mdeis.db import diary
 
@@ -19,9 +21,32 @@ from ..core.trend import RulebookGap
 from .context import Refusal, ToolContext
 
 
-def logged_tool(name: str):
+def _redacted(arguments: dict, names: tuple) -> dict:
+    """The arguments as they are written to the diary. A named argument is written as its sha256
+    and length, never as its content (a structured value is hashed as sorted JSON). The body still
+    receives the value."""
+    out = dict(arguments)
+    for key in names:
+        value = out.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            value = json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+        digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+        out[key] = {"redacted": True, "sha256": digest, "length": len(value)}
+    return out
+
+
+def logged_tool(name: str, redact: tuple = ()):
+    """`redact` names text arguments that must not enter the diary (lesson notes: the diary cannot
+    be corrected later, and a refused note is exactly the one that names a learner). They are logged
+    as a hash and a length, so the diary still ties to what was stored."""
+
     def decorate(body):
         signature = inspect.signature(body)
+        unknown = [r for r in redact if r not in signature.parameters]
+        if unknown:
+            raise TypeError(f"{name}: redact names {unknown}, which are not arguments of the tool")
 
         @functools.wraps(body)
         def run(ctx: ToolContext, *args, **kwargs):
@@ -29,7 +54,7 @@ def logged_tool(name: str):
             # before anything happens.
             bound = signature.bind(ctx, *args, **kwargs)
             bound.apply_defaults()
-            arguments = dict(list(bound.arguments.items())[1:])
+            arguments = _redacted(dict(list(bound.arguments.items())[1:]), redact)
             try:
                 result, outcome = body(*bound.args, **bound.kwargs)
             except (Refusal, RulebookProblem, RulebookGap) as refusal:
