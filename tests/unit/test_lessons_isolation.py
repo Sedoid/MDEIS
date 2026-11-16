@@ -40,3 +40,24 @@ def test_the_only_modules_that_import_the_store_are_the_store_itself_and_tests()
         text = path.read_text("utf-8")
         if path.parent.name == "lessons":
             assert "lessons.store" not in text and "from .store" not in text, path
+
+
+# T-062: the human-only routes need to call approve and reject, so exactly one new module may import
+# the store besides the tool server. This test PINS that set. It was added, not loosened: the test
+# above looks only inside `src/mdeis/lessons/`, so by itself it would not stop any other module.
+IMPORTS_THE_STORE = re.compile(
+    r"lessons\.store|from \.lessons import store|from mdeis\.lessons import store"
+)
+MAY_IMPORT_THE_STORE = {"mdeis/server.py", "mdeis/human_routes.py"}
+
+
+def test_exactly_the_tool_server_and_the_human_routes_import_the_store_outside_it():
+    found = {
+        str(p.relative_to(SRC))
+        for p in SRC.rglob("*.py")
+        if p != SRC / "mdeis" / "lessons" / "store.py"
+        and p.parent != SRC / "mdeis" / "lessons"  # the package's own modules are checked above
+        and "lessons" in p.read_text("utf-8")
+        and IMPORTS_THE_STORE.search(p.read_text("utf-8"))
+    }
+    assert found == MAY_IMPORT_THE_STORE

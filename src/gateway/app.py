@@ -17,8 +17,16 @@ things and has no model code in it:
 `POST /lessons` and `GET /lessons/{plan_id}` are a pass-through for the lesson adapter. They take
 the same key and the same signed-in user as chat, sign the same token (with the school), and
 forward what the tutor chose and wrote to the orchestrator. The body is closed (`extra="forbid"`):
-a field that names an author, a school or an approver is refused here. There is no route in this
-file that approves or rejects a plan.
+a field that names an author, a school or an approver is refused here. Nothing on those two routes
+approves or rejects a plan.
+
+The routes under `/portal/lessons` are for the portal's Lessons page, and only the portal calls
+them. They need the portal's own key (`GATEWAY_PORTAL_KEY`, not the chat key, and the chat key does
+not open them). Making a lesson goes to the orchestrator as above. Reading, listing, approving and
+rejecting a plan go to the tool server's human-only routes, never through the orchestrator: this
+service adds the shared key (`HUMAN_ROUTE_KEY`, which only this service and the tool server hold)
+and a token signed for the signed-in user, who comes from the portal's headers and never from a
+body. A body here may hold only what the tutor chose, so no field can name a person or a school.
 
 It logs the names of headers and the request number, never their values, keys or message text.
 """
@@ -59,6 +67,13 @@ INTERRUPTED = (
 
 PLAN_ID = r"^LP-[0-9]{6,}$"  # the form the database makes for a lesson plan number
 APPROVER_TOKEN_HEADER = "X-Approver-Token"
+HUMAN_KEY_HEADER = "X-Human-Route-Key"
+DEFAULT_MCP_URL = "http://mdeis-mcp:8100/mcp"
+PORTAL_UNAVAILABLE = (
+    "The lesson service is not available right now. Nothing was changed. "
+    "Please try again in a moment."
+)
+ROUTES_OFF = "The tutor's approval routes are switched off on this server. Nothing was changed."
 LESSON_UNAVAILABLE = (
     "The lesson service is not available right now. Nothing was saved. "
     "Please try again in a moment."
@@ -78,6 +93,19 @@ class LessonBody(BaseModel):
     notes: str = Field(min_length=1)
 
 
+class ApproveBody(BaseModel):
+    """The edit ids the tutor accepted. Nothing else is accepted: no field can name a person."""
+
+    model_config = ConfigDict(extra="forbid")
+    accepted_edit_ids: list[str]
+
+
+class RejectBody(BaseModel):
+    """A rejection carries no field at all."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
 @dataclass(frozen=True)
 class Settings:
     api_key: str
@@ -87,6 +115,9 @@ class Settings:
     user_id_header: str
     user_name_header: str
     school: str = ""  # the school code this gateway serves (GATEWAY_SCHOOL_CODE); "" means none
+    portal_key: str = ""  # the key the portal holds (GATEWAY_PORTAL_KEY); "" locks its routes
+    human_key: str = ""  # the key the tool server's human-only routes need (HUMAN_ROUTE_KEY)
+    mcp_url: str = DEFAULT_MCP_URL
 
 
 def load_settings(env=None) -> Settings:
@@ -99,6 +130,9 @@ def load_settings(env=None) -> Settings:
         user_id_header=env.get("GATEWAY_USER_ID_HEADER") or USER_ID_HEADER,
         user_name_header=env.get("GATEWAY_USER_NAME_HEADER") or USER_NAME_HEADER,
         school=(env.get("GATEWAY_SCHOOL_CODE") or "").strip(),
+        portal_key=(env.get("GATEWAY_PORTAL_KEY") or "").strip(),
+        human_key=(env.get("HUMAN_ROUTE_KEY") or "").strip(),
+        mcp_url=(env.get("MDEIS_MCP_URL") or DEFAULT_MCP_URL).strip(),
     )
 
 
@@ -107,6 +141,21 @@ def require_key(authorization: Annotated[str | None, Header()] = None) -> None:
     expected = load_settings().api_key
     if not expected or not hmac.compare_digest(authorization or "", f"Bearer {expected}"):
         raise HTTPException(status_code=401, detail="missing or wrong key")
+
+
+def require_portal_key(authorization: Annotated[str | None, Header()] = None) -> None:
+    """The key the portal holds. It is not the chat key, and the chat key does not open these
+    routes. No key set means they are locked."""
+    expected = load_settings().portal_key
+    given = (authorization or "").encode("utf-8")
+    if not expected or not hmac.compare_digest(given, f"Bearer {expected}".encode()):
+        raise HTTPException(status_code=401, detail="missing or wrong key")
+
+
+def tool_server_base(mcp_url: str) -> str:
+    """The tool server's address without the `/mcp` path the orchestrator uses."""
+    base = mcp_url.rstrip("/")
+    return base[: -len("/mcp")] if base.endswith("/mcp") else base
 
 
 def text_of(content) -> str:
@@ -278,8 +327,7 @@ def create_app(client_factory=None) -> FastAPI:
                 content={"outcome": "error", "statement": LESSON_UNAVAILABLE, "plan": None},
             )
 
-    @app.post("/lessons", dependencies=[Depends(require_key)])
-    async def lessons(request: Request, body: LessonBody):
+    async def make_lesson(request: Request, body: LessonBody):
         settings = load_settings()
         token, refusal = signed_in(request, settings)
         if refusal:
@@ -290,6 +338,10 @@ def create_app(client_factory=None) -> FastAPI:
             return client.post(f"{settings.orchestrator_url}/lessons", json=run, headers=headers)
 
         return await to_orchestrator(settings, send)
+
+    @app.post("/lessons", dependencies=[Depends(require_key)])
+    async def lessons(request: Request, body: LessonBody):
+        return await make_lesson(request, body)
 
     @app.get("/lessons/{plan_id}", dependencies=[Depends(require_key)])
     async def lesson(request: Request, plan_id: Annotated[str, Path(pattern=PLAN_ID)]):
@@ -305,6 +357,65 @@ def create_app(client_factory=None) -> FastAPI:
             )
 
         return await to_orchestrator(settings, send)
+
+    # --- the portal's Lessons page ----------------------------------------------------------------
+    async def to_tool_server(request: Request, method: str, path: str, body=None):
+        """One call to the tool server's human-only routes, as the signed-in user. The key is added
+        here and goes nowhere else; what comes back is handed on with its own status."""
+        settings = load_settings()
+        token, refusal = signed_in(request, settings)
+        if refusal:
+            return refusal
+        if not settings.human_key:
+            return JSONResponse(
+                status_code=httpx.codes.SERVICE_UNAVAILABLE,
+                content={"status": "refused", "reason": "routes_off", "detail": ROUTES_OFF},
+            )
+        headers = {HUMAN_KEY_HEADER: settings.human_key, APPROVER_TOKEN_HEADER: token}
+        url = tool_server_base(settings.mcp_url) + path
+        try:
+            async with make_client() as client:
+                reply = await client.request(method, url, headers=headers, json=body)
+            data = reply.json()
+            if not isinstance(data, dict):
+                raise ValueError("not an object")
+        except (httpx.HTTPError, ValueError):
+            return JSONResponse(
+                status_code=httpx.codes.BAD_GATEWAY,
+                content={"status": "refused", "reason": "service_unavailable",
+                         "detail": PORTAL_UNAVAILABLE},
+            )
+        return JSONResponse(status_code=reply.status_code, content=data)
+
+    @app.post("/portal/lessons", dependencies=[Depends(require_portal_key)])
+    async def portal_make(request: Request, body: LessonBody):
+        return await make_lesson(request, body)
+
+    @app.get("/portal/lessons/options", dependencies=[Depends(require_portal_key)])
+    async def portal_options(request: Request):
+        return await to_tool_server(request, "GET", "/human/lessons/options")
+
+    @app.get("/portal/lessons", dependencies=[Depends(require_portal_key)])
+    async def portal_list(request: Request):
+        return await to_tool_server(request, "GET", "/human/lessons")
+
+    @app.get("/portal/lessons/{plan_id}", dependencies=[Depends(require_portal_key)])
+    async def portal_plan(request: Request, plan_id: Annotated[str, Path(pattern=PLAN_ID)]):
+        return await to_tool_server(request, "GET", f"/human/lessons/{plan_id}")
+
+    @app.post("/portal/lessons/{plan_id}/approve", dependencies=[Depends(require_portal_key)])
+    async def portal_approve(
+        request: Request, body: ApproveBody, plan_id: Annotated[str, Path(pattern=PLAN_ID)]
+    ):
+        return await to_tool_server(
+            request, "POST", f"/human/lessons/{plan_id}/approve", body.model_dump()
+        )
+
+    @app.post("/portal/lessons/{plan_id}/reject", dependencies=[Depends(require_portal_key)])
+    async def portal_reject(
+        request: Request, body: RejectBody, plan_id: Annotated[str, Path(pattern=PLAN_ID)]
+    ):
+        return await to_tool_server(request, "POST", f"/human/lessons/{plan_id}/reject", {})
 
     return app
 

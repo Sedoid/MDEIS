@@ -199,8 +199,11 @@ def test_the_gateway_has_no_route_that_approves_or_rejects_and_exactly_two_lesso
     from gateway.app import create_app
 
     paths = {p for p, _ in routes_of(create_app())}
-    assert not [p for p in paths if "approve" in p or "reject" in p]
-    assert {p for p in paths if "lesson" in p} == {"/lessons", "/lessons/{plan_id}"}
+    # T-062 adds the portal's own routes under /portal/ on purpose (they are pinned in
+    # test_gateway_portal_routes.py). The chat side keeps the same two assertions.
+    chat_side = {p for p in paths if not p.startswith("/portal/")}
+    assert not [p for p in chat_side if "approve" in p or "reject" in p]
+    assert {p for p in chat_side if "lesson" in p} == {"/lessons", "/lessons/{plan_id}"}
 
 
 def test_the_prompt_never_mentions_approval_or_a_person_who_could_approve():

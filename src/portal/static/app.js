@@ -22,8 +22,8 @@ let me = null;
 let csrf = null;
 let timer = null;
 let config = {};
-const VIEWS = ["upload", "files", "chat"];
-const TITLES = { upload: "Upload", files: "Your files", chat: "Chat" };
+const VIEWS = ["upload", "files", "lessons", "chat"];
+const TITLES = { upload: "Upload", files: "Your files", lessons: "Lessons", chat: "Chat" };
 
 const OFFLINE = "Could not reach the server. Check the connection and try again.";
 
@@ -125,6 +125,10 @@ function route() {
   if (name !== "chat" && $("shell").classList.contains("chat-wide")) setWide(false);
   document.title = TITLES[name] + " · Lucent AI";
   $("main").scrollTop = 0;
+  // The Lessons page is its own file (lessons.js). It is given the page's calls, and nothing else.
+  if (name === "lessons" && window.lessonsView) {
+    window.lessonsView.show({ call, text, csrf: () => csrf, me });
+  }
 }
 
 async function start() {
@@ -179,6 +183,7 @@ function showSignIn() {
   $("shell").hidden = true;
   $("chat-frame").removeAttribute("src");
   $("groups").replaceChildren();
+  if (window.lessonsView) window.lessonsView.reset();  // nothing of one person's plans stays on screen
   $("signin").hidden = false;
 }
 

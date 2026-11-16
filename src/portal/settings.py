@@ -1,13 +1,15 @@
 """The portal's settings, read from the environment when the service starts.
 
 Everything here is configuration: where the inbox is, how big a file may be, where Open WebUI is.
-There is no model key and no approver-token secret in this service, and none is read.
+There is no model key and no approver-token secret in this service, and none is read. The only key
+it holds besides the session secret is the one for the gateway's portal routes (the Lessons page).
 """
 
 import os
 from dataclasses import dataclass
 
 DEFAULT_MAX_MB = 10
+DEFAULT_GATEWAY_URL = "http://gateway:8000"
 DEFAULT_MAX_MARKDOWN_MB = 1
 MB = 1024 * 1024
 ON = ("1", "true", "yes", "on")
@@ -25,6 +27,8 @@ class Settings:
     max_markdown_bytes: int
     frame_chat: bool
     portal_public_url: str = ""  # the address people type, if a proxy sits in front
+    gateway_url: str = ""  # where the Lessons page asks (inside the network); "" means off
+    gateway_key: str = ""  # the key for the gateway's portal routes; "" means the page is off
 
 
 def load_settings(env=None) -> Settings:
@@ -40,4 +44,6 @@ def load_settings(env=None) -> Settings:
         max_markdown_bytes=int(env.get("MAX_MARKDOWN_MB") or DEFAULT_MAX_MARKDOWN_MB) * MB,
         frame_chat=env.get("PORTAL_FRAME_CHAT", "false").strip().lower() in ON,
         portal_public_url=(env.get("PORTAL_PUBLIC_URL") or "").rstrip("/"),
+        gateway_url=(env.get("GATEWAY_URL") or DEFAULT_GATEWAY_URL).rstrip("/"),
+        gateway_key=(env.get("GATEWAY_PORTAL_KEY") or "").strip(),
     )

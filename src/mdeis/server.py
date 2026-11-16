@@ -3,7 +3,8 @@ model and no model key.
 
 The five are `class_baseline`, `stage_gap_counts` and three lesson tools (`guard_lesson_notes`,
 `save_lesson_plan`, `get_lesson_plan`). The chat assistant sees none of the lesson tools: its list
-is an explicit allow-list in the orchestrator. No tool here approves or rejects a lesson plan.
+is an explicit allow-list in the orchestrator. No tool here approves or rejects a lesson plan: the
+tutor does that through plain HTTP routes (`human_routes.py`), which are not tools.
 
 Each tool here only translates an MCP call into a call of the plain function in `mdeis.tools`.
 The two things the model must not control are read from the HTTP headers the orchestrator sets,
@@ -26,7 +27,7 @@ from mcp.server.fastmcp import Context, FastMCP
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from . import tools
+from . import human_routes, tools
 from .core import approver_token
 from .lessons import store as lesson_store
 from .tools import class_view
@@ -255,6 +256,10 @@ if class_view.enabled():  # locked unless CLASS_VIEW_ENABLED is switched on
     @mcp.tool(description=_about(lesson_store.get_lesson_plan))
     def get_lesson_plan(request: Context, plan_id: str) -> dict:
         return _run(request, lesson_store.get_lesson_plan, plan_id=plan_id)
+
+    # The tutor's own routes (read, approve, reject) are plain HTTP routes, not tools. Each needs
+    # the gateway's key and a signed token, so no model can reach them. See human_routes.py.
+    human_routes.install(mcp)
 
 
 def main() -> None:

@@ -6,15 +6,23 @@
     POST /api/documents?kind=    upload a file       GET  /api/documents[/D-000001]  status
     GET  /api/documents/D-000001/file   the file itself, for a new tab
     GET  /healthz
+    GET  /api/lessons/options  /api/lessons  /api/lessons/LP-000001    the Lessons page, read
+    POST /api/lessons  /api/lessons/LP-000001/approve  .../reject      the Lessons page, act
 
 Who is signed in comes from Open WebUI (auth.py). A file is checked, written to the inbox under a
 name we make, and then a `documents` row is added as `pending`; the ingest worker does the reading.
 Nothing here reads a card, calls a model or holds a model key or the approver-token secret.
+
+The Lessons routes only pass on to the gateway. Each needs a signed-in person; each post needs the
+CSRF token and the page's own origin; the person passed on is the one Open WebUI vouched for, never
+one named in a body; and a body may hold only what the tutor chose or wrote (no field can name a
+person, a school or a status). What comes back is handed on unchanged, with its status.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import re
@@ -30,6 +38,7 @@ from starlette.concurrency import run_in_threadpool
 
 from . import security
 from .auth import OpenWebUIAuth, Unavailable, User
+from .gateway import GatewayClient
 from .settings import MB, Settings, load_settings
 from .store import PgStore
 
@@ -40,16 +49,58 @@ KINDS = {"results": (".pdf",), "methodology": (".pdf", ".md")}
 PDF_START = b"%PDF-"
 STORED_NAME = re.compile(r"^[0-9a-f]{32}\.(pdf|md)$")  # what the portal and the admin tool write
 DOCUMENT_ID = re.compile(r"^D-[0-9]{6,}$")
+PLAN_ID = re.compile(r"^LP-[0-9]{6,}$")  # the form the database gives a lesson plan number
+NEW_LESSON_FIELDS = ("stage", "area", "term", "objective", "notes")
+LESSONS_OFF = "The Lessons page is not set up on this server yet. Nothing was changed."
 
 
 def _say(status: int, message: str, **more) -> JSONResponse:
     return JSONResponse({"error": message, **more}, status_code=status)
 
 
-def create_app(settings: Settings | None = None, auth=None, store=None) -> FastAPI:
+def _refuse(status: int, reason: str, detail: str) -> JSONResponse:
+    """The Lessons routes answer a refusal in one shape, the one the tool server uses."""
+    return JSONResponse(
+        {"status": "refused", "reason": reason, "detail": detail}, status_code=status
+    )
+
+
+def _lesson_body(raw: bytes, cap: int, fields: tuple) -> tuple:
+    """(the body, None), or (None, the refusal). The body is one JSON object that holds only the
+    fields listed; an empty body counts as `{}` only when no field is listed."""
+    if len(raw) > cap:
+        return None, _refuse(413, "too_large", "That is too large to send.")
+    if not raw.strip():
+        if fields:
+            return None, _refuse(400, "bad_body", "Nothing was sent.")
+        return {}, None
+    try:
+        body = json.loads(raw)
+    except ValueError:
+        return None, _refuse(400, "bad_body", "That could not be read.")
+    if not isinstance(body, dict):
+        return None, _refuse(400, "bad_body", "That could not be read.")
+    if set(body) - set(fields):
+        return None, _refuse(400, "unknown_field", "Only the fields on the form are accepted.")
+    return body, None
+
+
+def _new_lesson_problem(body: dict) -> str | None:
+    for name in NEW_LESSON_FIELDS:
+        value = body.get(name)
+        if name == "term":
+            if not isinstance(value, int) or isinstance(value, bool):
+                return "Choose the term."
+        elif not isinstance(value, str) or not value.strip():
+            return f"The {name} is needed."
+    return None
+
+
+def create_app(settings: Settings | None = None, auth=None, store=None, gateway=None) -> FastAPI:
     config = settings or load_settings()
     auth = auth or OpenWebUIAuth(config.webui_url)
     store = store or PgStore(config.database_url)
+    gateway = gateway or GatewayClient(config.gateway_url, config.gateway_key)
     app = FastAPI(title="MDEIS portal", docs_url=None, redoc_url=None, openapi_url=None)
 
     policy = security.csp(config.webui_public_url if config.frame_chat else None)
@@ -303,6 +354,67 @@ def create_app(settings: Settings | None = None, auth=None, store=None) -> FastA
             return _say(503, "The file could not be recorded. Nothing was kept. Try again.")
         log.info("document %s (%s) from user %s", document_id, kind, user.id)
         return JSONResponse({"document_id": document_id, "status": "pending"}, status_code=201)
+
+    # --- the Lessons page: every route passes on to the gateway as the signed-in person ----------
+    async def lessons_call(request: Request, method: str, path: str, plan=None, fields=None):
+        """One Lessons request. `fields` is None for a read; for a post it lists what the body may
+        hold, and the post needs the page's origin and the CSRF token."""
+        user = await who(request)
+        if user is None:
+            return _say(401, "Sign in to Open WebUI first.")
+        if fields is not None and (
+            not own_origin(request)
+            or not security.csrf_ok(
+                config.session_secret, user.id, request.headers.get("x-csrf-token")
+            )
+        ):
+            return _say(403, "This request did not come from the page. Reload the page.")
+        if not gateway.configured:
+            return _refuse(503, "lessons_off", LESSONS_OFF)
+        if plan is not None and not PLAN_ID.match(plan):
+            return _refuse(404, "plan_not_found", "There is no such plan.")
+        sent = None
+        if fields is not None:
+            body, refusal = _lesson_body(await request.body(), config.max_markdown_bytes, fields)
+            if refusal:
+                return refusal
+            if fields == NEW_LESSON_FIELDS and (problem := _new_lesson_problem(body)):
+                return _refuse(400, "bad_body", problem)
+            if fields == ("accepted_edit_ids",):
+                ids = body.get("accepted_edit_ids")
+                if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+                    return _refuse(400, "bad_body", "Choose the changes to accept.")
+            sent = body
+        status, answer = await gateway.request(method, path, user, sent)
+        if not isinstance(answer, dict):
+            return _refuse(502, "service_unavailable", "The lesson service gave no usable answer.")
+        return JSONResponse(answer, status_code=status)
+
+    @app.get("/api/lessons/options")
+    async def lesson_options(request: Request):
+        return await lessons_call(request, "GET", "/portal/lessons/options")
+
+    @app.get("/api/lessons")
+    async def lesson_list(request: Request):
+        return await lessons_call(request, "GET", "/portal/lessons")
+
+    @app.get("/api/lessons/{plan_id}")
+    async def lesson_plan(plan_id: str, request: Request):
+        return await lessons_call(request, "GET", f"/portal/lessons/{plan_id}", plan_id)
+
+    @app.post("/api/lessons")
+    async def lesson_new(request: Request):
+        return await lessons_call(request, "POST", "/portal/lessons", None, NEW_LESSON_FIELDS)
+
+    @app.post("/api/lessons/{plan_id}/approve")
+    async def lesson_approve(plan_id: str, request: Request):
+        return await lessons_call(
+            request, "POST", f"/portal/lessons/{plan_id}/approve", plan_id, ("accepted_edit_ids",)
+        )
+
+    @app.post("/api/lessons/{plan_id}/reject")
+    async def lesson_reject(plan_id: str, request: Request):
+        return await lessons_call(request, "POST", f"/portal/lessons/{plan_id}/reject", plan_id, ())
 
     return app
 
