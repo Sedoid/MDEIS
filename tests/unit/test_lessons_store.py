@@ -37,8 +37,8 @@ from mdeis.lessons import store
 from mdeis.tools.context import Approver, ToolContext
 
 FUNCTIONS = [
-    "guard_lesson_notes", "save_lesson_plan", "get_lesson_plan", "approve_lesson_plan",
-    "reject_lesson_plan",
+    "guard_lesson_notes", "save_lesson_plan", "get_lesson_plan", "list_lesson_plans",
+    "approve_lesson_plan", "reject_lesson_plan",
 ]
 NAMING_A_PERSON_OR_SCHOOL = {
     "approver", "approver_id", "approver_name", "author", "author_id", "author_name", "user",
@@ -98,7 +98,8 @@ def test_only_the_approval_function_writes_the_approved_status():
 
 LOG_NAMES = {
     "guard_lesson_notes": "lesson_guard_notes", "save_lesson_plan": "lesson_save_plan",
-    "get_lesson_plan": "lesson_get_plan", "approve_lesson_plan": "lesson_approve_plan",
+    "get_lesson_plan": "lesson_get_plan", "list_lesson_plans": "lesson_list_plans",
+    "approve_lesson_plan": "lesson_approve_plan",
     "reject_lesson_plan": "lesson_reject_plan",
 }
 
@@ -644,3 +645,80 @@ def test_the_notes_never_appear_in_the_diary_only_their_hash_and_length(db):
     assert row["inputs"]["objective"]["length"] == len(OBJECTIVE)
     assert row["inputs"]["model_output"]["redacted"] is True
     assert A_STARTER not in json.dumps(row["inputs"])
+
+
+# ------------------------------------------------------------- the list, and more in the read
+@FOR_DB
+def test_the_read_also_gives_the_stored_check_result_pins_model_and_run(db):
+    class_read(db)
+    plan = save(db)["plan_id"]
+    mine = store.get_lesson_plan(ctx(db), plan_id=plan)
+    assert mine["checks_passed"] is True
+    assert mine["pins"]["template_version"] == VERSION
+    assert mine["pins"]["template_sha256"] == "a" * 64
+    assert (mine["model"], mine["prompt_sha256"], mine["run_id"]) == ("model-x", "b" * 64, RUN)
+    assert mine["created_at"] == stored(db, plan)["created_at"].isoformat()
+
+
+@FOR_DB
+def test_checks_passed_is_read_from_the_stored_check_result_only(db):
+    class_read(db)
+    plan = save(db)["plan_id"]
+    # the guard stops a change to check_result, so switch it off to model a damaged row
+    db.execute("ALTER TABLE lesson_plans DISABLE TRIGGER lesson_plans_guard")
+    for broken in ('{"passed": false, "objective_unchanged": true, "outside_unchanged": true}',
+                   '{"passed": true, "objective_unchanged": false, "outside_unchanged": true}',
+                   '{"passed": true, "objective_unchanged": true}', "{}"):
+        db.execute("UPDATE lesson_plans SET check_result = %s::jsonb WHERE plan_id = %s",
+                   (broken, plan))
+        assert store.get_lesson_plan(ctx(db), plan_id=plan)["checks_passed"] is False, broken
+
+
+@FOR_DB
+def test_the_list_holds_only_the_signed_in_authors_plans_newest_first(db):
+    class_read(db)
+    first = save(db)["plan_id"]
+    second = save(db)["plan_id"]
+    other = save(db, who=OTHER)["plan_id"]
+    store.approve_lesson_plan(ctx(db), plan_id=first, accepted_edit_ids=["e1"])
+    mine = store.list_lesson_plans(ctx(db))
+    assert mine["status"] == "ok"
+    assert [p["plan_id"] for p in mine["plans"]] == [second, first]
+    by_id = {p["plan_id"]: p for p in mine["plans"]}
+    assert by_id[first]["plan_status"] == "approved" and by_id[first]["approved_at"] is not None
+    assert by_id[second]["plan_status"] == "proposed" and by_id[second]["approved_at"] is None
+    assert set(by_id[first]) == {"plan_id", "plan_status", "stage", "area", "term",
+                                 "template_version", "created_at", "approved_at"}
+    assert (by_id[first]["stage"], by_id[first]["area"], by_id[first]["term"]) == (
+        "Form 3", "literacy", 2)
+    theirs = store.list_lesson_plans(ctx(db, OTHER))
+    assert [p["plan_id"] for p in theirs["plans"]] == [other]
+
+
+@FOR_DB
+def test_the_list_holds_no_lesson_text_no_name_and_no_other_school(db):
+    class_read(db)
+    save(db)
+    text = json.dumps(store.list_lesson_plans(ctx(db)))
+    for word in (A_STARTER, A_ASK, OBJECTIVE, "Ms Tutor", "u-1", "model-x"):
+        assert word not in text
+    assert store.list_lesson_plans(ctx(db, school="OTHER"))["plans"] == []
+
+
+@FOR_DB
+def test_the_list_needs_a_signed_in_user_and_a_school_and_is_logged(db):
+    assert store.list_lesson_plans(ctx(db, None))["status"] == "refused"
+    assert store.list_lesson_plans(ctx(db, school=None))["status"] == "refused"
+    assert store.list_lesson_plans(ctx(db))["plans"] == []
+    rows = log_rows(db, "lesson_list_plans")
+    assert [r["outcome"] for r in rows] == ["refused", "refused", "ok"]
+    assert rows[2]["approver_id"] == "u-1"
+
+
+@FOR_DB
+def test_no_argument_can_name_the_person_or_school_for_the_list(db):
+    with pytest.raises(TypeError):
+        store.list_lesson_plans(ctx(db), author_id="u-2")
+    with pytest.raises(TypeError):
+        store.list_lesson_plans(ctx(db), school_id="TST")
+    assert list(inspect.signature(store.list_lesson_plans).parameters) == ["ctx"]

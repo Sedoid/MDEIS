@@ -41,6 +41,8 @@ from .rules import load_lesson_rules
 # The class tools whose diary rows count as "returned in this run".
 CLASS_TOOLS = ("class_baseline",)
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+LIST_LIMIT = 100  # a page size for the saved-plans list, not a rule
+CHECK_KEYS = ("passed", "objective_unchanged", "outside_unchanged")
 
 PLAIN = {
     "approved_needs_approver_and_check": (
@@ -195,6 +197,12 @@ def _load(ctx: ToolContext, plan_id, school: str, lock: bool = False) -> dict:
     if row is None or row["school_code"] != school:
         raise Refusal(f"there is no lesson plan {plan_id} for this school")
     return row
+
+
+def _checks_passed(check_result) -> bool:
+    """True only when the stored check result says every check passed. Read from the row, never
+    from a caller."""
+    return isinstance(check_result, dict) and all(check_result.get(k) is True for k in CHECK_KEYS)
 
 
 def _own(row: dict, who) -> None:
@@ -356,6 +364,38 @@ def get_lesson_plan(ctx: ToolContext, plan_id):
         "author_name": row["author_name"],
         "approver_name": row["approver_name"],
         "approved_at": row["approved_at"].isoformat() if row["approved_at"] else None,
+        "created_at": row["created_at"].isoformat(),
+        "checks_passed": _checks_passed(row["check_result"]),
+        "pins": row["pins"],
+        "model": row["model"],
+        "prompt_sha256": row["prompt_sha256"],
+        "run_id": row["run_id"],
+    }, "ok"
+
+
+@logged_tool("lesson_list_plans")
+def list_lesson_plans(ctx: ToolContext):
+    """The signed-in author's own plans in this school, newest first. No argument names a person or
+    a school. Each entry is what a list needs: no lesson text and no name."""
+    who = _signed_in(ctx)
+    school = _school(ctx)
+    rows = ctx.conn.cursor(row_factory=dict_row).execute(
+        "SELECT plan_id, status, stage, area, term, template_version, created_at, approved_at "
+        "FROM lesson_plans WHERE author_id = %s AND school_code = %s "
+        "ORDER BY created_at DESC, plan_id DESC LIMIT %s",
+        (who.id, school, LIST_LIMIT),
+    ).fetchall()
+    return {
+        "status": "ok",
+        "plans": [
+            {
+                "plan_id": r["plan_id"], "plan_status": r["status"], "stage": r["stage"],
+                "area": r["area"], "term": r["term"], "template_version": r["template_version"],
+                "created_at": r["created_at"].isoformat(),
+                "approved_at": r["approved_at"].isoformat() if r["approved_at"] else None,
+            }
+            for r in rows
+        ],
     }, "ok"
 
 
