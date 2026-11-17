@@ -45,7 +45,8 @@ def put_the_server_back(monkeypatch):
 def test_with_the_view_off_the_server_lists_neither_class_tool(monkeypatch):
     tools = listed(monkeypatch, on=False)
     assert "class_baseline" not in tools and "stage_gap_counts" not in tools
-    assert len(tools) == 10, "the eight tools and, from T-072, list_measures and compute_measure"
+    # the eight tools, list_measures and compute_measure (T-072), export_report (T-076)
+    assert len(tools) == 11
 
 
 def test_with_the_view_on_the_server_lists_class_baseline_with_only_stage_and_term(monkeypatch):
@@ -54,9 +55,9 @@ def test_with_the_view_on_the_server_lists_class_baseline_with_only_stage_and_te
     assert set(tools["class_baseline"].inputSchema["properties"]) == {"stage", "term"}
     assert set(tools["class_baseline"].inputSchema["required"]) == {"stage", "term"}
     # The three lesson tools (guard_lesson_notes, save_lesson_plan, get_lesson_plan) share the
-    # class view's switch, so the count with the view on is 10 + 2 + 3. The names are pinned in
+    # class view's switch, so the count with the view on is 11 + 2 + 3. The names are pinned in
     # test_lesson_graph_boundaries.py.
-    assert len(tools) == 15
+    assert len(tools) == 16
 
 
 def test_the_description_says_what_it_is_and_what_it_will_not_do(monkeypatch):

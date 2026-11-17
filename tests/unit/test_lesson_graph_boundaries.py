@@ -34,9 +34,11 @@ LESSON_PACKAGE = SRC / "orchestrator" / "lessons"
 LESSON_TOOLS = ("guard_lesson_notes", "save_lesson_plan", "get_lesson_plan")
 HUMAN_ONLY = ("approve_lesson_plan", "reject_lesson_plan")
 # T-072 added list_measures and compute_measure to the chat allow-list on purpose: eight, then ten.
-TEN = (
+# T-076 added export_report on purpose (owner decision): ten, then eleven.
+ELEVEN = (
     "ingest_assessments", "resolve_issue", "compute_trend", "list_measures", "compute_measure",
     "get_criterion", "draft_summary", "check_citations", "make_chart", "release_report",
+    "export_report",
 )  # fmt: skip
 
 
@@ -45,20 +47,20 @@ def python_files(root):
 
 
 # --------------------------------------------------------------------------- the chat allow-list
-def test_the_chat_assistants_allow_list_is_the_ten_tools_and_one_class_tool():
-    assert tools.MDEIS_TOOLS == TEN
+def test_the_chat_assistants_allow_list_is_the_eleven_tools_and_one_class_tool():
+    assert tools.MDEIS_TOOLS == ELEVEN
     assert tools.CLASS_VIEW_TOOL == "class_baseline"
 
 
 @pytest.mark.parametrize("view", [False, True], ids=["view off", "view on"])
 def test_the_chat_assistant_is_never_offered_a_lesson_tool_even_when_the_server_lists_one(view):
-    everything = [*TEN, "class_baseline", "stage_gap_counts", *LESSON_TOOLS, *HUMAN_ONLY]
+    everything = [*ELEVEN, "class_baseline", "stage_gap_counts", *LESSON_TOOLS, *HUMAN_ONLY]
     pg_names = load_settings({}).pg_tools
     listed = {tools.MDEIS: [spec(n) for n in everything], tools.PG: [spec(n) for n in pg_names]}
     definitions, owner, dropped = tools.bind(listed, pg_names, view)
     offered = {d["function"]["name"] for d in definitions}
     assert not offered & {*LESSON_TOOLS, *HUMAN_ONLY, "stage_gap_counts"}
-    assert len(offered) == (15 if view else 14), "14 tools, 15 with the class view on"
+    assert len(offered) == (16 if view else 15), "15 tools, 16 with the class view on (T-076)"
     assert not set(owner) & {*LESSON_TOOLS, *HUMAN_ONLY}
 
 
@@ -88,7 +90,7 @@ def test_with_the_class_view_on_the_server_lists_the_three_lesson_tools_and_no_h
     found = listed(server_module, monkeypatch, on=True)
     assert set(LESSON_TOOLS) <= set(found)
     assert not set(HUMAN_ONLY) & set(found)
-    assert len(found) == 15
+    assert len(found) == 16
     properties = {name: set(found[name].inputSchema["properties"]) for name in LESSON_TOOLS}
     assert properties == {
         "guard_lesson_notes": {"stage", "area", "term", "objective", "notes"},
@@ -104,7 +106,7 @@ def test_with_the_class_view_on_the_server_lists_the_three_lesson_tools_and_no_h
 
 def test_with_the_class_view_off_the_server_lists_no_lesson_tool(server_module, monkeypatch):
     found = listed(server_module, monkeypatch, on=False)
-    assert not set(LESSON_TOOLS) & set(found) and len(found) == 10
+    assert not set(LESSON_TOOLS) & set(found) and len(found) == 11
 
 
 def test_the_graphs_tool_names_are_tools_the_server_lists(server_module, monkeypatch):

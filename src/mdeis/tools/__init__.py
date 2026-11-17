@@ -9,6 +9,7 @@ from .citations import check_citations
 from .class_view import stage_gap_counts
 from .criterion import get_criterion
 from .draft import draft_summary
+from .export import export_report
 from .ingest import ingest_assessments
 from .measures import compute_measure, list_measures
 from .release import release_report
@@ -21,6 +22,7 @@ __all__ = [
     "compute_measure",
     "compute_trend",
     "draft_summary",
+    "export_report",
     "get_criterion",
     "ingest_assessments",
     "list_measures",

@@ -32,7 +32,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Annotated, Any, TypedDict
 
-from . import chart_reply, guards, loop, tools
+from . import chart_reply, export_reply, guards, loop, tools
 from .model import ModelError, ToolCall
 
 END = "__end__"
@@ -65,6 +65,7 @@ class State(TypedDict, total=False):
     sources: list  # the report-card files the tools named, each once
     rules: list  # the rules the tools applied, with the rulebook's wording
     assumed: list  # what the tools had to assume (a stage weight), each once
+    exports: list  # report numbers the export tool said `ok` to, each once (the link is made later)
     ready: str  # a draft that passed the check in this run
     steps: int
     redrafts: int
@@ -255,6 +256,7 @@ def build(deps: Deps) -> Machine:
         sources = list(state.get("sources", []))
         rules = list(state.get("rules", []))
         assumed = list(state.get("assumed", []))
+        exports = list(state.get("exports", []))
         asked_now = set(state["asked"]) | deps.earlier_asked
         questions, seen, report, draft_text = [], set(), None, ""
         for call in state["pending"]:
@@ -268,6 +270,7 @@ def build(deps: Deps) -> Machine:
             sources = chart_reply.add_sources(sources, result)
             rules = chart_reply.add_rules(rules, result)
             assumed = chart_reply.add_assumed(assumed, result)
+            exports = export_reply.add_export(exports, call.name, result)
             if call.name in ("ingest_assessments", "compute_trend"):
                 for q in questions_from(result, asked_now, deps.last_user):
                     if q["issue_id"] not in seen:
@@ -288,6 +291,7 @@ def build(deps: Deps) -> Machine:
             "sources": sources,
             "rules": rules,
             "assumed": assumed,
+            "exports": exports,
             "events": events,
         }
 
@@ -360,7 +364,8 @@ def build(deps: Deps) -> Machine:
         guessed = state.get("assumed", []) if shown else []
         text = chart_reply.compose(
             state.get("answer", ""), state.get("charts", []), found, show_line=False,
-            rules=applied, assumed=guessed,
+            rules=applied, assumed=guessed, exports=state.get("exports", []),
+            portal_url=export_reply.portal_of(settings),
         )
         if state.get("ready"):
             text += saved_text(state["ready"], state.get("draft_text", ""))
@@ -424,6 +429,7 @@ def initial_state(conversation: list) -> State:
         sources=[],
         rules=[],
         assumed=[],
+        exports=[],
         ready="",
         steps=0,
         redrafts=0,

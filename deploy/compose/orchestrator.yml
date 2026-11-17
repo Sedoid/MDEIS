@@ -45,6 +45,8 @@ services:
       # One JSON line per finished run (tokens, cost, calls, latency, tool names; no prompts, no
       # replies). Read by `make usage`. The path is on the usage_log volume below.
       USAGE_LOG_FILE: ${USAGE_LOG_FILE:-/var/log/mdeis/usage.jsonl}
+      # Where the download link under a PDF answer points: the portal's address as the browser sees it.
+      PORTAL_URL: ${PORTAL_URL:-/portal/}
     # Named volume so the log survives a restart. The image makes /var/log/mdeis owned by the
     # orchestrator user (uid 10004), and Docker copies that owner into a new empty volume.
     volumes:

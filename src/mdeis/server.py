@@ -1,4 +1,4 @@
-"""The MDEIS MCP server (Streamable HTTP): ten tools (five more when the class view is on), no
+"""The MDEIS MCP server (Streamable HTTP): eleven tools (five more when the class view is on), no
 model and no model key.
 
 The five are `class_baseline`, `stage_gap_counts` and three lesson tools (`guard_lesson_notes`,
@@ -212,6 +212,13 @@ def release_report(request: Context, report_id: str) -> dict:
     return _run(request, tools.release_report, report_id=report_id)
 
 
+@mcp.tool(description=_about(tools.export_report))
+def export_report(request: Context, report_id: str) -> dict:
+    # A report number and nothing else: who is asking and the school come from the verified token.
+    # The tool only checks that the report is released. It returns no file (T-076).
+    return _run(request, tools.export_report, report_id=report_id)
+
+
 if class_view.enabled():  # locked unless CLASS_VIEW_ENABLED is switched on
 
     @mcp.tool(description=_about(tools.class_baseline))
@@ -289,8 +296,9 @@ if class_view.enabled():  # locked unless CLASS_VIEW_ENABLED is switched on
     # the gateway's key and a signed token, so no model can reach them. See human_routes.py.
     human_routes.install(mcp)
 
-# The PDF of a released report is a plain HTTP route too, not a tool, and it does not wait for the
-# class view. It needs the gateway's key and a signed token, like the routes above (T-056).
+# The PDF of a released report is made by a plain HTTP route, not by a tool, and the route does not
+# wait for the class view. It needs the gateway's key and a signed token, like the routes above
+# (T-056). The model's `export_report` above only checks; the person follows the link to this route.
 human_routes.install_reports(mcp)
 
 # The teacher's routes for a built measure (T-073) are plain HTTP routes too, not tools. They need

@@ -5,8 +5,13 @@ route is mounted on a plain Starlette app.
 What is held here: the route needs the gateway's key AND a good signed token, and refuses with a
 typed reason and a diary row otherwise; the person and the school come from the token and nowhere
 else; the body is closed; a good answer is the file with a download header, a refusal is typed JSON
-with no file; the diary failing means no file; and the export is NOT a model tool: not on the tool
-list of the server, not on the orchestrator's allow-list, not named anywhere in the orchestrator.
+with no file; the diary failing means no file; and the file is made only by this route, never by a
+model tool.
+
+T-076 changed the last point on purpose (an owner decision of that session): the model may call
+`export_report`, a tool that only CHECKS that a report is released and returns its number and file
+name. There is still no tool that returns bytes or takes a file, a person or a school, and the
+orchestrator still names neither the export code nor this route. The tests below say that.
 """
 
 import ast
@@ -266,18 +271,18 @@ def test_the_server_adds_the_pdf_route_by_one_call_outside_the_class_view_block(
     assert everywhere.count("human_routes.install_reports(mcp)") == 1
 
 
-def test_the_server_has_no_tool_for_exporting_and_names_no_export_function():
+def test_the_server_has_exactly_one_export_tool_and_it_names_no_export_function():
     tree = ast.parse(server_source())
     tools = [n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and any(
         "tool" in ast.unparse(d) for d in n.decorator_list)]
     assert tools, "the test no longer finds the tools"
-    assert not [t for t in tools if "export" in t or "pdf" in t], tools
+    assert [t for t in tools if "export" in t or "pdf" in t] == ["export_report"], tools
     for word in ("export_released_report", "report_export", "render_report_pdf"):
         assert word not in server_source(), word
 
 
 @pytest.mark.parametrize("on", [False, True], ids=["view off", "view on"])
-def test_the_tool_list_has_no_export_tool_and_the_pdf_route_is_there_either_way(
+def test_the_tool_list_has_one_export_tool_that_takes_only_a_number_and_the_pdf_route_is_there(
     monkeypatch, on
 ):
     pytest.importorskip("mcp")
@@ -289,9 +294,10 @@ def test_the_tool_list_has_no_export_tool_and_the_pdf_route_is_there_either_way(
         else:
             monkeypatch.delenv("CLASS_VIEW_ENABLED", raising=False)
         server = importlib.reload(server)
-        names = {t.name for t in asyncio.run(server.mcp.list_tools())}
-        assert not [n for n in names if "export" in n or "pdf" in n], names
-        assert len(names) == (15 if on else 10), "the tool list is as it was"
+        listed = {t.name: t for t in asyncio.run(server.mcp.list_tools())}
+        assert [n for n in listed if "export" in n or "pdf" in n] == ["export_report"], listed
+        assert set(listed["export_report"].inputSchema["properties"]) == {"report_id"}
+        assert len(listed) == (16 if on else 11), "the tool list is 11, or 16 with the class view"
         paths = {getattr(r, "path", None) for r in server.mcp.streamable_http_app().routes}
         assert "/human/reports/{report_id}/pdf" in paths
     finally:
@@ -299,20 +305,21 @@ def test_the_tool_list_has_no_export_tool_and_the_pdf_route_is_there_either_way(
         importlib.reload(server)
 
 
-def test_the_orchestrators_tool_allow_list_is_unchanged_and_has_no_export():
+def test_the_orchestrators_allow_list_has_the_one_export_tool_and_no_tool_that_returns_a_file():
     from orchestrator import tools
 
     offered = set(tools.MDEIS_TOOLS) | {tools.CLASS_VIEW_TOOL}
-    assert not [n for n in offered if "export" in n or "pdf" in n], offered
+    assert [n for n in offered if "export" in n or "pdf" in n] == ["export_report"], offered
+    assert not [n for n in offered if "download" in n or "file" in n]
     assert "release_report" in offered, "the allow-list still holds the tools it held"
 
 
-def test_nothing_in_the_orchestrator_names_the_export_or_its_route():
+def test_the_orchestrator_names_the_tool_but_not_the_export_code_or_the_download_route():
     for path in (SRC / "orchestrator").rglob("*"):
         if path.is_file() and "__pycache__" not in path.parts:
             text = path.read_text("utf-8", errors="ignore")
-            for word in ("export_report", "report_pdf", "export_released_report", "/pdf",
-                         "render_report_pdf", "mdeis.export"):
+            for word in ("report_pdf", "export_released_report", "/pdf", "render_report_pdf",
+                         "mdeis.export"):
                 assert word not in text, (path, word)
 
 

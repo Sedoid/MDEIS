@@ -15,6 +15,8 @@ import re
 
 from mdeis import chart_image
 
+from . import export_reply
+
 # Record, document and result numbers mean nothing to a person. The files they came from do.
 NUMBERS = re.compile(r"\s*\[(?:A|D)-\d+[^\]]*\]|\s*\[[0-9a-f]{6,}[^\]]*\]")
 FINDING_NUMBER = re.compile(r"\s*\[?\bCF-[0-9a-f]{8}\b\]?")  # a class result's finding number
@@ -165,15 +167,19 @@ def compose(
     show_line: bool = True,
     rules: list | None = None,
     assumed: list | None = None,
+    exports: list | None = None,
+    portal_url: str = export_reply.DEFAULT_PORTAL_URL,
 ) -> str:
-    """The model's words, then each chart and its caption, then the files the answer rests on.
+    """The model's words, then each chart and its caption, then a download line for each report the
+    export tool said `ok` to, then the files the answer rests on.
 
-    Anything image-like in the words goes. When the tools named their source files, the record,
-    document and result numbers the model wrote beside its sentences go too, and so do rule markers
-    when the rulebook's wording came with them: a footer names the files and says what the rules
-    say.
+    Anything image-like in the words goes, and so does anything link-like: the download line is
+    made here, from the report numbers the tool returned, never from what the model wrote.
+    When the tools named their source files, the record, document and result numbers the model
+    wrote beside its sentences go too, and so do rule markers when the rulebook's wording came
+    with them: a footer names the files and says what the rules say.
     Without them the words are left as written."""
-    out = FINDING_NUMBER.sub("", strip_images(text))
+    out = FINDING_NUMBER.sub("", export_reply.strip_links(strip_images(text)))
     if sources:
         out = NUMBERS.sub("", out)
     if rules:
@@ -187,5 +193,8 @@ def compose(
             out += f"\n\n{image}"
         if words:
             out += f"\n\n{words}"
+    download = export_reply.link_line(exports or [], portal_url)
+    if download:
+        out += f"\n\n{download}"
     line = footer(sources or [], rules, assumed) if show_line else ""
     return out + f"\n\n{line}" if line else out

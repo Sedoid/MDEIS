@@ -143,16 +143,17 @@ def test_the_tools_reach_the_sandbox_only_through_the_call_path_that_builds_the_
 
 
 # ----------------------------------------------------------------------- the allow-list
-def test_the_allow_list_gains_exactly_these_two_tools_and_nothing_else():
+def test_the_allow_list_gains_exactly_these_tools_and_nothing_else():
     from orchestrator import tools as allow
 
     before = {
         "ingest_assessments", "resolve_issue", "compute_trend", "get_criterion", "draft_summary",
         "check_citations", "make_chart", "release_report",
     }  # fmt: skip
-    assert set(allow.MDEIS_TOOLS) - before == {"list_measures", "compute_measure"}
+    # T-072 added the first two; T-076 added export_report on purpose (owner decision).
+    assert set(allow.MDEIS_TOOLS) - before == {"list_measures", "compute_measure", "export_report"}
     assert before <= set(allow.MDEIS_TOOLS)
-    assert len(allow.MDEIS_TOOLS) == len(set(allow.MDEIS_TOOLS)) == 10
+    assert len(allow.MDEIS_TOOLS) == len(set(allow.MDEIS_TOOLS)) == 11
     charts = [n for n in allow.MDEIS_TOOLS if "chart" in n]
     assert charts == ["make_chart"], "no new chart tool"
 

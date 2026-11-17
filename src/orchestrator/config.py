@@ -10,6 +10,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
+from .export_reply import DEFAULT_PORTAL_URL, portal_base
+
 DEFAULT_MAX_STEPS = 12  # model calls in one run before the loop stops
 DEFAULT_MAX_REDRAFTS = 2  # times a draft that fails the citation check is written again
 DEFAULT_MDEIS_URL = "http://mdeis-mcp:8100/mcp"
@@ -53,6 +55,9 @@ class Settings:
     # The usage log: one JSON line for each finished run, appended to this file (usage.py). Empty
     # means off. It works without Langfuse and holds counts, names and times only.
     usage_log_file: str = ""
+    # Where the link under a PDF answer points: the portal's address, as a path from the site root
+    # or a full http(s) address, always ending in a slash (export_reply.py). Not a secret.
+    portal_url: str = DEFAULT_PORTAL_URL
 
     @property
     def model_ready(self) -> bool:
@@ -92,4 +97,5 @@ def load_settings(env=None) -> Settings:
         langfuse_capture_content=_flag(env.get("LANGFUSE_CAPTURE_CONTENT", "false")),
         langfuse_capture_tool_io=_flag(env.get("LANGFUSE_CAPTURE_TOOL_IO", "false")),
         usage_log_file=env.get("USAGE_LOG_FILE", "").strip(),
+        portal_url=portal_base(env.get("PORTAL_URL", "")),
     )

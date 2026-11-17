@@ -22,6 +22,7 @@ let me = null;
 let csrf = null;
 let timer = null;
 let config = {};
+let wantedReport = null; // a report number from the address, waiting for sign-in to be confirmed
 const VIEWS = ["upload", "files", "lessons", "methods", "chat"];
 const TITLES = { upload: "Upload", files: "Your files", lessons: "Lessons", methods: "Methods", chat: "Chat" };
 
@@ -117,7 +118,7 @@ function setWide(on) {
 // One view at a time, chosen by the address (#/upload, #/files, #/chat), so Back and links work.
 function route() {
   if (!me) return;
-  const wanted = location.hash.replace("#/", "");
+  const wanted = location.hash.replace("#/", "").split("?")[0];  // "files?report=R-000001" is Files
   const name = VIEWS.includes(wanted) ? wanted : "upload";
   for (const view of VIEWS) $("view-" + view).hidden = view !== name;
   for (const link of document.querySelectorAll(".nav a")) {
@@ -136,6 +137,42 @@ function route() {
   if (name === "methods" && window.methodsView) {
     window.methodsView.show({ call, text, csrf: () => csrf, me });
   }
+  // A link from the chat (#/files?report=R-000001) fills in the report number on the Files page.
+  if (name === "files") openReportFromAddress();
+}
+
+// The report number in the address, or null. The same strict pattern as the download uses, so
+// nothing else can reach the field or the request.
+function reportInAddress() {
+  const found = /[?&]report=([^&]*)/.exec(location.hash);
+  if (!found) return null;
+  let value;
+  try {
+    value = decodeURIComponent(found[1]);
+  } catch (error) {
+    return null;
+  }
+  return REPORT_NUMBER.test(value) ? value : null;
+}
+
+function openReportFromAddress() {
+  const number = reportInAddress();
+  if (!number) return;
+  $("report-id").value = number;
+  wantedReport = number;
+  askForWantedReport();
+}
+
+// The download starts once, and only when sign-in is confirmed and the page holds its CSRF token.
+// Until then the number waits (start() asks again after the token is read). The address is then
+// cleaned, so a refresh does not download again.
+async function askForWantedReport() {
+  if (!wantedReport || !csrf || !me) return;
+  const number = wantedReport;
+  wantedReport = null;
+  history.replaceState(null, "", "#/files");
+  $("report-id").value = number;
+  await downloadReport();
 }
 
 async function start() {
@@ -158,6 +195,7 @@ async function start() {
   $("form-methodology").hidden = !me.admin;
   route();
   csrf = (await get("api/csrf")).body.csrf;
+  await askForWantedReport();
   if (window.methodsView) window.methodsView.badge({ call, text, csrf: () => csrf, me });
   await handOverLogin();
   if (config.frame_chat) {
@@ -185,6 +223,7 @@ async function handOverLogin() {
 
 function showSignIn() {
   me = null;
+  wantedReport = null;  // a link waiting for sign-in is not replayed for whoever signs in next
   clearTimeout(timer);
   if ($("shell").classList.contains("chat-wide")) setWide(false);
   document.title = "Sign in · Lucent AI";
@@ -682,7 +721,7 @@ function wireDrop(form) {
 const REPORT_NUMBER = /^R-[0-9]{6,}$/;
 
 async function downloadReport(event) {
-  event.preventDefault();
+  if (event) event.preventDefault();
   const line = $("report-message");
   const button = $("report-download");
   const number = $("report-id").value.trim().toUpperCase();

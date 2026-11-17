@@ -4,6 +4,10 @@ This is NOT a tool. No model can call it: it is reached only through the human r
 server (`human_routes.install_reports`), which needs the gateway's key and a signed-in person's
 token. The person comes from the context (made from that token), never from an argument.
 
+The model's own tool, `export_report` (T-076), only CHECKS that a report is released, with the same
+`released.find_released` that this module uses, and returns no file. The file is made here, and
+only when the person follows the link the system adds under the answer.
+
 It reads the stored report and the stored findings and writes nothing but one diary line. It never
 recomputes anything. Only a report with status `released` is exported, and only for a person of the
 school the report's learner belongs to. A report of another school is answered "no such report",
@@ -22,22 +26,13 @@ from datetime import datetime
 from mdeis.db import diary
 
 from ..tools.context import ToolContext
+from .released import PLAIN, REPORT_ID, file_name, find_released, refusal  # noqa: F401
 from .report_pdf import CLAUSE_ID, RECORD_ID, SECTION_ID, ids_in, render_report_pdf
 
+# (PLAIN, REPORT_ID and refusal moved to `released.py`, shared with the model's tool; they are
+# imported here because the human routes and the tests read them from this module.)
 TOOL = "export_report_pdf"
-REPORT_ID = re.compile(r"^R-[0-9]{6,}$")  # the form the database gives a report number
 MARKER = re.compile(r"\[([A-Z]{1,2}-[0-9][0-9A-Za-z.]*)\]")  # a citation marker in a body
-
-PLAIN = {
-    "not_signed_in": "No one is signed in, so no report can be exported.",
-    "no_school": "This sign-in carries no school.",
-    "report_not_found": "There is no such report.",
-    "report_not_released": "Only a released report can be exported.",
-}
-
-
-def refusal(reason: str) -> dict:
-    return {"status": "refused", "reason": reason, "detail": PLAIN[reason]}
 
 
 def resolve_sources(conn, ids: set, template_version: str, document_id: str | None) -> list:
@@ -82,25 +77,11 @@ def resolve_sources(conn, ids: set, template_version: str, document_id: str | No
 
 
 def _decide(ctx: ToolContext, report_id, generated_at: datetime, practice_data: bool) -> dict:
-    if ctx.approver is None:
-        return refusal("not_signed_in")
-    if not ctx.school:
-        return refusal("no_school")
-    if not isinstance(report_id, str) or not REPORT_ID.match(report_id):
-        return refusal("report_not_found")
-    row = ctx.conn.execute(
-        "SELECT r.report_id, r.learner_id, r.status, r.body, r.findings, r.template_version, "
-        "r.methodology_document_id, r.released_by_id, r.released_by_name, r.released_at, "
-        "l.school_code FROM reports r JOIN learners l ON l.learner_id = r.learner_id "
-        "WHERE r.report_id = %s",
-        (report_id,),
-    ).fetchone()
-    if row is None or row[10] != ctx.school:
-        return refusal("report_not_found")
-    (_, learner_id, status, body, findings, version, document_id, released_by_id,
+    why, row = find_released(ctx, report_id)  # the check the model's tool uses too
+    if why is not None:
+        return why
+    (_, learner_id, _status, body, findings, version, document_id, released_by_id,
      released_by_name, released_at, _school) = row
-    if status != "released":
-        return refusal("report_not_released")
 
     wanted = set(MARKER.findall(body))
     for finding in findings if isinstance(findings, list) else [findings]:
@@ -116,7 +97,7 @@ def _decide(ctx: ToolContext, report_id, generated_at: datetime, practice_data: 
         practice_data=practice_data,
     )
     return {
-        "status": "ok", "report_id": report_id, "file_name": f"{report_id}.pdf", "pdf": pdf,
+        "status": "ok", "report_id": report_id, "file_name": file_name(report_id), "pdf": pdf,
         "sha256": hashlib.sha256(pdf).hexdigest(), "size_bytes": len(pdf),
     }
 
@@ -132,7 +113,7 @@ def export_released_report(
     """
     result = _decide(ctx, report_id, generated_at, practice_data)
     ok = result["status"] == "ok"
-    shown = report_id if isinstance(report_id, str) and REPORT_ID.match(report_id) else None
+    shown = report_id if isinstance(report_id, str) and REPORT_ID.fullmatch(report_id) else None
     result["logged_event_id"] = diary.write(
         TOOL,
         run_id=ctx.run_id,

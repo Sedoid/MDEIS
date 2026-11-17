@@ -103,7 +103,7 @@ def test_the_older_class_tool_is_never_offered_to_the_model_even_with_the_view_o
     assert tools.CLASS_VIEW_TOOL == "class_baseline"
 
 
-def test_the_model_has_fourteen_tools_with_the_view_off_and_fifteen_with_it_on():
+def test_the_model_has_fifteen_tools_with_the_view_off_and_sixteen_with_it_on():
     full = {
         tools.MDEIS: [*MDEIS_LISTING, spec("class_baseline"), spec("stage_gap_counts")],
         tools.PG: [spec(n) for n in SETTINGS.pg_tools],
@@ -112,7 +112,7 @@ def test_the_model_has_fourteen_tools_with_the_view_off_and_fifteen_with_it_on()
     on, _, _ = tools.bind(full, SETTINGS.pg_tools, True)
     off_names = {d["function"]["name"] for d in off}
     on_names = {d["function"]["name"] for d in on}
-    assert len(off) == 14 and len(on) == 15
+    assert len(off) == 15 and len(on) == 16
     assert on_names - off_names == {"class_baseline"} and off_names <= on_names
 
 

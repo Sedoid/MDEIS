@@ -20,7 +20,7 @@ import json
 import re
 from pathlib import Path
 
-from . import chart_reply, guards, tools
+from . import chart_reply, export_reply, guards, tools
 from .model import ModelError
 
 PROMPT_FILE = Path(__file__).parent / "prompts" / "system.md"
@@ -47,12 +47,19 @@ def event(name: str, **data) -> dict:
 
 
 def conversation_from(messages: list, token: str | None) -> list:
-    """The model's view of the conversation: user and assistant text, the token taken out."""
+    """The model's view of the conversation: user and assistant text, the token taken out.
+
+    A picture is taken out of every message. A link is taken out of the assistant's earlier
+    messages (the download line the system added), so the model never sees an address and cannot
+    copy one. What a person wrote is sent as they wrote it."""
     kept = [m for m in messages if m["role"] in KEPT_ROLES]
-    return [
-        {"role": m["role"], "content": chart_reply.strip_images(guards.scrub(m["content"], token))}
-        for m in kept
-    ]
+    out = []
+    for m in kept:
+        words = chart_reply.strip_images(guards.scrub(m["content"], token))
+        if m["role"] == "assistant":
+            words = export_reply.strip_links(words)
+        out.append({"role": m["role"], "content": words})
+    return out
 
 
 def latest_user_text(messages: list) -> str:
@@ -117,6 +124,7 @@ async def run(*, messages: list, token: str | None, run_id: str, settings, model
     ]
     conversation += conversation_from(messages, token)
     called, drafted, charts, sources, rules, assumed = [], set(), [], [], [], []
+    exports, portal = [], export_reply.portal_of(settings)
     for step in range(settings.max_steps):
         yield event("status", text="Thinking." if not step else "Working on it.")
         try:
@@ -126,7 +134,10 @@ async def run(*, messages: list, token: str | None, run_id: str, settings, model
             return
         if not reply.calls:
             words = guards.scrub(reply.text, token)
-            answer = chart_reply.compose(words, charts, sources, rules=rules, assumed=assumed)
+            answer = chart_reply.compose(
+                words, charts, sources, rules=rules, assumed=assumed, exports=exports,
+                portal_url=portal,
+            )
             for item in final_events(answer, called, run_id):
                 yield item
             return
@@ -152,6 +163,7 @@ async def run(*, messages: list, token: str | None, run_id: str, settings, model
             sources = chart_reply.add_sources(sources, result)
             rules = chart_reply.add_rules(rules, result)
             assumed = chart_reply.add_assumed(assumed, result)
+            exports = export_reply.add_export(exports, call.name, result)
             content = guards.scrub(json.dumps(result, default=str), token)
             conversation.append({"role": "tool", "tool_call_id": call.id, "content": content})
             yield event("status", text=f"Used {call.name}.")
@@ -160,7 +172,9 @@ async def run(*, messages: list, token: str | None, run_id: str, settings, model
         "Ask me to carry on, or ask a narrower question."
     )
     for item in final_events(
-        chart_reply.compose(note, charts, sources, rules=rules, assumed=assumed),
+        chart_reply.compose(
+            note, charts, sources, rules=rules, assumed=assumed, exports=exports, portal_url=portal
+        ),
         called,
         run_id,
         incomplete=True,

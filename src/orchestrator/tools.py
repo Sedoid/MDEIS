@@ -19,6 +19,9 @@ MDEIS_TOOLS = (
     "check_citations",
     "make_chart",
     "release_report",
+    # Added on purpose (an owner decision of T-076): the model may ask whether a report can be
+    # exported. The tool only checks and returns no file; the system adds the download link.
+    "export_report",
 )
 APPROVER_LIKE = {"approver", "approver_id", "approver_name", "user", "user_id", "by"}
 # Offered only when the class view is switched on. It takes a stage and a term: the school is in

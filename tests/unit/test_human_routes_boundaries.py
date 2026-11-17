@@ -64,7 +64,8 @@ def test_neither_the_orchestrator_nor_the_portal_names_the_key_the_header_or_the
 
 def test_the_orchestrators_settings_read_no_variable_that_could_hold_the_key():
     config = (SRC / "orchestrator" / "config.py").read_text("utf-8")
-    assert "HUMAN" not in config and "PORTAL" not in config
+    # PORTAL_URL is only the address a download link points to; the portal KEY must not be here.
+    assert "HUMAN" not in config and "PORTAL_KEY" not in config
 
 
 def test_the_model_path_has_no_way_to_name_an_approval_tool():
@@ -121,7 +122,7 @@ def test_the_mcp_tool_list_never_offers_a_tool_that_approves_or_rejects(
     names = {t.name for t in asyncio.run(server.mcp.list_tools())}
     assert not [n for n in names if "approve" in n or "reject" in n], names
     assert not names & set(NAMES_FOR_APPROVAL)
-    assert len(names) == (15 if on else 10), "the human routes are not tools"
+    assert len(names) == (16 if on else 11), "the human routes are not tools (T-076: 11, 16)"
 
 
 def test_the_human_routes_are_added_to_the_server_only_with_the_class_view_on(
