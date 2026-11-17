@@ -20,6 +20,10 @@ How it works, in four parts:
   text of a chat's model calls is added (tool results are still withheld), for debugging with
   SYNTHETIC data. A lesson's notes and objective are never sent in any mode, and nor is a learner
   name that a tool returned.
+* A second, separate switch, LANGFUSE_CAPTURE_TOOL_IO (also SYNTHETIC data only), adds each tool's
+  arguments and result to its span, cut to TOOL_IO_MAX_CHARS. Names found in results, the approver
+  token and the keys are masked. The lesson tools and the whole lesson graph are never captured, in
+  any mode. A name a user typed into a question and that no result repeated is NOT masked.
 * Fire and forget: a background task sends the queued runs with a short timeout. Any failure is
   swallowed and counted in `Tracer.stats`; a run is never slowed, changed or broken by the tracer.
 
@@ -41,6 +45,7 @@ from collections import deque
 
 import httpx
 
+from .lessons import GUARD_TOOL, READ_TOOL, SAVE_TOOL
 from .model import ModelError, usage_of
 
 TRACES_PATH = "/api/public/otel/v1/traces"
@@ -57,6 +62,11 @@ MAX_DEPTH = 6  # how deep a tool result is searched for names
 MAX_ID_CHARS = 200
 NS_PER_MS = 1_000_000
 WITHHELD = "[withheld]"
+TOOL_IO_MAX_CHARS = 4000  # a tool argument or result longer than this is cut (and marked)
+TRUNCATED_SUFFIX = "...[truncated]"
+# Tools whose arguments and results are never captured: they hold a tutor's notes and objective.
+NEVER_TOOL_IO = frozenset({GUARD_TOOL, SAVE_TOOL, READ_TOOL})
+_MISSING = object()  # "this tool call has no result" (it raised)
 LEVELS = {"refused": "WARNING", "error": "ERROR"}  # a Langfuse level for a tool outcome
 RUN_UUID = re.compile(r"^RUN-([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})$")
 
@@ -156,6 +166,7 @@ class Trace:
     ):
         self.tracer, self.run_id, self.kind = tracer, run_id, kind
         self.capture = tracer.settings.langfuse_capture_content
+        self.tool_io = tracer.settings.langfuse_capture_tool_io
         self.masks = masks
         self.user_id, self.session_id = user_id, session_id
         self.trace_id, self.root_id = trace_id_for(run_id), new_span_id()
@@ -296,12 +307,16 @@ class Trace:
 
         self._safe(build)
 
-    def tool(self, started: tuple, server: str, name: str, outcome: str) -> None:
+    def tool(
+        self, started: tuple, server: str, name: str, outcome: str,
+        arguments=_MISSING, result=_MISSING,
+    ) -> None:
         def build():
             times = self._times(started)
             attributes = [
                 attr("langfuse.observation.type", "span"),
                 attr("langfuse.observation.level", LEVELS.get(outcome, "DEFAULT")),
+                *self._tool_io_attributes(name, arguments, result),
                 *metadata_attrs(
                     "langfuse.observation.metadata",
                     {
@@ -316,11 +331,32 @@ class Trace:
 
         self._safe(build)
 
-    # -- what may be shown, with content capture on
+    # -- what may be shown, with content capture or tool capture on
+    def _tool_io_attributes(self, name: str, arguments, result) -> list:
+        """The tool's arguments and result as JSON strings, masked and cut. Nothing for the lesson
+        tools or in a lesson run, and nothing when the setting is off."""
+        if not self.tool_io or self.kind == "lesson" or name in NEVER_TOOL_IO:
+            return []
+        found, cut = [], False
+        for key, value in (("input", arguments), ("output", result)):
+            if value is _MISSING:
+                continue
+            try:
+                text = json.dumps(value, default=str, ensure_ascii=False)
+            except Exception:
+                text = "[unserializable]"
+            text = self.clean(text)
+            if len(text) > TOOL_IO_MAX_CHARS:
+                text, cut = text[:TOOL_IO_MAX_CHARS] + TRUNCATED_SUFFIX, True
+            found.append(attr(f"langfuse.observation.{key}", text))
+        if cut:
+            found.append(attr("mdeis.truncated", True))
+        return found
+
     def learn_names(self, result, depth: int = 0) -> None:
         """Remember any value under a key that ends in `name` (a learner's display name), so it can
-        be masked wherever it is repeated."""
-        if not self.capture or depth > MAX_DEPTH:
+        be masked wherever it is repeated: in a model's text, in a tool's result or argument."""
+        if not (self.capture or self.tool_io) or depth > MAX_DEPTH:
             return
         try:
             if isinstance(result, dict):
@@ -405,10 +441,10 @@ class TracedServer:
         try:
             result = await self.inner.call(name, arguments)
         except Exception:
-            self.trace.tool(started, self.name, name, "error")
+            self.trace.tool(started, self.name, name, "error", arguments)
             raise
-        self.trace.tool(started, self.name, name, outcome_of(result))
-        self.trace.learn_names(result)
+        self.trace.learn_names(result)  # first: this call's own names are masked in its span
+        self.trace.tool(started, self.name, name, outcome_of(result), arguments, result)
         return result
 
 
@@ -474,10 +510,9 @@ class Tracer:
         """Begin a trace for a run. `kind` is chat, lesson or build. `mask` is text that must never
         be sent (a lesson's notes and objective). Nothing is sent until the run finishes."""
         session = str(conversation_id)[:MAX_ID_CHARS] if conversation_id else None
-        return Trace(
-            self, run_id, kind, [m for m in mask if isinstance(m, str) and m],
-            user_id=user_id_from(token), session_id=session,
-        )
+        # The approver token is masked too, so that a tool that repeats it cannot send it.
+        hidden = [m for m in (*mask, token) if isinstance(m, str) and m]
+        return Trace(self, run_id, kind, hidden, user_id=user_id_from(token), session_id=session)
 
     def submit(self, spans: list) -> None:
         """Queue a finished run for sending."""
@@ -584,7 +619,7 @@ def tracer_for(settings):
         return NullTracer()
     key = (
         settings.langfuse_host, settings.langfuse_public_key, settings.langfuse_secret_key,
-        settings.langfuse_capture_content, settings.model,
+        settings.langfuse_capture_content, settings.langfuse_capture_tool_io, settings.model,
     )
     if key not in _CACHE:
         _CACHE[key] = Tracer(settings)

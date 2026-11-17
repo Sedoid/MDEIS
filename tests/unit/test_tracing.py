@@ -76,7 +76,7 @@ DOCUMENTED = {
     "langfuse.observation.status_message", "langfuse.observation.model.name",
     "gen_ai.request.model", "langfuse.observation.usage_details",
     "langfuse.observation.cost_details", "langfuse.observation.input",
-    "langfuse.observation.output",
+    "langfuse.observation.output", "mdeis.truncated",
 }
 DOCUMENTED_PREFIXES = ("langfuse.observation.metadata.", "langfuse.trace.metadata.")
 GEN = "langfuse.observation.type"
@@ -863,6 +863,202 @@ def test_the_off_tracer_reports_on_false_and_zeros():
         "on": False, "runs_sent": 0, "runs_failed": 0, "runs_dropped": 0, "spans_rejected": 0,
         "last_status": None,
     }
+
+
+# --------------------------------------------------------------------------- tool input and output
+IO_IN, IO_OUT = "langfuse.observation.input", "langfuse.observation.output"
+LEARNER = "Zanele Quillfeather"  # a made-up learner name, the sentinel for name masking
+LESSON_TOOLS = ("guard_lesson_notes", "save_lesson_plan", "get_lesson_plan")
+
+
+def lookup(sql="select 1"):
+    """A chat that asks the lookup tool twice; the first answer holds a learner's name."""
+    pg = FakeServer(
+        PG_LISTING,
+        {"execute_sql": {"rows": [{"display_name": LEARNER, "school_ref": "L-0001"}]}},
+    )
+    model = FakeModel(
+        ask("execute_sql", {"sql": sql}, id="c1"),
+        ask("execute_sql", {"sql": "where note = 'Quillfeather was absent'"}, id="c2"),
+        say("Done."),
+    )
+    return model, pg
+
+
+def test_the_setting_is_off_by_default_and_independent_of_content_capture():
+    assert cfg().langfuse_capture_tool_io is False
+    on = cfg(LANGFUSE_CAPTURE_TOOL_IO="true")
+    assert on.langfuse_capture_tool_io is True and on.langfuse_capture_content is False
+    both = cfg(LANGFUSE_CAPTURE_TOOL_IO="true", LANGFUSE_CAPTURE_CONTENT="true")
+    assert both.langfuse_capture_tool_io and both.langfuse_capture_content
+
+
+def test_the_variable_is_in_the_env_example_and_the_compose_file():
+    env = (ROOT / ".env.example").read_text(encoding="utf-8")
+    assert re.search(r"^LANGFUSE_CAPTURE_TOOL_IO=false$", env, re.M)
+    compose = (ROOT / "deploy" / "compose" / "orchestrator.yml").read_text(encoding="utf-8")
+    assert "LANGFUSE_CAPTURE_TOOL_IO: ${LANGFUSE_CAPTURE_TOOL_IO:-false}" in compose
+
+
+def test_by_default_a_tool_span_has_no_input_or_output_even_with_content_capture_on():
+    wire = Wire()
+    model = FakeModel(ask("get_criterion", {"query": "SENTINEL-ARG"}), say("ok"))
+    results = {"get_criterion": {"text": "SENTINEL-RESULT"}}
+    chat(tracer_for(wire, LANGFUSE_CAPTURE_CONTENT="true"), model, results=results)
+    [span] = wire.tool_spans()
+    assert IO_IN not in attrs(span) and IO_OUT not in attrs(span)
+    assert "SENTINEL-ARG" not in wire.text() and "SENTINEL-RESULT" not in wire.text()
+
+
+def test_with_the_setting_on_a_tool_span_carries_its_arguments_and_result_as_json():
+    wire = Wire()
+    model = FakeModel(ask("get_criterion", {"query": "SENTINEL-ARG"}), say("SENTINEL-REPLY"))
+    results = {"get_criterion": {"status": "ok", "text": "SENTINEL-RESULT"}}
+    chat(tracer_for(wire, LANGFUSE_CAPTURE_TOOL_IO="true"), model, results=results)
+    [span] = wire.tool_spans()
+    mine = attrs(span)
+    assert json.loads(mine[IO_IN]) == {"query": "SENTINEL-ARG"}
+    assert json.loads(mine[IO_OUT]) == {"status": "ok", "text": "SENTINEL-RESULT"}
+    assert "mdeis.truncated" not in mine
+    for gen in wire.generations():  # the other setting is off: the model's text is not sent
+        assert IO_IN not in attrs(gen) and IO_OUT not in attrs(gen)
+    assert "SENTINEL-REPLY" not in wire.text()
+    assert mine["langfuse.observation.metadata.outcome"] == "ok", "the old fields stay"
+
+
+def test_content_capture_alone_does_not_put_tool_data_on_tool_spans_and_the_reverse():
+    wire = Wire()
+    model = FakeModel(ask("get_criterion", {"query": "SENTINEL-ARG"}), say("SENTINEL-REPLY"))
+    chat(tracer_for(wire, LANGFUSE_CAPTURE_CONTENT="true"), model)
+    assert IO_IN not in attrs(wire.tool_spans()[0])
+    assert "SENTINEL-REPLY" in wire.text() and "SENTINEL-ARG" not in wire.text()
+
+
+def test_a_learner_name_in_a_result_is_masked_and_so_is_the_same_name_in_any_argument():
+    wire = Wire()
+    model, pg = lookup(sql=f"select * from learners where display_name = '{LEARNER}'")
+    chat(tracer_for(wire, LANGFUSE_CAPTURE_TOOL_IO="true"), model, pg=pg)
+    first, second = wire.tool_spans()
+    one, two = attrs(first), attrs(second)
+    assert json.loads(one[IO_OUT])["rows"][0]["school_ref"] == "L-0001", "other values are kept"
+    assert tracing.WITHHELD in one[IO_OUT] and tracing.WITHHELD in one[IO_IN]
+    assert tracing.WITHHELD in two[IO_IN], "a part of the name in a later argument of the run"
+    text = wire.text()
+    for part in ("Zanele", "Quillfeather"):
+        assert part not in text
+
+
+def test_a_value_is_cut_to_the_named_length_and_marked():
+    wire = Wire()
+    long = "x" * (tracing.TOOL_IO_MAX_CHARS + 500)
+    model = FakeModel(
+        ask("get_criterion", {"query": long}, id="c1"),
+        ask("get_criterion", {"query": "short"}, id="c2"),
+        say("ok"),
+    )
+    chat(tracer_for(wire, LANGFUSE_CAPTURE_TOOL_IO="true"), model,
+         results={"get_criterion": {"text": "fine"}})
+    big, small = wire.tool_spans()
+    one, two = attrs(big), attrs(small)
+    assert one["mdeis.truncated"] is True
+    assert len(one[IO_IN]) == tracing.TOOL_IO_MAX_CHARS + len(tracing.TRUNCATED_SUFFIX)
+    assert one[IO_IN].endswith(tracing.TRUNCATED_SUFFIX)
+    assert json.loads(one[IO_OUT]) == {"text": "fine"}, "only the long value is cut"
+    assert "mdeis.truncated" not in two
+
+
+def test_the_lesson_tools_are_never_captured_even_with_both_settings_on():
+    wire = Wire()
+    tracer = tracer_for(
+        wire, LANGFUSE_CAPTURE_TOOL_IO="true", LANGFUSE_CAPTURE_CONTENT="true"
+    )
+    answer = lesson(tracer, FakeModel(say(GOOD)))
+    assert answer["outcome"] == "stored"
+    spans = wire.tool_spans()
+    assert [s["name"] for s in spans] == [
+        "class_baseline", "guard_lesson_notes", "save_lesson_plan",
+    ]
+    for span in spans:
+        assert IO_IN not in attrs(span) and IO_OUT not in attrs(span)
+    for fragment in (A_ASK, NEW_ASK, OBJECTIVE, "underline the key sentence", "Give learners a"):
+        assert fragment not in wire.text()
+
+
+def test_a_lesson_tool_named_in_a_chat_is_not_captured_either():
+    wire = Wire()
+
+    async def go():
+        tracer = tracer_for(wire, LANGFUSE_CAPTURE_TOOL_IO="true")
+        trace = tracer.start(run_id="RUN-N1", kind="chat", token=TOKEN, conversation_id="c")
+        result = {"text": "SENTINEL-RESULT", "notes": "SENTINEL-NOTES"}
+        results = {name: result for name in LESSON_TOOLS}
+        server = trace.wrap_servers({"mdeis": FakeServer([], results)})["mdeis"]
+        for name in LESSON_TOOLS:
+            await server.call(name, {"notes": "SENTINEL-NOTES", "objective": "SENTINEL-OBJ"})
+        trace.finish("ok")
+        await tracer.flush()
+
+    asyncio.run(go())
+    assert len(wire.tool_spans()) == 3
+    for span in wire.tool_spans():
+        assert IO_IN not in attrs(span) and IO_OUT not in attrs(span)
+    assert "SENTINEL" not in wire.text()
+
+
+def test_the_approver_token_and_the_keys_are_masked_even_when_a_tool_repeats_them():
+    wire = Wire()
+    model = FakeModel(ask("get_criterion", {"query": f"token {TOKEN}"}), say("ok"))
+    results = {"get_criterion": {"text": f"key {SK} and {PK}"}}
+    chat(tracer_for(wire, LANGFUSE_CAPTURE_TOOL_IO="true"), model, results=results)
+    for secret in (TOKEN, SK, PK):
+        assert secret not in wire.text()
+    assert tracing.WITHHELD in attrs(wire.tool_spans()[0])[IO_IN]
+
+
+def test_a_tool_that_raises_keeps_its_arguments_and_never_the_error_text():
+    class Broken:
+        async def call(self, name, arguments):
+            raise RuntimeError("SENTINEL-ERROR-TEXT")
+
+    wire = Wire()
+
+    async def go():
+        tracer = tracer_for(wire, LANGFUSE_CAPTURE_TOOL_IO="true")
+        trace = tracer.start(run_id="RUN-X1", kind="chat")
+        server = trace.wrap_servers({"mdeis": Broken()})["mdeis"]
+        with pytest.raises(RuntimeError):
+            await server.call("compute_trend", {"q": "SENTINEL-ARG"})
+        trace.finish("error")
+        await tracer.flush()
+
+    asyncio.run(go())
+    mine = attrs(wire.tool_spans()[0])
+    assert json.loads(mine[IO_IN]) == {"q": "SENTINEL-ARG"} and IO_OUT not in mine
+    assert "SENTINEL-ERROR-TEXT" not in wire.text()
+
+
+def test_the_run_is_identical_with_tool_capture_on_and_off_and_with_a_broken_transport():
+    results = {"get_criterion": {"status": "ok", "text": "a rule"}}
+    off = chat(tracing.NullTracer(), script(), results=results)
+    on = chat(tracer_for(Wire(), LANGFUSE_CAPTURE_TOOL_IO="true"), script(), results=results)
+    broken = chat(
+        tracer_for(Wire(error=httpx.ConnectError("x")), LANGFUSE_CAPTURE_TOOL_IO="true"),
+        script(), results=results,
+    )
+    assert on == off == broken
+
+
+def test_logs_and_the_counters_stay_free_of_tool_data_with_the_setting_on(caplog):
+    caplog.set_level(logging.DEBUG)
+    wire = Wire(status=401, answer={"message": "SENTINEL-BODY-TEXT"})
+    tracer = tracer_for(wire, LANGFUSE_CAPTURE_TOOL_IO="true")
+    model = FakeModel(ask("get_criterion", {"query": "SENTINEL-ARG"}), say("ok"))
+    chat(tracer, model, results={"get_criterion": {"text": "SENTINEL-RESULT"}})
+    [line] = tracer_lines(caplog)
+    assert LINE.match(line.getMessage())
+    assert "SENTINEL" not in caplog.text
+    summary = json.dumps(tracer.summary())
+    assert set(tracer.summary()) == SIX and "SENTINEL" not in summary
 
 
 # --------------------------------------------------------------------------- the service

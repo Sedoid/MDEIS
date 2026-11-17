@@ -27,6 +27,8 @@ services:
       - ./deploy/compose:/app/deploy/compose:ro
       - ./deploy/caddy:/app/deploy/caddy:ro
       - ./pyproject.toml:/app/pyproject.toml:ro
+      # Names and defaults only, no secrets: a test checks that each setting is listed in it.
+      - ./.env.example:/app/.env.example:ro
     networks: [data]
     depends_on:
       postgres:

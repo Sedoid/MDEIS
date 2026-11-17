@@ -41,6 +41,7 @@ services:
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       LANGFUSE_HOST: ${LANGFUSE_HOST:-}
       LANGFUSE_CAPTURE_CONTENT: ${LANGFUSE_CAPTURE_CONTENT:-false}
+      LANGFUSE_CAPTURE_TOOL_IO: ${LANGFUSE_CAPTURE_TOOL_IO:-false}
     networks: [agent, data]
     depends_on:
       postgres:

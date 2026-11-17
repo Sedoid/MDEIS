@@ -46,6 +46,10 @@ class Settings:
     langfuse_secret_key: str = field(default="", repr=False)
     langfuse_host: str = ""
     langfuse_capture_content: bool = False  # off: metadata only, no prompts or replies
+    # Off: a tool span has the tool's name, time and outcome only. On: it also has the tool's
+    # arguments and result (not for the lesson tools). Learner names found in results are masked,
+    # but a name a user typed into a question can still appear in an argument. Synthetic data only.
+    langfuse_capture_tool_io: bool = False
 
     @property
     def model_ready(self) -> bool:
@@ -83,4 +87,5 @@ def load_settings(env=None) -> Settings:
         langfuse_secret_key=env.get("LANGFUSE_SECRET_KEY", "").strip(),
         langfuse_host=env.get("LANGFUSE_HOST", "").strip().rstrip("/"),
         langfuse_capture_content=_flag(env.get("LANGFUSE_CAPTURE_CONTENT", "false")),
+        langfuse_capture_tool_io=_flag(env.get("LANGFUSE_CAPTURE_TOOL_IO", "false")),
     )
