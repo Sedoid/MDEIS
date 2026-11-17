@@ -139,12 +139,20 @@ def test_nothing_in_the_query_or_the_headers_or_the_body_can_name_the_person(wor
     ({"X-Human-Route-Key": "wrong"}, "wrong_key", 401),
     ({"X-Approver-Token": None}, "no_token", 401),
     ({"X-Approver-Token": "not-a-token"}, "bad_token", 401),
-    ({"X-Approver-Token": token(secret="another-secret")}, "bad_token", 401),
-    ({"X-Approver-Token": token(school=None)}, "no_school", 403),
+    ({"X-Approver-Token": "signed-with-another-secret"}, "bad_token", 401),
+    ({"X-Approver-Token": "signed-without-a-school"}, "no_school", 403),
 ])
 def test_without_the_key_or_a_good_token_there_is_no_file_a_typed_reason_and_a_diary_row(
     world, headers, reason, status
 ):
+    # A token lasts five minutes, so these two are signed here, not when the tests are collected.
+    signed = {
+        "signed-with-another-secret": lambda: token(secret="another-secret"),
+        "signed-without-a-school": lambda: token(school=None),
+    }
+    name = headers.get("X-Approver-Token")
+    if name in signed:
+        headers = {**headers, "X-Approver-Token": signed[name]()}
     answer = post(world, headers=good(**headers))
     assert answer.status_code == status
     assert answer.json()["status"] == "refused" and answer.json()["reason"] == reason
