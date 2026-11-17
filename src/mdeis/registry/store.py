@@ -222,6 +222,7 @@ def create_version(
     template_patch=None,
     rules_quoted=None,
     measure_id=None,
+    declared_params=False,
 ):
     """Store a generated function as a new `proposed` version, with the result of the static check.
 
@@ -229,6 +230,11 @@ def create_version(
     its report is stored with the version. Code that fails it is kept (so the findings can be read)
     but can only be rejected. A version of a measure that already holds the same code built from the
     same section is not made twice. Nothing here runs the code.
+
+    `declared_params` adds the two checks on how the function reads the school's values: every key
+    it reads names a declared clause (`param_key_not_declared`) and every declared clause is read
+    (`param_unused`). The measure build sets it. It is off by default, so a version registered
+    without it is checked as before.
     """
     _text(measure_name, "a measure name")
     _text(method_ref, "the methodology section it comes from")
@@ -263,6 +269,7 @@ def create_version(
         output_kind=output_kind,
         rules=rules,
         template_values=template_values(template["content"]),
+        declared_clause_ids=clause_ids if declared_params else None,
     )
     digest = hashlib.sha256(source_code.encode("utf-8")).hexdigest()
 

@@ -12,6 +12,8 @@ MDEIS_TOOLS = (
     "ingest_assessments",
     "resolve_issue",
     "compute_trend",
+    "list_measures",
+    "compute_measure",
     "get_criterion",
     "draft_summary",
     "check_citations",

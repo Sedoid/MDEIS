@@ -1,0 +1,104 @@
+# The measure build, version 1 (T-071).
+#
+# What the build reads from a methodology and how it settles a value, before any function is written.
+# The code in src/mdeis/measure_build/ and src/orchestrator/build/ reads this file and holds no list,
+# word, pattern or limit of its own. No school value is in this file.
+#
+# This is not a school rulebook (v1.yaml), not the clarity gate (gate-v1.yaml) and not the sandbox
+# rules (sandbox-v1.yaml). It is the build's own list of settings that already have a home in the
+# school's template, so that a setting has ONE home: the build reads the existing field and never
+# makes a second copy of it.
+#
+# Every value below is a PROPOSAL. The owner confirms or changes each one. Nothing is loosened to let
+# a particular document through.
+
+build_version: measure-build-v1
+
+# How the document's own id and version are read, from any section (in practice the title block).
+# The version decides whether a template clause may stand in for a section (see `skip` below): the
+# section numbers in a template are bare ("6.4"), so they say nothing without the version of the
+# document they belong to. Patterns, with one group each. Ignoring capitals.
+document:
+  id_pattern: 'document\s+id:\**\s*([0-9A-Za-z][0-9A-Za-z.\-]*)'     # PROPOSED: owner to confirm
+  version_pattern: 'version:\**\s*([0-9A-Za-z][0-9A-Za-z.\-]*)'      # PROPOSED: owner to confirm
+
+# A value stated in a section is often defined in a section it points at ("listed in section 3.2").
+# The model is shown the measure's own section and the sections it points at. A pointer is one of
+# these words and then a section number.
+reference_words: [section, sections, see]     # PROPOSED: owner to confirm
+
+# One home per setting. A setting listed here has a field in the school's template. If the active
+# template already holds the field, the measure READS it (key CLAUSE.field) and no measure_params
+# rule is made; a different value in the document stops the build (setting_conflict). A setting not
+# listed here has no home, and the build proposes a measure_params rule for it.
+#
+# Only plain quantities are listed. A setting whose meaning depends on the rule around it (a "moved"
+# threshold, a "steady" band) is not listed: whether the boundary value itself counts is in the
+# code of the fixed tool, not in the template, so a field of the template is not the same setting.
+# `names` are the other names the extraction may give the same setting. `unit` is from the closed
+# list in src/mdeis/core/template.py.
+homes:
+  - setting: score_scale_maximum             # PROPOSED: owner to confirm
+    section: scales
+    field: max
+    unit: points
+    names: [score_scale, scale_maximum, maximum_score, score_maximum]
+  - setting: pass_mark                       # PROPOSED: owner to confirm
+    section: scales
+    field: pass_mark
+    unit: points
+    names: [pass_score]
+  - setting: window                          # PROPOSED: owner to confirm
+    section: trend
+    field: window_terms
+    unit: terms
+    names: [window_terms, window_size, window_scores]
+  - setting: minimum_evidence                # PROPOSED: owner to confirm
+    section: trend
+    field: min_scores
+    unit: scores
+    names: [min_scores, minimum_scores, minimum_evidence_scores]
+  - setting: minimum_group_size              # PROPOSED: owner to confirm
+    section: group_minimum
+    field: min_group_size
+    unit: learners
+    names: [min_group_size, group_minimum]
+
+# A section is skipped when a clause of the school's template implements it: the clause's
+# `method_ref` is the section's number AND the template's `methodology_version` is the document's
+# version. A measure_params clause never counts (it is not a fixed tool). The skipped sections are
+# listed with the clause and the fixed tool that covers it, and a person can say "build it anyway".
+# This maps a clause area to the fixed tool that reads it, for the list only.
+fixed_tools:                                 # PROPOSED: owner to confirm
+  SC: get_criterion
+  ST: get_criterion
+  LV: get_criterion
+  CA: compute_trend
+  TR: compute_trend
+  EX: compute_trend
+  GM: class_baseline
+
+# How many times an answer that was not accepted is sent back to the model with the plain reasons.
+repair_rounds: 2                             # PROPOSED: owner to confirm
+
+# The most rules the model may return for one section, and the shortest quote that counts (a quote
+# of a few characters proves nothing).
+max_rules_per_section: 12                    # PROPOSED: owner to confirm
+quote_min_chars: 12                          # PROPOSED: owner to confirm
+
+# A version needs at least this many tests whose expected numbers come from a worked-example quote
+# of the methodology (a quote that is literally in the document). The model's own tests do not count.
+min_document_examples: 1                     # PROPOSED: owner to confirm
+
+# What a generated measure may return in v1: exact numbers under keys, nothing else (no label, no
+# word for a pattern). A yes-or-no answer is a 1 or a 0. The kind must be one of these, and a key
+# must match the pattern.
+output:
+  kinds: [number]                            # PROPOSED: owner to confirm
+  key_pattern: '^[a-z][a-z0-9]*(_[a-z0-9]+)*$'   # PROPOSED: owner to confirm
+
+# The shape of the records a measure is tested with: a list of objects, oldest first, each with
+# exactly these fields, as exact numbers. At run time (core/measures.py `runner_records`) a record
+# also carries record_id, year, term, stage and subject; a generated measure built in v1 relies on
+# the score only, so the build's tests give the score only.
+record_fields: [score]                       # PROPOSED: owner to confirm

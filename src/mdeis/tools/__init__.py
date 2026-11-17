@@ -10,6 +10,7 @@ from .class_view import stage_gap_counts
 from .criterion import get_criterion
 from .draft import draft_summary
 from .ingest import ingest_assessments
+from .measures import compute_measure, list_measures
 from .release import release_report
 from .resolve import resolve_issue
 from .trend import compute_trend
@@ -17,10 +18,12 @@ from .trend import compute_trend
 __all__ = [
     "class_baseline",
     "check_citations",
+    "compute_measure",
     "compute_trend",
     "draft_summary",
     "get_criterion",
     "ingest_assessments",
+    "list_measures",
     "make_chart",
     "release_report",
     "resolve_issue",

@@ -26,6 +26,10 @@ SEEN = "[a chart was shown here]"
 LEFT_OFF = {
     "blocked": "a question about its records has to be answered first",
     "not_enough_evidence": "there are too few scores",
+    # a chart of approved measure results (make_chart with measure_hashes)
+    "no_value": "the measure gave no value",
+    "outside_the_score_scale": "its value does not fit on the score scale",
+    "kind_not_drawn": "this kind of result is not drawn",
 }
 
 
@@ -75,7 +79,10 @@ def caption(result: dict) -> str:
     if result.get("series"):
         names = ", ".join(line["name"] for line in result["series"])
         rules = " ".join(f"[{cid}]" for cid in result.get("clause_ids", []))
-        lines.append(f"Chart of {names}, term by term, from the stored report-card scores.")
+        if result.get("measures"):  # drawn from approved measure results, not from scores directly
+            lines.append(f"Chart of {names}, as computed by an approved measure from the scores.")
+        else:
+            lines.append(f"Chart of {names}, term by term, from the stored report-card scores.")
         if rules:
             lines.append(f"Rules: {rules}.")
     left = result.get("excluded") or []

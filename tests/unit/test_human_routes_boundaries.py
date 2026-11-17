@@ -121,7 +121,7 @@ def test_the_mcp_tool_list_never_offers_a_tool_that_approves_or_rejects(
     names = {t.name for t in asyncio.run(server.mcp.list_tools())}
     assert not [n for n in names if "approve" in n or "reject" in n], names
     assert not names & set(NAMES_FOR_APPROVAL)
-    assert len(names) == (13 if on else 8), "the human routes are not tools"
+    assert len(names) == (15 if on else 10), "the human routes are not tools"
 
 
 def test_the_human_routes_are_added_to_the_server_only_with_the_class_view_on(

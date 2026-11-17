@@ -49,6 +49,8 @@ TOOL_NAMES = [
     "check_citations",
     "make_chart",
     "release_report",
+    "list_measures",
+    "compute_measure",
 ]
 HANDLES = [
     "FX-01", "FX-02", "FX-03a", "FX-03b", "FX-04a", "FX-04b", "FX-04c", "FX-04d", "FX-05",

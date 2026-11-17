@@ -13,6 +13,12 @@ def exact(value) -> Fraction:
     return Fraction(str(value))
 
 
+def exact_text(x: Fraction) -> str:
+    """A fraction in lowest terms as "n/d", or as "n" when it is a whole number. The exact form of a
+    number that crosses to a generated measure and back as text."""
+    return str(x.numerator) if x.denominator == 1 else f"{x.numerator}/{x.denominator}"
+
+
 def two_places(x: Fraction) -> str:
     d = Decimal(x.numerator) / Decimal(x.denominator)
     return str(d.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))

@@ -291,7 +291,7 @@ def test_the_tool_list_has_no_export_tool_and_the_pdf_route_is_there_either_way(
         server = importlib.reload(server)
         names = {t.name for t in asyncio.run(server.mcp.list_tools())}
         assert not [n for n in names if "export" in n or "pdf" in n], names
-        assert len(names) == (13 if on else 8), "the tool list is as it was"
+        assert len(names) == (15 if on else 10), "the tool list is as it was"
         paths = {getattr(r, "path", None) for r in server.mcp.streamable_http_app().routes}
         assert "/human/reports/{report_id}/pdf" in paths
     finally:

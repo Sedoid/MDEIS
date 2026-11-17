@@ -463,12 +463,14 @@ def test_the_borrowed_tool_can_only_read(conn, roles):
     # Since migration 008 it also reads the registry of generated measures by column only: what a
     # measure is, never its source code, its tests, or the names of the people who decided.
     # Since migration 009 it cannot read lesson plans at all: they hold a tutor's own notes.
+    # Since migration 010 it cannot read template patches either: they say who ran the admin step.
     not_whole = {
         "action_log",
         "learners",
         "measure_versions",
         "registry_reviewers",
         "lesson_plans",
+        "template_patches",
     }
     for table in tables(conn):
         assert can(conn, role, table, "SELECT") == (table not in not_whole), table

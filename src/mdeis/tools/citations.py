@@ -5,6 +5,8 @@ The rules, in order of what they catch:
   unknown_record    a [A-000123] marker no tool returned in this run
   unknown_clause    a [TR-2] marker no tool returned in this run, or not in the pinned rulebook
   unknown_section   a [M-6.4] marker no tool returned, or not in the pinned methodology
+  unknown_measure   a [MS-0001] marker no tool returned in this run, or a measure the draft's
+                    findings did not use
   unknown_number    a number in the text that is not in the findings the draft was built from
   banned_word       a word the pinned rulebook bans
 The check is plain code. The writer cannot argue with it, and nothing but a clean pass sets
@@ -17,17 +19,23 @@ from decimal import Decimal
 from ..core.rules import load_rules
 from ._call import logged_tool
 from .context import Refusal, ToolContext
+from .measures import measures_in
 
 MARKER = re.compile(r"\[([A-Z]{1,2}-[0-9][0-9A-Za-z.]*)\]")
 RECORD_ID = re.compile(r"A-[0-9]+")
 SECTION_ID = re.compile(r"M-[0-9][0-9A-Za-z.]*")
+MEASURE_ID = re.compile(r"MS-[0-9]+")
 KNOWN_ID = re.compile(r"A-[0-9]{6,}|[A-Z]{2}-[0-9]+|M-[0-9][0-9A-Za-z.]*")
 NUMBER = re.compile(r"[0-9]+(?:\.[0-9]+)?")
 ID_TOKEN = re.compile(r"\b[A-Z]{1,2}-[0-9][0-9A-Za-z.]*")
-NOT_COUNTED = {"result_hash"}
+# Keys whose content is never a number a draft may state: a hash, the exact form of a number
+# ("61/4" is read as 61 and 4), the values the template gave a measure (`values_used`: the rule's
+# own wording, which the result carries, states them) and the hashes of a measure's code and source
+# section. The `params` of a rule that `get_criterion` returns are not listed and still count.
+NOT_COUNTED = {"result_hash", "exact", "values_used", "code_sha256", "section_sha256"}
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 RULES_TOOL = "get_criterion"
-RETURNED_BY = ("compute_trend", "ingest_assessments", RULES_TOOL)
+RETURNED_BY = ("compute_trend", "ingest_assessments", RULES_TOOL, "compute_measure")
 
 
 def sentences(body: str) -> list:
@@ -78,11 +86,12 @@ def returned_in_run(ctx: ToolContext, run_id: str, findings: list) -> tuple:
 
 def problems_in(
     body: str, ids: set, numbers: set, banned: list, clauses: set | None = None,
-    sections: set | None = None,
+    sections: set | None = None, measures: set | None = None,
 ) -> list:
     """Every problem in a draft. `clauses` and `sections` are the rules of the pinned rulebook
     version and the sections of the pinned methodology: a marker outside them is refused even if a
-    tool returned it. Left out, only what the tools returned in the run is checked."""
+    tool returned it. `measures` are the measures the draft's findings used: a measure marker
+    outside them is refused too. Left out, only what the tools returned in the run is checked."""
     problems = []
     for number, sentence in enumerate(sentences(body), start=1):
         markers = MARKER.findall(sentence)
@@ -91,7 +100,7 @@ def problems_in(
                 {"reason": "uncited_sentence", "sentence": number, "detail": sentence}
             )
         for marker in markers:
-            reason = _marker_problem(marker, ids, clauses, sections)
+            reason = _marker_problem(marker, ids, clauses, sections, measures)
             if reason:
                 problems.append({"reason": reason, "sentence": number, "detail": marker})
         for n in sorted(numbers_in(sentence)):
@@ -103,20 +112,27 @@ def problems_in(
     return problems
 
 
-def _marker_problem(marker, ids, clauses, sections) -> str | None:
+def _marker_problem(marker, ids, clauses, sections, measures=None) -> str | None:
     if RECORD_ID.fullmatch(marker):
         return None if marker in ids else "unknown_record"
     if SECTION_ID.fullmatch(marker):
         known = marker in ids and (sections is None or marker in sections)
         return None if known else "unknown_section"
+    if MEASURE_ID.fullmatch(marker):
+        known = marker in ids and (measures is None or marker in measures)
+        return None if known else "unknown_measure"
     known = marker in ids and (clauses is None or marker in clauses)
     return None if known else "unknown_clause"
 
 
-def sources_for(ctx: ToolContext, body: str, version: str, document_id: str | None) -> list:
+def sources_for(
+    ctx: ToolContext, body: str, version: str, document_id: str | None, findings: list | None = None
+) -> list:
     """Each distinct marker in the draft, with what it points to: a record to its document, page
-    and row; a rule to the rulebook version; a methodology section to its document and page."""
+    and row; a rule to the rulebook version; a methodology section to its document and page; a
+    measure to its name, the methodology section it comes from and the version the draft used."""
     out = []
+    versions = {m["measure_id"]: m["version"] for m in measures_in(findings)}
     for marker in dict.fromkeys(MARKER.findall(body)):
         if RECORD_ID.fullmatch(marker):
             row = ctx.conn.execute(
@@ -152,6 +168,20 @@ def sources_for(ctx: ToolContext, body: str, version: str, document_id: str | No
                         "document_id": document_id,
                         "title": title,
                         "page": page,
+                    }
+                )
+        elif MEASURE_ID.fullmatch(marker):
+            row = ctx.conn.execute(
+                "SELECT name, method_ref FROM measures WHERE measure_id = %s", (marker,)
+            ).fetchone()
+            if row:
+                out.append(
+                    {
+                        "id": marker,
+                        "kind": "measure",
+                        "name": row[0],
+                        "method_ref": row[1],
+                        "version": versions.get(marker),
                     }
                 )
         else:
@@ -199,7 +229,10 @@ def check_citations(ctx: ToolContext, report_id: str):
             (document_id,),
         ).fetchall()
     }
-    problems = problems_in(body, ids, numbers, rules.banned_words, in_version, in_methodology)
+    used = {m["measure_id"] for m in measures_in(findings)}
+    problems = problems_in(
+        body, ids, numbers, rules.banned_words, in_version, in_methodology, used
+    )
     ok = not problems
     ctx.conn.execute("UPDATE reports SET citations_ok = %s WHERE report_id = %s", (ok, report_id))
     result = {
@@ -208,6 +241,6 @@ def check_citations(ctx: ToolContext, report_id: str):
         "template_version": version,
         "problems": problems,
         "methodology_document_id": document_id,
-        "sources": sources_for(ctx, body, version, document_id),
+        "sources": sources_for(ctx, body, version, document_id, findings),
     }
     return result, "ok" if ok else "blocked"

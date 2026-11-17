@@ -2,6 +2,7 @@
 
 from ._call import logged_tool
 from .context import Refusal, ToolContext
+from .measures import stale_measures
 
 
 @logged_tool("release_report")
@@ -10,16 +11,18 @@ def release_report(ctx: ToolContext, report_id: str):
 
     Refused, and logged, when nobody is signed in, the draft is not pending review, the check has
     not passed, or the rulebook or methodology has changed since the draft was written
-    (`stale_pin`). The approver comes from the session. There is no argument that can name one.
+    (`stale_pin`), or a measure version the draft used has been replaced or withdrawn since. The
+    approver comes from the session. There is no argument that can name one.
     """
     if ctx.approver is None:
         raise Refusal("no approver is signed in, so nothing can be released")
     row = ctx.conn.execute(
-        "SELECT status, citations_ok FROM reports WHERE report_id = %s FOR UPDATE", (report_id,)
+        "SELECT status, citations_ok, findings FROM reports WHERE report_id = %s FOR UPDATE",
+        (report_id,),
     ).fetchone()
     if row is None:
         raise Refusal(f"there is no report {report_id}")
-    status, citations_ok = row
+    status, citations_ok, findings = row
     if status != "pending_review":
         raise Refusal(f"{report_id} is already {status}")
     if not citations_ok:
@@ -28,7 +31,7 @@ def release_report(ctx: ToolContext, report_id: str):
         "SELECT template_stale, methodology_stale FROM report_pin_status WHERE report_id = %s",
         (report_id,),
     ).fetchone()
-    if pin[0] or pin[1]:
+    if pin[0] or pin[1] or stale_measures(ctx.conn, findings):
         raise Refusal("stale_pin")
     released = ctx.conn.execute(
         "UPDATE reports SET status = 'released', released_by_id = %s, released_by_name = %s, "

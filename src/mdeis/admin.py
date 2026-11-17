@@ -5,6 +5,7 @@
     python -m mdeis.admin ingest-dir --kind results --dir data/synthetic/cards --as "Demo loader"
     python -m mdeis.admin ack-methodology D-000012 --by "Ada Teacher" --note "checked 6.4"
     python -m mdeis.admin grant-reviewer --user-id U --name "Ms Teacher" --role teacher [--revoke]
+    python -m mdeis.admin apply-template-patch --patch TP-000001 --version-name baobab-v2 --by "Ada"
 
 `load-criteria` does what `python -m mdeis.rulebook load` does, and takes the same options. The
 rulebook module also has embed, activate, status and search.
@@ -12,6 +13,10 @@ rulebook module also has embed, activate, status and search.
 `ingest` copies a file into the inbox, records it as a document, and reads it in this process with
 the same code the worker uses. `ack-methodology` puts a methodology that needed review in force; it
 needs the name of the person who checked it. Both write the diary.
+
+`apply-template-patch` loads the measure parameters of confirmed measures as a NEW template version
+(see `mdeis.measure_build.apply`). It prints and logs every value it adds. It is not a tool and the
+model cannot call it.
 
 `grant-reviewer` records who may decide in the measure registry (a developer clears a hold, a
 teacher confirms a measure), or ends that with `--revoke`. The server operator runs it; the operator
@@ -32,6 +37,7 @@ import psycopg
 from mdeis import rulebook
 from mdeis.db import diary
 from mdeis.ingest import methodology, worker
+from mdeis.measure_build import apply as patch_apply
 from mdeis.registry import reviewers
 
 # the admin name -> the rulebook command it runs
@@ -44,7 +50,9 @@ USAGE = (
     '  python -m mdeis.admin ingest-dir --kind results --dir FOLDER --as "Name" [--recursive]\n'
     '  python -m mdeis.admin ack-methodology D-000012 --by "Name" [--note "..."]\n'
     '  python -m mdeis.admin grant-reviewer --user-id ID --name "Name" --role teacher|developer\n'
-    "      [--revoke]   (--name is not needed with --revoke)"
+    "      [--revoke]   (--name is not needed with --revoke)\n"
+    '  python -m mdeis.admin apply-template-patch --patch TP-000001 [--patch ...] \\\n'
+    '      --version-name NAME --by "Name" [--template-dir DIR] [--no-activate] [--no-embed]'
 )
 
 
@@ -219,6 +227,47 @@ def grant_reviewer(argv: list[str]) -> int:
     return 0
 
 
+def apply_template_patch(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="python -m mdeis.admin apply-template-patch")
+    parser.add_argument("--patch", action="append", required=True,
+                        help="a patch ID; repeat for a batch")
+    parser.add_argument("--version-name", required=True,
+                        help="the new template version, its file name")
+    parser.add_argument("--by", required=True, help="the name of the person who runs this step")
+    parser.add_argument("--template-dir", default=os.environ.get(patch_apply.TEMPLATE_DIR_ENV))
+    parser.add_argument("--no-activate", action="store_true",
+                        help="load it without making it active")
+    parser.add_argument("--no-embed", action="store_true", help="do not make vectors now")
+    args = parser.parse_args(argv)
+    if not args.template_dir:
+        print(f"Refused: give --template-dir or set {patch_apply.TEMPLATE_DIR_ENV}.",
+              file=sys.stderr)
+        return 1
+    url = os.environ["DATABASE_URL"]
+    with psycopg.connect(url) as conn:
+        try:
+            done = patch_apply.apply_patches(
+                conn, args.patch, args.version_name, args.by, Path(args.template_dir),
+                url=url, activate=not args.no_activate,
+            )
+        except patch_apply.ApplyRefused as refusal:
+            conn.rollback()
+            print(f"Refused: {refusal}", file=sys.stderr)
+            return 1
+        print(f"{done['loaded'].version}: {done['loaded'].status} ({done['loaded'].clauses} rules"
+              f"{', active' if done['loaded'].active else ''})")
+        print(f"file: {done['path']}")
+        print(f"sha256: {done['sha256']}")
+        print("values added (each confirmed by the teacher named):")
+        for line in done["added"]:
+            print(f"  {line}")
+        if done["loaded"].active:
+            print("This version is now active: every unreleased draft is now stale_pin.")
+        if not args.no_embed:
+            rulebook._embed_step(conn, url, required=False)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:
@@ -235,6 +284,8 @@ def main(argv: list[str] | None = None) -> int:
         return ack_methodology(rest)
     if command == "grant-reviewer":
         return grant_reviewer(rest)
+    if command == "apply-template-patch":
+        return apply_template_patch(rest)
     print(USAGE, file=sys.stderr)
     return 2
 

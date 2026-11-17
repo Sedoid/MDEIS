@@ -5,9 +5,11 @@ from mdeis.db import diary
 from ..core import store
 from ._call import logged_tool
 from .context import Refusal, ToolContext
+from .measures import measures_in
 
-# What a draft may be built from: results about the learner, and the rules and sections it cites.
-FINDING_TOOLS = ("compute_trend", "ingest_assessments", "get_criterion")
+# What a draft may be built from: results about the learner, an approved measure's result, and the
+# rules and sections it cites.
+FINDING_TOOLS = ("compute_trend", "ingest_assessments", "get_criterion", "compute_measure")
 
 
 def findings_for(ctx: ToolContext, hashes: list) -> list:
@@ -33,7 +35,7 @@ def draft_summary(ctx: ToolContext, learner_id: str, text: str, finding_hashes: 
 
     `finding_hashes` are the `result_hash` values of the tool results the text is built from: the
     learner's results, and the rule lookups it cites. The draft is pinned to the rulebook version
-    those results used.
+    those results used, and keeps the version of every measure it used (`measures_used`).
     """
     if not store.learner_exists(ctx.conn, learner_id):
         raise Refusal(f"there is no learner {learner_id}")
@@ -69,6 +71,7 @@ def draft_summary(ctx: ToolContext, learner_id: str, text: str, finding_hashes: 
         "report_id": row[0],
         "template_version": version,
         "methodology_document_id": methodology[0] if methodology else None,
+        "measures_used": measures_in(findings),
         "logged_event_id": None,
     }
     return result, "ok"

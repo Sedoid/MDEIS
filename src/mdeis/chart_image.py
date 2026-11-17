@@ -11,7 +11,8 @@ they can be told apart in greyscale.
     title, subtitle   text shown at the top
     scale_max         the top of the score axis (the rulebook's scale)
     terms             [{label, group, band}] left to right; band is [low, high] or None
-    series            [{name, values}]; a value is a number, or None for a term with no score
+    series            [{name, values}]; a value is a number, or None for a term with no score;
+                      an optional `legend` replaces the one-line legend of a single line
     band_legend       the legend text for the shaded band (when any term has a band)
     gap               None, or {index, from_value, to_value, text}
     source            the line at the foot
@@ -235,7 +236,8 @@ def trend_svg(chart: dict) -> str:
             f'stroke-width="2.25"{dashed}/>'
         )
         parts.append(_marker(MARKERS[k % len(MARKERS)], PAD + 16, row, colour, 4.2))
-        label = line["name"] if many else "Score in each term, from the report cards"
+        one = line.get("legend", "Score in each term, from the report cards")
+        label = line["name"] if many else one
         parts.append(_text(text_x, row + 5, label, SIZE["legend"]))
         row += ROW
     if bands:
