@@ -38,6 +38,8 @@ venv/
 htmlcov/
 dist/
 build/
+# The methodology build graph is source code, not a build output.
+!src/orchestrator/build/
 
 # ── Node (n8n helpers, tooling) ──────────────────────────────────────
 node_modules/
