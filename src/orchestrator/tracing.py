@@ -61,8 +61,22 @@ LEVELS = {"refused": "WARNING", "error": "ERROR"}  # a Langfuse level for a tool
 RUN_UUID = re.compile(r"^RUN-([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})$")
 
 log = logging.getLogger("orchestrator.tracing")
+OFF_SUMMARY = {
+    "on": False, "runs_sent": 0, "runs_failed": 0, "runs_dropped": 0, "spans_rejected": 0,
+    "last_status": None,
+}
 _LIVE: weakref.WeakSet = weakref.WeakSet()  # every tracer, so shutdown can flush them all
 _CACHE: dict = {}
+
+
+def _show_info_lines() -> None:
+    """The service sets up no logging, so an INFO line would be lost. Only a real tracer (tracing
+    on) calls this: it lets this one logger print its lines, and nothing else changes."""
+    if not log.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+        log.addHandler(handler)
+    log.setLevel(logging.INFO)
 
 
 def trace_id_for(run_id: str) -> str:
@@ -414,6 +428,9 @@ class NullTrace:
 class NullTracer:
     enabled = False
 
+    def summary(self) -> dict:
+        return dict(OFF_SUMMARY)
+
     def start(self, **kwargs) -> NullTrace:
         return NullTrace()
 
@@ -432,9 +449,23 @@ class Tracer:
         self.settings, self._client = settings, client
         self._queue: deque = deque()
         self._task: asyncio.Task | None = None
-        # Counts are of spans, except `errors` (things that went wrong inside the tracer).
-        self.stats = {"queued": 0, "sent": 0, "rejected": 0, "failed": 0, "dropped": 0, "errors": 0}
+        # Counts are of spans, except `errors` (things that went wrong inside the tracer), the
+        # `runs_*` counts (requests, one for each run) and `last_status` (an HTTP status or None).
+        self.stats = {
+            "queued": 0, "sent": 0, "rejected": 0, "failed": 0, "dropped": 0, "errors": 0,
+            "runs_sent": 0, "runs_failed": 0, "runs_dropped": 0, "last_status": None,
+        }
         _LIVE.add(self)
+        _show_info_lines()
+
+    def summary(self) -> dict:
+        """What the health check may say about tracing: counts and a status, no host, no key."""
+        stats = self.stats
+        return {
+            "on": True, "runs_sent": stats["runs_sent"], "runs_failed": stats["runs_failed"],
+            "runs_dropped": stats["runs_dropped"], "spans_rejected": stats["rejected"],
+            "last_status": stats["last_status"],
+        }
 
     def start(
         self, *, run_id: str, kind: str, token: str | None = None,
@@ -452,6 +483,7 @@ class Tracer:
         """Queue a finished run for sending."""
         while len(self._queue) >= QUEUE_MAX:
             self.stats["dropped"] += len(self._queue.popleft())
+            self.stats["runs_dropped"] += 1
         self._queue.append(spans)
         self.stats["queued"] += len(spans)
         try:
@@ -465,13 +497,16 @@ class Tracer:
             await self._post(self._queue.popleft())
 
     async def _post(self, spans: list) -> None:
+        """Send one run and log ONE line about it: counts and a status, never a message, a body, a
+        key or any text of the run."""
         try:
             response = await self._send(spans)
-        except Exception as error:  # (the class only: a message could hold anything)
-            self._lost(len(spans), type(error).__name__)
+        except Exception as error:  # (the class name only: a message could hold anything)
+            self._lost(len(spans), type(error).__name__, None)
             return
-        if not 200 <= response.status_code < 300:
-            self._lost(len(spans), f"status {response.status_code}")
+        status = response.status_code
+        if not 200 <= status < 300:
+            self._lost(len(spans), str(status), status)
             return
         rejected = 0
         try:  # a partial success names how many spans were refused; the reason is not kept
@@ -480,9 +515,13 @@ class Tracer:
         except Exception:
             pass
         self.stats["sent"] += len(spans) - rejected
-        if rejected:
-            self.stats["rejected"] += rejected
-            log.warning("langfuse: %d spans were rejected", rejected)
+        self.stats["rejected"] += rejected
+        self.stats["runs_sent"] += 1
+        self.stats["last_status"] = status
+        log.log(
+            logging.WARNING if rejected else logging.INFO,
+            "langfuse: run sent, spans=%d, http=%d, rejected=%d", len(spans), status, rejected,
+        )
 
     async def _send(self, spans: list) -> httpx.Response:
         settings = self.settings
@@ -510,9 +549,11 @@ class Tracer:
         async with httpx.AsyncClient() as client:
             return await post(client)
 
-    def _lost(self, count: int, why: str) -> None:
+    def _lost(self, count: int, why: str, status: int | None) -> None:
         self.stats["failed"] += count
-        log.warning("langfuse: %d spans not delivered (%s)", count, why)
+        self.stats["runs_failed"] += 1
+        self.stats["last_status"] = status
+        log.warning("langfuse: run not sent, spans=%d, reason=%s", count, why)
 
     async def flush(self) -> None:
         """Send what is queued, once, and wait at most FLUSH_TIMEOUT_SECONDS for all of it."""
@@ -521,6 +562,7 @@ class Tracer:
         except Exception:  # (a timeout, or a task from another loop: counted, never raised)
             self.stats["errors"] += 1
             self.stats["dropped"] += sum(len(run) for run in self._queue)
+            self.stats["runs_dropped"] += len(self._queue)
             self._queue.clear()
 
     async def _flush(self) -> None:

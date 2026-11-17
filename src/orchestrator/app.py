@@ -135,6 +135,13 @@ def create_app(
 
     app = FastAPI(title="MDEIS orchestrator", lifespan=lifespan)
 
+    def tracing_state(settings) -> dict:
+        """Counts and a status. It never decides whether the service is healthy."""
+        try:
+            return tracer_factory(settings).summary()
+        except Exception:
+            return tracing.NullTracer().summary()
+
     @app.get("/healthz")
     def healthz(response: Response) -> dict:
         problems = _problems()
@@ -147,6 +154,7 @@ def create_app(
             "mode": settings.mode,
             "engine": engine_name(settings),
             "model_configured": settings.model_ready,
+            "tracing": tracing_state(settings),
         }
 
     @app.post("/run", dependencies=[Depends(require_key)])

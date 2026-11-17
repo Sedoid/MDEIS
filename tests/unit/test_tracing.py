@@ -738,6 +738,133 @@ def test_a_lesson_repair_round_is_counted_in_the_trace():
     assert len(wire.generations()) == 2
 
 
+# --------------------------------------------------------------------------- what the log says
+LINE = re.compile(
+    r"^langfuse: run (sent, spans=\d+, http=\d+, rejected=\d+|not sent, spans=\d+, reason=\w+)$"
+)
+SIX = {"on", "runs_sent", "runs_failed", "runs_dropped", "spans_rejected", "last_status"}
+
+
+def tracer_lines(caplog):
+    return [r for r in caplog.records if r.name.startswith("orchestrator.tracing")]
+
+
+def test_a_sent_run_logs_one_info_line_with_counts_and_status_only(caplog):
+    caplog.set_level(logging.DEBUG)
+    chat(tracer_for(Wire()), script())
+    [line] = tracer_lines(caplog)
+    assert line.levelno == logging.INFO
+    assert line.getMessage() == "langfuse: run sent, spans=4, http=200, rejected=0"
+
+
+@pytest.mark.parametrize("status", [400, 401, 500])
+def test_a_refused_run_logs_the_status_number_and_nothing_the_server_said(caplog, status):
+    caplog.set_level(logging.DEBUG)
+    chat(tracer_for(Wire(status=status, answer={"message": "SENTINEL-BODY-TEXT"})), script())
+    [line] = tracer_lines(caplog)
+    assert line.levelno == logging.WARNING
+    assert line.getMessage() == f"langfuse: run not sent, spans=4, reason={status}"
+
+
+def test_a_timeout_logs_the_exception_class_name_only(caplog):
+    caplog.set_level(logging.DEBUG)
+    chat(tracer_for(Wire(error=httpx.ReadTimeout("SENTINEL-BODY-TEXT"))), script())
+    [line] = tracer_lines(caplog)
+    assert line.levelno == logging.WARNING
+    assert line.getMessage() == "langfuse: run not sent, spans=4, reason=ReadTimeout"
+
+
+def test_a_partial_rejection_is_one_warning_with_the_count_and_no_reason(caplog):
+    caplog.set_level(logging.DEBUG)
+    answer = {"partialSuccess": {"rejectedSpans": 2, "errorMessage": "SENTINEL-BODY-TEXT"}}
+    chat(tracer_for(Wire(answer=answer)), script())
+    [line] = tracer_lines(caplog)
+    assert line.levelno == logging.WARNING
+    assert line.getMessage() == "langfuse: run sent, spans=4, http=200, rejected=2"
+
+
+def test_no_log_line_holds_a_key_a_body_or_any_text_of_the_run(caplog):
+    caplog.set_level(logging.DEBUG)
+    answers = [
+        Wire(),
+        Wire(status=401, answer={"message": "SENTINEL-BODY-TEXT"}),
+        Wire(error=httpx.ConnectError("SENTINEL-BODY-TEXT")),
+        Wire(answer={"partialSuccess": {"rejectedSpans": 1, "errorMessage": "SENTINEL-BODY-TEXT"}}),
+    ]
+    for wire in answers:
+        tracer = tracer_for(wire, LANGFUSE_CAPTURE_CONTENT="true")
+        chat(tracer, FakeModel(say(f"SENTINEL-REPLY {SK}")), text=f"SENTINEL-PROMPT {PK}")
+    lines = tracer_lines(caplog)
+    assert len(lines) == 4, "one line for each run"
+    for line in lines:
+        text = line.getMessage() + " " + str(line.args) + str(line.exc_info)
+        assert LINE.match(line.getMessage()), line.getMessage()
+        for secret in (PK, SK, HOST, "SENTINEL", "Authorization", "Basic"):
+            assert secret not in text
+
+
+def test_with_tracing_off_nothing_at_all_is_logged(caplog):
+    caplog.set_level(logging.DEBUG)
+    chat(tracing.NullTracer(), script())
+    trace = tracing.tracer_for(load_settings({})).start(run_id="RUN-O1", kind="chat")
+    trace.finish("ok")
+    assert tracer_lines(caplog) == []
+
+
+def test_a_real_tracer_makes_its_info_lines_visible_in_the_container_log():
+    tracing.Tracer(SETTINGS, client=Wire().client())
+    assert tracing.log.isEnabledFor(logging.INFO) and tracing.log.handlers
+
+
+# --------------------------------------------------------------------------- the counters
+def test_the_counters_after_a_sent_run_a_refused_run_a_timeout_and_a_partial_rejection():
+    wire = Wire()
+    tracer = tracer_for(wire)
+    assert tracer.summary() == {
+        "on": True, "runs_sent": 0, "runs_failed": 0, "runs_dropped": 0, "spans_rejected": 0,
+        "last_status": None,
+    }
+    chat(tracer, script())
+    assert tracer.summary() == {
+        "on": True, "runs_sent": 1, "runs_failed": 0, "runs_dropped": 0, "spans_rejected": 0,
+        "last_status": 200,
+    }
+    refused = tracer_for(Wire(status=401))
+    chat(refused, script())
+    assert refused.summary()["runs_failed"] == 1 and refused.summary()["last_status"] == 401
+    assert refused.summary()["runs_sent"] == 0
+    slow = tracer_for(Wire(error=httpx.ReadTimeout("slow")))
+    chat(slow, script())
+    assert slow.summary()["runs_failed"] == 1 and slow.summary()["last_status"] is None
+    partial = tracer_for(Wire(answer={"partialSuccess": {"rejectedSpans": 2}}))
+    chat(partial, script())
+    assert partial.summary()["spans_rejected"] == 2 and partial.summary()["runs_sent"] == 1
+
+
+def test_a_run_dropped_from_a_full_queue_is_counted_as_a_run():
+    tracer = tracing.Tracer(SETTINGS, client=Wire().client())
+    for k in range(tracing.QUEUE_MAX + 2):
+        tracer.submit([{"spanId": f"{k:016x}"}])
+    assert tracer.summary()["runs_dropped"] == 2
+
+
+def test_the_summary_has_six_fields_and_no_host_and_no_key():
+    tracer = tracer_for(Wire())
+    chat(tracer, script())
+    summary = tracer.summary()
+    assert set(summary) == SIX
+    text = json.dumps(summary)
+    for secret in (PK, SK, HOST, "langfuse.example", "lf."):
+        assert secret not in text
+
+
+def test_the_off_tracer_reports_on_false_and_zeros():
+    assert tracing.NullTracer().summary() == {
+        "on": False, "runs_sent": 0, "runs_failed": 0, "runs_dropped": 0, "spans_rejected": 0,
+        "last_status": None,
+    }
+
+
 # --------------------------------------------------------------------------- the service
 pytest.importorskip("fastapi")
 
@@ -851,6 +978,109 @@ def test_the_service_with_tracing_off_makes_no_tracer_traffic(monkeypatch):
     with TestClient(app) as client:
         response = client.post("/run", json=body, headers=AUTH)
     assert run_events(response)[-1][0] == "final"
+
+
+def healthy(monkeypatch):
+    """No database in a unit test: say the service is otherwise fine, so `status` is about tracing
+    only."""
+    monkeypatch.setattr(service, "_problems", lambda: [])
+
+
+def health_of(client, until=None):
+    """The health answer. With `until`, ask again until it holds."""
+    deadline = time.monotonic() + 3
+    while True:
+        response = client.get("/healthz")
+        if until is None or until(response.json()["tracing"]) or time.monotonic() > deadline:
+            return response
+        time.sleep(0.05)
+
+
+def run_body():
+    return {
+        "conversation_id": "c-1", "approver_token": TOKEN,
+        "messages": [{"role": "user", "content": "How is the reading going?"}],
+    }
+
+
+@asynccontextmanager
+async def no_tool_servers(settings, token, run_id):
+    yield {tools.MDEIS: NoTools()}
+
+
+def test_healthz_carries_the_counters_and_keeps_its_other_fields(monkeypatch):
+    healthy(monkeypatch)
+    for key, value in BASE.items():
+        monkeypatch.setenv(key, value)
+    tracer = tracer_for(Wire())
+    app = service.create_app(
+        model_factory=Answers, servers_factory=no_tool_servers,
+        tracer_factory=lambda settings: tracer,
+    )
+    with TestClient(app) as client:
+        before = client.get("/healthz")
+        assert before.status_code == 200 and before.json()["status"] == "ok"
+        assert before.json()["tracing"]["on"] is True and before.json()["tracing"]["runs_sent"] == 0
+        client.post("/run", json=run_body(), headers=AUTH)
+        after = health_of(client, until=lambda t: t["runs_sent"] == 1).json()
+    assert {"status", "problems", "mode", "engine", "model_configured"} <= set(after)
+    assert set(after["tracing"]) == SIX
+    assert after["tracing"] == {
+        "on": True, "runs_sent": 1, "runs_failed": 0, "runs_dropped": 0, "spans_rejected": 0,
+        "last_status": 200,
+    }
+    assert HOST not in json.dumps(after) and PK not in json.dumps(after)
+
+
+@pytest.mark.parametrize(
+    "wire_args",
+    [{"error": httpx.ConnectError("refused")}, {"status": 401}, {"status": 400}],
+    ids=["connect-error", "401", "400"],
+)
+def test_a_failing_sender_never_makes_the_service_unhealthy(monkeypatch, wire_args):
+    healthy(monkeypatch)
+    for key, value in BASE.items():
+        monkeypatch.setenv(key, value)
+    tracer = tracer_for(Wire(**wire_args))
+    app = service.create_app(
+        model_factory=Answers, servers_factory=no_tool_servers,
+        tracer_factory=lambda settings: tracer,
+    )
+    with TestClient(app) as client:
+        response = client.post("/run", json=run_body(), headers=AUTH)
+        assert run_events(response)[-1][0] == "final"
+        health = health_of(client, until=lambda t: t["runs_failed"] == 1)
+    assert health.status_code == 200 and health.json()["status"] == "ok"
+    assert health.json()["problems"] == []
+    assert health.json()["tracing"]["runs_failed"] == 1
+
+
+def test_a_broken_tracer_factory_does_not_break_healthz(monkeypatch):
+    healthy(monkeypatch)
+
+    def boom(settings):
+        raise RuntimeError("factory bug")
+
+    app = service.create_app(tracer_factory=boom)
+    health = TestClient(app).get("/healthz")
+    assert health.status_code == 200 and health.json()["tracing"]["on"] is False
+
+
+def test_with_tracing_off_healthz_says_on_false_and_logs_nothing(monkeypatch, caplog):
+    healthy(monkeypatch)
+    for key, value in BASE.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "")
+    caplog.set_level(logging.DEBUG)
+    app = service.create_app(model_factory=Answers, servers_factory=no_tool_servers)
+    with TestClient(app) as client:
+        client.post("/run", json=run_body(), headers=AUTH)
+        health = client.get("/healthz")
+    assert health.json()["tracing"] == {
+        "on": False, "runs_sent": 0, "runs_failed": 0, "runs_dropped": 0, "spans_rejected": 0,
+        "last_status": None,
+    }
+    assert tracer_lines(caplog) == []
 
 
 # --------------------------------------------------------------------------- the code itself
