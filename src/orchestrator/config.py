@@ -8,7 +8,7 @@ The model's name, the provider order and the two privacy switches are configurat
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 DEFAULT_MAX_STEPS = 12  # model calls in one run before the loop stops
 DEFAULT_MAX_REDRAFTS = 2  # times a draft that fails the citation check is written again
@@ -41,10 +41,20 @@ class Settings:
     provider_order: tuple
     allow_fallbacks: bool
     data_collection: str
+    # Optional Langfuse tracing (tracing.py). The keys stay out of repr so no log prints them.
+    langfuse_public_key: str = field(default="", repr=False)
+    langfuse_secret_key: str = field(default="", repr=False)
+    langfuse_host: str = ""
+    langfuse_capture_content: bool = False  # off: metadata only, no prompts or replies
 
     @property
     def model_ready(self) -> bool:
         return bool(self.model_key and self.model)
+
+    @property
+    def langfuse_on(self) -> bool:
+        """Tracing runs only when all three are set."""
+        return bool(self.langfuse_public_key and self.langfuse_secret_key and self.langfuse_host)
 
 
 def load_settings(env=None) -> Settings:
@@ -69,4 +79,8 @@ def load_settings(env=None) -> Settings:
         provider_order=names("OPENROUTER_PROVIDER"),
         allow_fallbacks=_flag(env.get("OPENROUTER_ALLOW_FALLBACKS", "false")),
         data_collection=env.get("OPENROUTER_DATA_COLLECTION", "deny").strip() or "deny",
+        langfuse_public_key=env.get("LANGFUSE_PUBLIC_KEY", "").strip(),
+        langfuse_secret_key=env.get("LANGFUSE_SECRET_KEY", "").strip(),
+        langfuse_host=env.get("LANGFUSE_HOST", "").strip().rstrip("/"),
+        langfuse_capture_content=_flag(env.get("LANGFUSE_CAPTURE_CONTENT", "false")),
     )

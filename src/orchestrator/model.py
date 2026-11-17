@@ -16,6 +16,9 @@ import httpx
 from .config import Settings
 
 REQUEST_TIMEOUT_SECONDS = 120
+# The usage fields, as OpenRouter names them. `cost` is in USD.
+USAGE_KEYS = ("prompt_tokens", "completion_tokens", "total_tokens", "cost")
+MAX_PROVIDER_CHARS = 80
 
 
 class ModelError(Exception):
@@ -33,6 +36,8 @@ class ToolCall:
 class Reply:
     text: str
     calls: tuple = ()
+    usage: dict | None = None  # tokens and the USD cost as the service reported them (tracing)
+    provider: str | None = None  # which provider served the call (tracing only)
 
 
 def payload(settings: Settings, messages: list, tools: list) -> dict:
@@ -48,7 +53,24 @@ def payload(settings: Settings, messages: list, tools: list) -> dict:
     if settings.provider_order:
         provider["order"] = list(settings.provider_order)
     body["provider"] = provider
+    body["usage"] = {"include": True}  # ask for the token counts and the cost in USD
     return body
+
+
+def usage_of(data: dict) -> dict | None:
+    """The token counts and cost the service reported. A value that is not a plain non-negative
+    number is left out; nothing is worked out here, and there is no price table."""
+    block = data.get("usage")
+    if not isinstance(block, dict):
+        return None
+    found = {
+        key: block[key]
+        for key in USAGE_KEYS
+        if isinstance(block.get(key), int | float)
+        and not isinstance(block[key], bool)
+        and block[key] >= 0
+    }
+    return found or None
 
 
 def reply_of(data: dict) -> Reply:
@@ -64,7 +86,12 @@ def reply_of(data: dict) -> Reply:
         )
         for k, c in enumerate(message.get("tool_calls") or [])
     )
-    return Reply(text=message.get("content") or "", calls=calls)
+    provider = data.get("provider")
+    if not isinstance(provider, str) or len(provider) > MAX_PROVIDER_CHARS:
+        provider = None
+    return Reply(
+        text=message.get("content") or "", calls=calls, usage=usage_of(data), provider=provider
+    )
 
 
 class OpenRouterModel:

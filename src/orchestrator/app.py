@@ -11,6 +11,10 @@ token. The author and the school are the token's, so a body that names an author
 approver is refused. `GET /lessons/{plan_id}` reads one saved plan, with no model. There is no route
 here that approves or rejects a plan: that is a human act on another path.
 
+Optional tracing (`tracing.py`) watches both routes when the three Langfuse variables are set:
+one trace for each run, with the run's id as the trace id. It is off otherwise, and it never changes
+an answer. It is not the audit log: the action log in Postgres is.
+
 It logs the names of things and never message text, tokens or keys.
 """
 
@@ -27,7 +31,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Path, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import graph, loop
+from . import graph, loop, tracing
 from .config import load_settings
 from .lessons import READ_TOOL
 from .lessons import graph as lesson_graph
@@ -114,13 +118,22 @@ def lesson_answer(outcome: str, statement: str, run_id: str) -> dict:
     return {"outcome": outcome, "statement": statement, "run_id": run_id, "plan": None, "steps": []}
 
 
-def create_app(model_factory=None, servers_factory=None, lesson_servers_factory=None) -> FastAPI:
+def create_app(
+    model_factory=None, servers_factory=None, lesson_servers_factory=None, tracer_factory=None
+) -> FastAPI:
     """The service. The factories exist so that tests can put a fake model and fake tool servers in
     their place; the real service uses the defaults."""
     model_factory = model_factory or OpenRouterModel
     servers_factory = servers_factory or open_servers
     lesson_servers_factory = lesson_servers_factory or open_lesson_servers
-    app = FastAPI(title="MDEIS orchestrator")
+    tracer_factory = tracer_factory or tracing.tracer_for
+
+    @asynccontextmanager
+    async def lifespan(_app):
+        yield
+        await tracing.flush_all()  # send what is still queued, within a bounded time
+
+    app = FastAPI(title="MDEIS orchestrator", lifespan=lifespan)
 
     @app.get("/healthz")
     def healthz(response: Response) -> dict:
@@ -147,6 +160,11 @@ def create_app(model_factory=None, servers_factory=None, lesson_servers_factory=
             if not settings.model_ready:
                 yield sse("error", {"text": NOT_CONFIGURED})
                 return
+            trace = tracer_factory(settings).start(
+                run_id=run_id, kind="chat", token=body.approver_token,
+                conversation_id=body.conversation_id,
+            )
+            outcome = "error"
             try:
                 async with servers_factory(settings, body.approver_token, run_id) as servers:
                     async for item in runner(
@@ -154,12 +172,16 @@ def create_app(model_factory=None, servers_factory=None, lesson_servers_factory=
                         token=body.approver_token,
                         run_id=run_id,
                         settings=settings,
-                        model=model_factory(settings),
-                        servers=servers,
+                        model=trace.wrap_model(model_factory(settings)),
+                        servers=trace.wrap_servers(servers),
                     ):
+                        outcome = tracing.chat_outcome(item, outcome)
                         yield sse(item["event"], item["data"])
             except Exception as error:  # (the class only: never the message)
+                outcome = "error"
                 yield sse("error", {"text": f"I could not finish ({type(error).__name__})."})
+            finally:
+                trace.finish(outcome)
 
         return StreamingResponse(stream(), media_type="text/event-stream")
 
@@ -173,6 +195,11 @@ def create_app(model_factory=None, servers_factory=None, lesson_servers_factory=
             return JSONResponse(
                 lesson_answer("error", NOT_CONFIGURED, run_id), status_code=503
             )
+        # The notes and the objective are masked: they are never sent to the tracer in any mode.
+        trace = tracer_factory(settings).start(
+            run_id=run_id, kind="lesson", token=body.approver_token,
+            mask=(body.notes, body.objective),
+        )
         try:
             async with lesson_servers_factory(settings, body.approver_token, run_id) as servers:
                 answer = await lesson_graph.run(
@@ -183,12 +210,18 @@ def create_app(model_factory=None, servers_factory=None, lesson_servers_factory=
                     notes=body.notes,
                     run_id=run_id,
                     settings=settings,
-                    model=model_factory(settings),
-                    servers=servers,
+                    model=trace.wrap_model(model_factory(settings)),
+                    servers=trace.wrap_servers(servers),
                 )
         except Exception as error:  # (the class only: never the message, which could hold notes)
+            trace.finish("error")
             said = f"I could not finish ({type(error).__name__}). Nothing was saved."
             return JSONResponse(lesson_answer("error", said, run_id), status_code=502)
+        trace.finish(
+            str(answer.get("outcome")),
+            repair_rounds=answer.get("repair_rounds"),
+            model_calls=answer.get("model_calls"),
+        )
         return JSONResponse(answer)
 
     @app.get("/lessons/{plan_id}", dependencies=[Depends(require_key)])
