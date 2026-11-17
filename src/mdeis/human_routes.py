@@ -25,6 +25,11 @@ on a refusal. A refusal here (a key or token problem, a body problem) writes a r
 plan twice is REFUSED, not repeated: the store answers that the plan is no longer open.
 
 Nothing here calls a model or a network, and nothing here names a person or a school.
+
+One more route is installed separately (`install_reports`), because it does not depend on the class
+view: `POST /human/reports/{report_id}/pdf` gives the PDF of a RELEASED report (T-056). It needs the
+same key and token, takes an empty body, builds the file from the stored report only, and writes a
+diary row for every attempt. It is not a tool and no model can reach it.
 """
 
 import hmac
@@ -33,15 +38,17 @@ import os
 import re
 import uuid
 from contextlib import contextmanager
+from datetime import UTC, datetime
 
 import psycopg
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from .core import approver_token
 from .core.rules import RulebookProblem
 from .db import diary
+from .export import report_export
 from .lessons import store as lesson_store
 from .lessons.rules import load_lesson_rules
 from .tools.context import Approver, ToolContext
@@ -62,7 +69,14 @@ PATHS = {
     "get": "/human/lessons/{plan_id}",
     "approve": "/human/lessons/{plan_id}/approve",
     "reject": "/human/lessons/{plan_id}/reject",
+    "report_pdf": "/human/reports/{report_id}/pdf",
 }
+REPORT_ID = report_export.REPORT_ID  # R-000001: the form the database gives a report number
+EXPORT_STATUS = {
+    "not_signed_in": 401, "no_school": 403, "report_not_found": 404, "report_not_released": 409,
+}
+PRACTICE_ENV = "PRACTICE_DATA_ONLY"
+TRUE_WORDS = ("1", "true", "yes", "on")
 
 # What the store says when it refuses, found by its own words, and the typed reason for it. The
 # first match wins. The integration test drives the real store and checks each still matches.
@@ -98,6 +112,7 @@ PLAIN = {
     "unknown_field": "The body may hold only these fields: {allowed}.",
     "accepted_edits_invalid": "accepted_edit_ids must be a list of edit ids (text).",
     "plan_not_found": "There is no such plan.",
+    "report_not_found": "There is no such report.",
     "list_unavailable": "The plan list is not available yet.",
     "unexpected_answer": "The lesson store gave an answer this route does not know.",
     "log_unavailable": "The action log could not be written, so nothing was done.",
@@ -274,6 +289,69 @@ class _Routes:
         return refuse(502, "unexpected_answer", who=who, outcome="error")
 
 
+class _ReportRoutes(_Routes):
+    """The PDF route: the same gate as the lesson routes, and its own small flow."""
+
+    def __init__(self, connect, env, commit, export, clock):
+        super().__init__(None, connect, env, commit, None)
+        self.export, self.clock = export, clock
+
+    def handle_pdf(self, key, token, report_id, raw: bytes) -> tuple:
+        """(status, body, file name). The body is the PDF bytes on success, else a refusal."""
+        run_id = f"RUN-{uuid.uuid4()}"
+        url = self.env.get("DATABASE_URL")
+        shown = report_id if isinstance(report_id, str) and REPORT_ID.match(report_id) else None
+
+        def refuse(status, reason, detail=None, who=None, outcome="refused") -> tuple:
+            body = _refusal_body(reason, detail or PLAIN[reason])
+            try:
+                diary.write(
+                    REFUSED_TOOL, run_id=run_id,
+                    inputs={"route": PATHS["report_pdf"], "report_id": shown}, outputs=body,
+                    outcome=outcome, approver_id=who.id if who else None,
+                    approver_name=who.name if who else None, url=url,
+                )
+            except diary.DiaryUnavailable:
+                return 503, _refusal_body("log_unavailable", PLAIN["log_unavailable"]), None
+            return status, body, None
+
+        who, problem = self._gate(key, token)
+        if problem:
+            status, reason = problem
+            return refuse(status, reason)
+        _, bad = _closed_body(raw, ())
+        if bad:
+            reason, status = bad
+            return refuse(status, reason, PLAIN[reason].format(allowed="none"), who=who)
+        if shown is None:
+            return refuse(404, "report_not_found", who=who)
+        practice = (self.env.get(PRACTICE_ENV) or "").strip().lower() in TRUE_WORDS
+        try:
+            with self.connect() as conn:
+                ctx = ToolContext(
+                    conn=conn, run_id=run_id, approver=Approver(id=who.id, name=who.name),
+                    database_url=url, commit=self.commit, school=who.school,
+                )
+                result = self.export(ctx, shown, self.clock(), practice)
+        except diary.DiaryUnavailable:
+            return refuse(503, "log_unavailable", who=who)
+        except Exception:  # (nothing from the failure is shown)
+            return refuse(500, "error", who=who, outcome="error")
+        if result.get("status") == "ok" and isinstance(result.get("pdf"), bytes):
+            return 200, result["pdf"], result["file_name"]
+        reason = result.get("reason")
+        if reason in EXPORT_STATUS:  # the export wrote its own diary row for this refusal
+            return EXPORT_STATUS[reason], _refusal_body(reason, result["detail"]), None
+        return refuse(
+            502, "unexpected_answer", "The export gave an answer this route does not know.",
+            who=who, outcome="error",
+        )
+
+
+def _now() -> datetime:
+    return datetime.now(UTC).replace(microsecond=0)
+
+
 def _closed_body(raw: bytes, allowed: tuple) -> tuple:
     """(the body, None) or (None, (typed reason, status)). The body is one small JSON object that
     holds only the fields listed. An empty body counts as `{}` only for a route that lists none."""
@@ -317,3 +395,28 @@ def install(app, *, store=lesson_store, connect=None, env=None, commit=True,
     app.custom_route(PATHS["get"], methods=["GET"])(serve("get"))
     app.custom_route(PATHS["approve"], methods=["POST"])(serve("approve"))
     app.custom_route(PATHS["reject"], methods=["POST"])(serve("reject"))
+
+
+def install_reports(app, *, connect=None, env=None, commit=True,
+                    export=report_export.export_released_report, clock=_now) -> None:
+    """Add the PDF route to `app`. Unlike `install`, it does not wait for the class view: a released
+    report is the main product. `connect`, `export` and `clock` let a test replace them."""
+    routes = _ReportRoutes(connect, os.environ if env is None else env, commit, export, clock)
+
+    async def endpoint(request: Request) -> Response:
+        raw = await request.body()
+        status, body, file_name = await run_in_threadpool(
+            routes.handle_pdf, request.headers.get(KEY_HEADER),
+            request.headers.get(TOKEN_HEADER), request.path_params.get("report_id"), raw,
+        )
+        if isinstance(body, bytes):
+            return Response(
+                body, status_code=status, media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{file_name}"',
+                    "Cache-Control": "no-store",
+                },
+            )
+        return JSONResponse(body, status_code=status)
+
+    app.custom_route(PATHS["report_pdf"], methods=["POST"])(endpoint)

@@ -122,6 +122,16 @@
         <section id="view-files" class="view" hidden>
           <h1>Your files</h1>
           <p class="sub">Report cards, grouped by batch (the school year of a learner's first card on file), then by class and school year, and whether each could be read.</p>
+          <form id="report-form" class="box report-export" novalidate>
+            <h2>Released report</h2>
+            <p class="hint">Enter the number of a report that has been released. You get it as a
+              PDF with its evidence and the name of the person who released it.</p>
+            <label for="report-id">Report number</label>
+            <input id="report-id" name="report_id" type="text" placeholder="R-000001"
+                   autocomplete="off" autocapitalize="characters" spellcheck="false">
+            <p id="report-message" class="message" role="status"></p>
+            <button id="report-download" type="submit" class="btn primary">Download PDF</button>
+          </form>
           <p id="summary" class="summary" aria-live="polite"></p>
           <div id="groups"></div>
           <div id="empty" class="empty table-wrap">

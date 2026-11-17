@@ -28,6 +28,12 @@ service adds the shared key (`HUMAN_ROUTE_KEY`, which only this service and the 
 and a token signed for the signed-in user, who comes from the portal's headers and never from a
 body. A body here may hold only what the tutor chose, so no field can name a person or a school.
 
+`POST /portal/reports/{report_id}/pdf` is the portal's "Download PDF" for a released report (T-056).
+It goes the same way: the portal's key, the signed-in person from the portal's headers, the shared
+key added here, and the tool server's human-only route, which builds the file from the stored report
+and logs the attempt. The PDF is handed back as it came; a refusal is handed back as JSON. No model
+is involved and the route takes no body.
+
 It logs the names of headers and the request number, never their values, keys or message text.
 """
 
@@ -66,6 +72,7 @@ INTERRUPTED = (
 )
 
 PLAN_ID = r"^LP-[0-9]{6,}$"  # the form the database makes for a lesson plan number
+REPORT_ID = r"^R-[0-9]{6,}$"  # the form the database makes for a report number
 APPROVER_TOKEN_HEADER = "X-Approver-Token"
 HUMAN_KEY_HEADER = "X-Human-Route-Key"
 DEFAULT_MCP_URL = "http://mdeis-mcp:8100/mcp"
@@ -376,6 +383,11 @@ def create_app(client_factory=None) -> FastAPI:
         try:
             async with make_client() as client:
                 reply = await client.request(method, url, headers=headers, json=body)
+            if reply.status_code == httpx.codes.OK and reply.headers.get(
+                "content-type", ""
+            ).startswith("application/pdf"):
+                kept = {k: reply.headers[k] for k in ("content-disposition",) if k in reply.headers}
+                return Response(content=reply.content, media_type="application/pdf", headers=kept)
             data = reply.json()
             if not isinstance(data, dict):
                 raise ValueError("not an object")
@@ -416,6 +428,12 @@ def create_app(client_factory=None) -> FastAPI:
         request: Request, body: RejectBody, plan_id: Annotated[str, Path(pattern=PLAN_ID)]
     ):
         return await to_tool_server(request, "POST", f"/human/lessons/{plan_id}/reject", {})
+
+    @app.post("/portal/reports/{report_id}/pdf", dependencies=[Depends(require_portal_key)])
+    async def portal_report_pdf(
+        request: Request, report_id: Annotated[str, Path(pattern=REPORT_ID)]
+    ):
+        return await to_tool_server(request, "POST", f"/human/reports/{report_id}/pdf", {})
 
     return app
 

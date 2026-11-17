@@ -261,6 +261,10 @@ if class_view.enabled():  # locked unless CLASS_VIEW_ENABLED is switched on
     # the gateway's key and a signed token, so no model can reach them. See human_routes.py.
     human_routes.install(mcp)
 
+# The PDF of a released report is a plain HTTP route too, not a tool, and it does not wait for the
+# class view. It needs the gateway's key and a signed token, like the routes above (T-056).
+human_routes.install_reports(mcp)
+
 
 def main() -> None:
     mcp.run(transport="streamable-http")

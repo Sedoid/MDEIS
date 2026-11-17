@@ -55,3 +55,30 @@ class GatewayClient:
         if not isinstance(answer, dict):
             return 502, dict(UNAVAILABLE_BODY)
         return reply.status_code, answer
+
+    async def download(self, method: str, path: str, user) -> tuple:
+        """(status, answer) for a call whose good answer is a file. The answer is the file's bytes
+        for a PDF, or the gateway's JSON refusal as a dict. Anything else is one plain failure."""
+        headers = {
+            "Authorization": f"Bearer {self.key}",
+            USER_ID_HEADER: user.id,
+            USER_NAME_HEADER: user.name,
+        }
+        client = self._client or httpx.AsyncClient(
+            timeout=httpx.Timeout(READ_TIMEOUT_SECONDS, connect=CONNECT_TIMEOUT_SECONDS)
+        )
+        try:
+            reply = await client.request(method, self.base_url + path, headers=headers)
+            if reply.status_code == 200 and reply.headers.get(
+                "content-type", ""
+            ).startswith("application/pdf"):
+                return 200, reply.content
+            answer = reply.json()
+        except (httpx.HTTPError, ValueError):
+            return 502, dict(UNAVAILABLE_BODY)
+        finally:
+            if self._client is None:
+                await client.aclose()
+        if not isinstance(answer, dict):
+            return 502, dict(UNAVAILABLE_BODY)
+        return reply.status_code, answer

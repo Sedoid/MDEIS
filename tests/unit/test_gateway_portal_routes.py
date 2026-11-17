@@ -305,6 +305,7 @@ def test_the_gateway_has_exactly_these_routes_that_approve_reject_or_read_throug
         ("/portal/lessons/options", "GET"), ("/portal/lessons/{plan_id}", "GET"),
         ("/portal/lessons/{plan_id}/approve", "POST"),
         ("/portal/lessons/{plan_id}/reject", "POST"),
+        ("/portal/reports/{report_id}/pdf", "POST"),  # T-056: the PDF of a released report
     }
     assert {p for p in found if "lesson" in p[0] and not p[0].startswith("/portal/")} == {
         ("/lessons", "POST"), ("/lessons/{plan_id}", "GET"),

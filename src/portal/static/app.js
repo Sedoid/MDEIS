@@ -31,8 +31,11 @@ const OFFLINE = "Could not reach the server. Check the connection and try again.
 // plain message, so no caller has to handle a thrown error.
 async function call(path, options) {
   try {
-    const reply = await fetch(path, { credentials: "same-origin", ...options });
-    return { ok: reply.ok, status: reply.status, body: await reply.json().catch(() => ({})) };
+    const { asFile, ...init } = options || {};
+    const reply = await fetch(path, { credentials: "same-origin", ...init });
+    // A good answer to a file request is the file itself; every other answer is JSON.
+    const body = asFile && reply.ok ? await reply.blob() : await reply.json().catch(() => ({}));
+    return { ok: reply.ok, status: reply.status, body };
   } catch (error) {
     return { ok: false, status: 0, body: { error: OFFLINE } };
   }
@@ -183,6 +186,8 @@ function showSignIn() {
   $("shell").hidden = true;
   $("chat-frame").removeAttribute("src");
   $("groups").replaceChildren();
+  $("report-id").value = "";  // nothing of one person's session stays on screen
+  $("report-message").textContent = "";
   if (window.lessonsView) window.lessonsView.reset();  // nothing of one person's plans stays on screen
   $("signin").hidden = false;
 }
@@ -666,6 +671,45 @@ function wireDrop(form) {
   });
 }
 
+// A released report as a PDF. It is asked for with a post, so the CSRF token goes in the header,
+// and the file is then handed to the browser to save. The server builds it from the stored report.
+const REPORT_NUMBER = /^R-[0-9]{6,}$/;
+
+async function downloadReport(event) {
+  event.preventDefault();
+  const line = $("report-message");
+  const button = $("report-download");
+  const number = $("report-id").value.trim().toUpperCase();
+  line.textContent = "";
+  line.className = "message";
+  if (!REPORT_NUMBER.test(number)) {
+    line.textContent = "Enter a report number such as R-000001.";
+    line.className = "message bad";
+    return;
+  }
+  button.disabled = true;
+  const reply = await call("api/reports/" + encodeURIComponent(number) + "/pdf", {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrf },
+    asFile: true,
+  });
+  button.disabled = false;
+  if (!reply.ok) {
+    line.textContent = reply.body.detail || reply.body.error || "The report could not be downloaded.";
+    line.className = "message bad";
+    return;
+  }
+  const url = URL.createObjectURL(reply.body);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = number + ".pdf";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  line.textContent = "Downloaded " + number + ".pdf.";
+}
+
 function revealPassword() {
   const field = $("password");
   const show = field.type === "password";
@@ -682,6 +726,7 @@ document.addEventListener("DOMContentLoaded", () => {
     wireDrop(form);
   }
   $("signin-form").addEventListener("submit", signIn);
+  $("report-form").addEventListener("submit", downloadReport);
   $("signout").addEventListener("click", signOut);
   $("theme").addEventListener("click", toggleTheme);
   $("reveal").addEventListener("click", revealPassword);

@@ -8,6 +8,7 @@
     GET  /healthz
     GET  /api/lessons/options  /api/lessons  /api/lessons/LP-000001    the Lessons page, read
     POST /api/lessons  /api/lessons/LP-000001/approve  .../reject      the Lessons page, act
+    POST /api/reports/R-000001/pdf    the PDF of a released report, for the Files page (T-056)
 
 Who is signed in comes from Open WebUI (auth.py). A file is checked, written to the inbox under a
 name we make, and then a `documents` row is added as `pending`; the ingest worker does the reading.
@@ -17,6 +18,10 @@ The Lessons routes only pass on to the gateway. Each needs a signed-in person; e
 CSRF token and the page's own origin; the person passed on is the one Open WebUI vouched for, never
 one named in a body; and a body may hold only what the tutor chose or wrote (no field can name a
 person, a school or a status). What comes back is handed on unchanged, with its status.
+
+The report PDF route is the same: signed in, the CSRF token and the page's own origin, an empty
+body, and only the gateway is called. A PDF comes back as a download; a refusal comes back as the
+usual JSON. The portal builds no PDF and reads no report.
 """
 
 from __future__ import annotations
@@ -50,6 +55,8 @@ PDF_START = b"%PDF-"
 STORED_NAME = re.compile(r"^[0-9a-f]{32}\.(pdf|md)$")  # what the portal and the admin tool write
 DOCUMENT_ID = re.compile(r"^D-[0-9]{6,}$")
 PLAN_ID = re.compile(r"^LP-[0-9]{6,}$")  # the form the database gives a lesson plan number
+REPORT_ID = re.compile(r"^R-[0-9]{6,}$")  # the form the database gives a report number
+REPORTS_OFF = "Report downloads are not set up on this server yet. Nothing was changed."
 NEW_LESSON_FIELDS = ("stage", "area", "term", "objective", "notes")
 LESSONS_OFF = "The Lessons page is not set up on this server yet. Nothing was changed."
 
@@ -415,6 +422,33 @@ def create_app(settings: Settings | None = None, auth=None, store=None, gateway=
     @app.post("/api/lessons/{plan_id}/reject")
     async def lesson_reject(plan_id: str, request: Request):
         return await lessons_call(request, "POST", f"/portal/lessons/{plan_id}/reject", plan_id, ())
+
+    @app.post("/api/reports/{report_id}/pdf")
+    async def report_pdf(report_id: str, request: Request):
+        """A released report as a PDF. It only asks the gateway, as the signed-in person."""
+        user = await who(request)
+        if user is None:
+            return _say(401, "Sign in to Open WebUI first.")
+        if not own_origin(request) or not security.csrf_ok(
+            config.session_secret, user.id, request.headers.get("x-csrf-token")
+        ):
+            return _say(403, "This request did not come from the page. Reload the page.")
+        if not gateway.configured:
+            return _refuse(503, "reports_off", REPORTS_OFF)
+        if not REPORT_ID.match(report_id):
+            return _refuse(404, "report_not_found", "There is no such report.")
+        _, refusal = _lesson_body(await request.body(), 64, ())
+        if refusal:
+            return refusal
+        status, answer = await gateway.download("POST", f"/portal/reports/{report_id}/pdf", user)
+        if isinstance(answer, bytes):
+            return Response(
+                answer, media_type="application/pdf",
+                headers={"Content-Disposition": f'attachment; filename="{report_id}.pdf"'},
+            )
+        if not isinstance(answer, dict):
+            return _refuse(502, "service_unavailable", "The service gave no usable answer.")
+        return JSONResponse(answer, status_code=status)
 
     return app
 
