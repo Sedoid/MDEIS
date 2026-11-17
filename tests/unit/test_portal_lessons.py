@@ -370,7 +370,7 @@ LESSONS_VIEW = LESSONS_VIEW[: LESSONS_VIEW.index("</section>")]
 
 
 def test_the_page_loads_the_lessons_script_the_same_way_as_the_other_one():
-    assert PAGE.count("<script src=") == 2
+    assert PAGE.count("<script src=") == 3  # T-073 added methods.js (pinned in test_portal_methods)
     assert '<script src="static/lessons.js" defer></script>' in PAGE
     assert PAGE.index("static/app.js") < PAGE.index("static/lessons.js")
     for bad in ("<style", "onclick=", "onload=", "onsubmit=", "javascript:"):

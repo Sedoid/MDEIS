@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="static/style.css">
   <script src="static/app.js" defer></script>
   <script src="static/lessons.js" defer></script>
+  <script src="static/methods.js" defer></script>
 </head>
 <body>
   <section id="signin" class="auth" hidden>
@@ -51,6 +52,9 @@
         <a href="#/lessons" data-view="lessons" title="Lessons">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 9h8M8 13h8M8 17h5"/></svg>
           <span>Lessons</span></a>
+        <a href="#/methods" data-view="methods" title="Methods">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5zM9 9l2 2 4-4M9 15h6"/></svg>
+          <span>Methods</span><span id="methods-count" class="nav-count" hidden></span></a>
         <a href="#/chat" data-view="chat" title="Chat">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>
           <span>Chat</span></a>
@@ -172,6 +176,21 @@
             <div id="lesson-list" class="lesson-list"></div>
           </div>
           <div id="lesson-review" hidden></div>
+        </section>
+
+        <section id="view-methods" class="view" hidden>
+          <h1>Methods</h1>
+          <p class="sub">A measure built from your school's methodology waits here for a teacher. You
+            try it on synthetic scores, read where it came from, then confirm or reject it. Nothing is
+            used until a named teacher confirms it.</p>
+          <p class="hint">Synthetic scores only. Never type the scores of a real person, and never a
+            name.</p>
+          <div id="methods-home">
+            <p id="methods-waiting" class="summary" aria-live="polite"></p>
+            <div id="methods-list" class="methods-list"></div>
+            <p id="methods-message" class="message" role="status"></p>
+          </div>
+          <div id="methods-demo" hidden></div>
         </section>
 
         <section id="view-chat" class="view view-chat" hidden>

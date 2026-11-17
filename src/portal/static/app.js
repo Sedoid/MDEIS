@@ -22,8 +22,8 @@ let me = null;
 let csrf = null;
 let timer = null;
 let config = {};
-const VIEWS = ["upload", "files", "lessons", "chat"];
-const TITLES = { upload: "Upload", files: "Your files", lessons: "Lessons", chat: "Chat" };
+const VIEWS = ["upload", "files", "lessons", "methods", "chat"];
+const TITLES = { upload: "Upload", files: "Your files", lessons: "Lessons", methods: "Methods", chat: "Chat" };
 
 const OFFLINE = "Could not reach the server. Check the connection and try again.";
 
@@ -132,6 +132,10 @@ function route() {
   if (name === "lessons" && window.lessonsView) {
     window.lessonsView.show({ call, text, csrf: () => csrf, me });
   }
+  // The Methods page is its own file too (methods.js), given the same things.
+  if (name === "methods" && window.methodsView) {
+    window.methodsView.show({ call, text, csrf: () => csrf, me });
+  }
 }
 
 async function start() {
@@ -154,6 +158,7 @@ async function start() {
   $("form-methodology").hidden = !me.admin;
   route();
   csrf = (await get("api/csrf")).body.csrf;
+  if (window.methodsView) window.methodsView.badge({ call, text, csrf: () => csrf, me });
   await handOverLogin();
   if (config.frame_chat) {
     $("chat-frame").src = config.chat_url;
@@ -189,6 +194,7 @@ function showSignIn() {
   $("report-id").value = "";  // nothing of one person's session stays on screen
   $("report-message").textContent = "";
   if (window.lessonsView) window.lessonsView.reset();  // nothing of one person's plans stays on screen
+  if (window.methodsView) window.methodsView.reset();  // nor anything of a measure's demo
   $("signin").hidden = false;
 }
 

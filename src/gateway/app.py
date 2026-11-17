@@ -28,6 +28,13 @@ service adds the shared key (`HUMAN_ROUTE_KEY`, which only this service and the 
 and a token signed for the signed-in user, who comes from the portal's headers and never from a
 body. A body here may hold only what the tutor chose, so no field can name a person or a school.
 
+The routes under `/portal/measures` are for the portal's Methods page (T-073): a teacher's demo of a
+measure the build made, and the teacher's decision. They go the same way as the lesson routes: to
+the tool server's human-only routes with the shared key and a token signed for the signed-in
+person, and never through the orchestrator. A body holds only what the teacher typed (a stage,
+synthetic scores, an expected answer, a note); no field can name a person, a school, a learner or a
+decision.
+
 `POST /portal/reports/{report_id}/pdf` is the portal's "Download PDF" for a released report (T-056).
 It goes the same way: the portal's key, the signed-in person from the portal's headers, the shared
 key added here, and the tool server's human-only route, which builds the file from the stored report
@@ -73,6 +80,8 @@ INTERRUPTED = (
 
 PLAN_ID = r"^LP-[0-9]{6,}$"  # the form the database makes for a lesson plan number
 REPORT_ID = r"^R-[0-9]{6,}$"  # the form the database makes for a report number
+MEASURE_ID = r"^MS-[0-9]{4,}$"  # the form the database makes for a measure number
+MEASURE_VERSION = r"^[1-9][0-9]*$"  # a version of a measure is a whole number from one
 APPROVER_TOKEN_HEADER = "X-Approver-Token"
 HUMAN_KEY_HEADER = "X-Human-Route-Key"
 DEFAULT_MCP_URL = "http://mdeis-mcp:8100/mcp"
@@ -111,6 +120,45 @@ class RejectBody(BaseModel):
     """A rejection carries no field at all."""
 
     model_config = ConfigDict(extra="forbid")
+
+
+class ScoreEntry(BaseModel):
+    """One synthetic score a teacher typed at the demo of a built measure. Nothing else is accepted:
+    no learner, no name, no school."""
+
+    model_config = ConfigDict(extra="forbid")
+    subject: str = Field(min_length=1)
+    term: int = Field(strict=True)
+    score: str = Field(min_length=1)
+
+
+class TryBody(BaseModel):
+    """A try at the demo: the stage and the scores. Nothing else is accepted."""
+
+    model_config = ConfigDict(extra="forbid")
+    stage: str = Field(min_length=1)
+    entries: list[ScoreEntry]
+
+
+class CaseBody(TryBody):
+    """A teacher's expected answer for a try. Nothing else is accepted."""
+
+    expected: dict[str, str]
+    agreed: bool = Field(default=False, strict=True)
+
+
+class ConfirmBody(BaseModel):
+    """A confirmation holds at most a note. No field can name a person or a decision."""
+
+    model_config = ConfigDict(extra="forbid")
+    note: str | None = None
+
+
+class RejectMeasureBody(BaseModel):
+    """A rejection holds the reason. No field can name a person or a decision."""
+
+    model_config = ConfigDict(extra="forbid")
+    note: str = Field(min_length=1)
 
 
 @dataclass(frozen=True)
@@ -428,6 +476,73 @@ def create_app(client_factory=None) -> FastAPI:
         request: Request, body: RejectBody, plan_id: Annotated[str, Path(pattern=PLAN_ID)]
     ):
         return await to_tool_server(request, "POST", f"/human/lessons/{plan_id}/reject", {})
+
+    # --- the portal's Methods page: a teacher's demo of a built measure (T-073) -----------------
+    @app.get("/portal/measures", dependencies=[Depends(require_portal_key)])
+    async def portal_measures(request: Request):
+        return await to_tool_server(request, "GET", "/human/measures")
+
+    @app.get("/portal/measures/{measure_id}/{version}", dependencies=[Depends(require_portal_key)])
+    async def portal_measure(
+        request: Request,
+        measure_id: Annotated[str, Path(pattern=MEASURE_ID)],
+        version: Annotated[str, Path(pattern=MEASURE_VERSION)],
+    ):
+        return await to_tool_server(request, "GET", f"/human/measures/{measure_id}/{version}")
+
+    @app.post(
+        "/portal/measures/{measure_id}/{version}/try", dependencies=[Depends(require_portal_key)]
+    )
+    async def portal_measure_try(
+        request: Request,
+        body: TryBody,
+        measure_id: Annotated[str, Path(pattern=MEASURE_ID)],
+        version: Annotated[str, Path(pattern=MEASURE_VERSION)],
+    ):
+        return await to_tool_server(
+            request, "POST", f"/human/measures/{measure_id}/{version}/try", body.model_dump()
+        )
+
+    @app.post(
+        "/portal/measures/{measure_id}/{version}/case", dependencies=[Depends(require_portal_key)]
+    )
+    async def portal_measure_case(
+        request: Request,
+        body: CaseBody,
+        measure_id: Annotated[str, Path(pattern=MEASURE_ID)],
+        version: Annotated[str, Path(pattern=MEASURE_VERSION)],
+    ):
+        return await to_tool_server(
+            request, "POST", f"/human/measures/{measure_id}/{version}/case", body.model_dump()
+        )
+
+    @app.post(
+        "/portal/measures/{measure_id}/{version}/confirm",
+        dependencies=[Depends(require_portal_key)],
+    )
+    async def portal_measure_confirm(
+        request: Request,
+        measure_id: Annotated[str, Path(pattern=MEASURE_ID)],
+        version: Annotated[str, Path(pattern=MEASURE_VERSION)],
+        body: ConfirmBody | None = None,
+    ):
+        sent = body.model_dump(exclude_none=True) if body else {}
+        return await to_tool_server(
+            request, "POST", f"/human/measures/{measure_id}/{version}/confirm", sent
+        )
+
+    @app.post(
+        "/portal/measures/{measure_id}/{version}/reject", dependencies=[Depends(require_portal_key)]
+    )
+    async def portal_measure_reject(
+        request: Request,
+        body: RejectMeasureBody,
+        measure_id: Annotated[str, Path(pattern=MEASURE_ID)],
+        version: Annotated[str, Path(pattern=MEASURE_VERSION)],
+    ):
+        return await to_tool_server(
+            request, "POST", f"/human/measures/{measure_id}/{version}/reject", body.model_dump()
+        )
 
     @app.post("/portal/reports/{report_id}/pdf", dependencies=[Depends(require_portal_key)])
     async def portal_report_pdf(

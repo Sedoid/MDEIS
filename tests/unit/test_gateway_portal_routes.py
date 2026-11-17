@@ -299,8 +299,10 @@ def test_the_gateway_has_exactly_these_routes_that_approve_reject_or_read_throug
     assert {p for p in found if "approve" in p[0] or "reject" in p[0]} == {
         ("/portal/lessons/{plan_id}/approve", "POST"),
         ("/portal/lessons/{plan_id}/reject", "POST"),
+        # T-073: the teacher's rejection of a built measure (pinned in test_gateway_measure_routes)
+        ("/portal/measures/{measure_id}/{version}/reject", "POST"),
     }
-    assert {p for p in found if p[0].startswith("/portal/")} == {
+    assert {p for p in found if p[0].startswith("/portal/") and "measure" not in p[0]} == {
         ("/portal/lessons", "POST"), ("/portal/lessons", "GET"),
         ("/portal/lessons/options", "GET"), ("/portal/lessons/{plan_id}", "GET"),
         ("/portal/lessons/{plan_id}/approve", "POST"),

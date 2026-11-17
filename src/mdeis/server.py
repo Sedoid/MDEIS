@@ -1,4 +1,4 @@
-"""The MDEIS MCP server (Streamable HTTP): eight tools (five more when the class view is on), no
+"""The MDEIS MCP server (Streamable HTTP): ten tools (five more when the class view is on), no
 model and no model key.
 
 The five are `class_baseline`, `stage_gap_counts` and three lesson tools (`guard_lesson_notes`,
@@ -27,9 +27,10 @@ from mcp.server.fastmcp import Context, FastMCP
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from . import human_routes, tools
+from . import human_routes, measure_routes, tools
 from .core import approver_token
 from .lessons import store as lesson_store
+from .measure_build import api as build_api
 from .tools import class_view
 from .tools.context import Approver, ToolContext
 from .tools.criterion import DEFAULT_RESULTS
@@ -118,6 +119,26 @@ def compute_trend(
     )
 
 
+@mcp.tool(description=_about(tools.list_measures))
+def list_measures(request: Context) -> dict:
+    # No argument at all: what is listed depends only on the active rulebook.
+    return _run(request, tools.list_measures)
+
+
+@mcp.tool(description=_about(tools.compute_measure))
+def compute_measure(
+    request: Context, measure_id: str, learner_id: str, skill: str | None = None
+) -> dict:
+    # A measure, a learner and a subject. No number, rulebook, approver or user argument.
+    return _run(
+        request,
+        tools.compute_measure,
+        measure_id=measure_id,
+        learner_id=learner_id,
+        skill=skill,
+    )
+
+
 @mcp.tool(description=_about(tools.resolve_issue))
 def resolve_issue(
     request: Context,
@@ -168,7 +189,12 @@ def check_citations(request: Context, report_id: str) -> dict:
 
 @mcp.tool(description=_about(tools.make_chart))
 def make_chart(
-    request: Context, learner_id: str, skills: list[str], template_version: str | None = None
+    request: Context,
+    learner_id: str,
+    skills: list[str] | None = None,
+    template_version: str | None = None,
+    measure_hashes: list[str] | None = None,
+    measure_field: str | None = None,
 ) -> dict:
     return _run(
         request,
@@ -176,6 +202,8 @@ def make_chart(
         learner_id=learner_id,
         skills=skills,
         template_version=template_version,
+        measure_hashes=measure_hashes,
+        measure_field=measure_field,
     )
 
 
@@ -264,6 +292,13 @@ if class_view.enabled():  # locked unless CLASS_VIEW_ENABLED is switched on
 # The PDF of a released report is a plain HTTP route too, not a tool, and it does not wait for the
 # class view. It needs the gateway's key and a signed token, like the routes above (T-056).
 human_routes.install_reports(mcp)
+
+# The teacher's routes for a built measure (T-073) are plain HTTP routes too, not tools. They need
+# the same key and signed token, and they do not wait for the class view.
+measure_routes.install(mcp)
+
+# The build tools of the methodology build. Nothing is added unless MEASURE_BUILD_ENABLED is on.
+build_api.register(mcp, _run)
 
 
 def main() -> None:

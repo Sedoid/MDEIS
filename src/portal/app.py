@@ -6,6 +6,8 @@
     POST /api/documents?kind=    upload a file       GET  /api/documents[/D-000001]  status
     GET  /api/documents/D-000001/file   the file itself, for a new tab
     GET  /healthz
+    GET  /api/measures  /api/measures/MS-0001/1                        the Methods page, read
+    POST /api/measures/MS-0001/1/try  .../case  .../confirm  .../reject  the Methods page, act
     GET  /api/lessons/options  /api/lessons  /api/lessons/LP-000001    the Lessons page, read
     POST /api/lessons  /api/lessons/LP-000001/approve  .../reject      the Lessons page, act
     POST /api/reports/R-000001/pdf    the PDF of a released report, for the Files page (T-056)
@@ -59,6 +61,13 @@ REPORT_ID = re.compile(r"^R-[0-9]{6,}$")  # the form the database gives a report
 REPORTS_OFF = "Report downloads are not set up on this server yet. Nothing was changed."
 NEW_LESSON_FIELDS = ("stage", "area", "term", "objective", "notes")
 LESSONS_OFF = "The Lessons page is not set up on this server yet. Nothing was changed."
+MEASURE_ID = re.compile(r"^MS-[0-9]{4,}$")  # the form the database gives a measure number
+MEASURE_VERSION = re.compile(r"^[1-9][0-9]*$")  # a version is a whole number from one
+TRY_FIELDS = ("stage", "entries")
+CASE_FIELDS = ("stage", "entries", "expected", "agreed")
+NOTE_FIELDS = ("note",)
+ENTRY_FIELDS = ("subject", "term", "score")
+METHODS_OFF = "The Methods page is not set up on this server yet. Nothing was changed."
 
 
 def _say(status: int, message: str, **more) -> JSONResponse:
@@ -100,6 +109,37 @@ def _new_lesson_problem(body: dict) -> str | None:
                 return "Choose the term."
         elif not isinstance(value, str) or not value.strip():
             return f"The {name} is needed."
+    return None
+
+
+def _measure_problem(kind: str, body: dict) -> str | None:
+    """Why a Methods body has the wrong shape, in plain words, or None. The tool server checks the
+    values again; this only keeps a body of the wrong shape from being sent on."""
+    if kind in ("try", "case"):
+        if not isinstance(body.get("stage"), str):
+            return "Choose the stage."
+        entries = body.get("entries")
+        if not isinstance(entries, list):
+            return "Enter the scores."
+        for entry in entries:
+            if not isinstance(entry, dict) or set(entry) != set(ENTRY_FIELDS):
+                return "Each row needs a subject, a term and a score, and nothing else."
+            if not isinstance(entry["subject"], str) or not isinstance(entry["score"], str):
+                return "Each row needs a subject and a score."
+            if not isinstance(entry["term"], int) or isinstance(entry["term"], bool):
+                return "A term is a whole number."
+    if kind == "case":
+        expected = body.get("expected")
+        if not isinstance(expected, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in expected.items()
+        ):
+            return "Enter your expected answer."
+        if "agreed" in body and not isinstance(body["agreed"], bool):
+            return "Say whether you agreed with the answer shown."
+    if kind == "confirm" and body.get("note") is not None and not isinstance(body["note"], str):
+        return "The note must be text."
+    if kind == "reject" and (not isinstance(body.get("note"), str) or not body["note"].strip()):
+        return "A rejection needs a note saying why."
     return None
 
 
@@ -422,6 +462,60 @@ def create_app(settings: Settings | None = None, auth=None, store=None, gateway=
     @app.post("/api/lessons/{plan_id}/reject")
     async def lesson_reject(plan_id: str, request: Request):
         return await lessons_call(request, "POST", f"/portal/lessons/{plan_id}/reject", plan_id, ())
+
+    # --- the Methods page: a teacher's demo of a built measure, passed on to the gateway ----------
+    async def methods_call(request: Request, method: str, path: str, ids=None, kind=None):
+        """One Methods request. `kind` is None for a read; for a post it names the body shape, and
+        the post needs the page's origin and the CSRF token."""
+        user = await who(request)
+        if user is None:
+            return _say(401, "Sign in to Open WebUI first.")
+        if kind is not None and (
+            not own_origin(request)
+            or not security.csrf_ok(
+                config.session_secret, user.id, request.headers.get("x-csrf-token")
+            )
+        ):
+            return _say(403, "This request did not come from the page. Reload the page.")
+        if not gateway.configured:
+            return _refuse(503, "methods_off", METHODS_OFF)
+        if ids is not None and not (
+            MEASURE_ID.match(ids[0]) and MEASURE_VERSION.match(ids[1])
+        ):
+            return _refuse(404, "measure_not_found", "There is no such measure version.")
+        sent = None
+        if kind is not None:
+            fields = {"try": TRY_FIELDS, "case": CASE_FIELDS}.get(kind, NOTE_FIELDS)
+            raw = await request.body()
+            if kind == "confirm" and not raw.strip():
+                body = {}
+            else:
+                body, refusal = _lesson_body(raw, config.max_markdown_bytes, fields)
+                if refusal:
+                    return refusal
+            if problem := _measure_problem(kind, body):
+                return _refuse(400, "bad_body", problem)
+            sent = body
+        status, answer = await gateway.request(method, path, user, sent)
+        if not isinstance(answer, dict):
+            return _refuse(502, "service_unavailable", "The service gave no usable answer.")
+        return JSONResponse(answer, status_code=status)
+
+    @app.get("/api/measures")
+    async def measure_list(request: Request):
+        return await methods_call(request, "GET", "/portal/measures")
+
+    @app.get("/api/measures/{measure_id}/{version}")
+    async def measure_demo(measure_id: str, version: str, request: Request):
+        path = f"/portal/measures/{measure_id}/{version}"
+        return await methods_call(request, "GET", path, (measure_id, version))
+
+    @app.post("/api/measures/{measure_id}/{version}/{action}")
+    async def measure_act(measure_id: str, version: str, action: str, request: Request):
+        if action not in ("try", "case", "confirm", "reject"):
+            return _refuse(404, "measure_not_found", "There is no such measure version.")
+        path = f"/portal/measures/{measure_id}/{version}/{action}"
+        return await methods_call(request, "POST", path, (measure_id, version), action)
 
     @app.post("/api/reports/{report_id}/pdf")
     async def report_pdf(report_id: str, request: Request):

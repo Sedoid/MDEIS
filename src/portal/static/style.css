@@ -313,3 +313,28 @@ mark.lesson-change.left-out { background: var(--idle-bg); text-decoration: line-
                  background: var(--warn-bg); border-radius: var(--radius); }
 .lesson-approve { margin-top: 1.5rem; max-width: 52rem; }
 .lesson-notes-list { margin: 0.5rem 0; padding-left: 1.25rem; color: var(--warn); }
+
+/* Methods: a teacher's demo of a built measure */
+.nav-count { margin-left: auto; min-width: 1.25rem; padding: 0 0.4rem; border-radius: 1rem;
+  background: var(--primary); color: var(--on-primary); font-size: 0.75rem; text-align: center; }
+.methods-list { display: grid; gap: 0.5rem; max-width: 52rem; }
+.methods-top { margin: 0 0 1rem; }
+.methods-block { max-width: 52rem; margin: 0 0 1.25rem; padding: 1rem; background: var(--raised);
+  border: 1px solid var(--line); border-radius: var(--radius); }
+.methods-block h2 { margin: 0 0 0.5rem; font-size: 1.05rem; }
+.methods-quote { margin: 0.5rem 0; padding-left: 0.75rem; border-left: 3px solid var(--line);
+  overflow-wrap: anywhere; }
+.methods-rows { display: grid; gap: 0.5rem; margin: 0.5rem 0; }
+.methods-row { display: grid; grid-template-columns: minmax(8rem, 2fr) 5rem minmax(5rem, 1fr);
+  gap: 0.5rem; }
+.methods-expected { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.5rem; margin: 0.5rem 0; }
+.methods-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.75rem 0; }
+.method-state { display: inline-block; padding: 0 0.5rem; border-radius: 1rem; font-size: 0.8rem;
+  background: var(--idle-bg); }
+.method-state.is-placeholder { background: var(--warn-bg); color: var(--warn); }
+.method-state.is-confirmed { background: var(--ok-bg); color: var(--ok); }
+.method-state.is-missing { background: var(--bad-bg); color: var(--bad); }
+.methods-match { font-weight: 600; }
+.methods-match.is-no { color: var(--bad); }
+.methods-match.is-yes { color: var(--ok); }
