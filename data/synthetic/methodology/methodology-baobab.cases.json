@@ -1,0 +1,67 @@
+[
+ {
+  "id": "B-01",
+  "scenario": "Mathematics, 3 term scores, oldest first: 61, 64, 58",
+  "expected": "Steady (spread 6, at most 8). Change -3, so not moved. Band of the latest score: D"
+ },
+ {
+  "id": "B-02",
+  "scenario": "English, 3 term scores, oldest first: 52, 58, 63",
+  "expected": "Moved up (change 11, 10 or more). Not steady (spread 11). Band of the latest score: C"
+ },
+ {
+  "id": "B-03",
+  "scenario": "Science, 3 term scores, oldest first: 70, 66, 62",
+  "expected": "Steady (spread 8, boundary included). Change -8, so not moved. Band of the latest score: C"
+ },
+ {
+  "id": "B-04",
+  "scenario": "Humanities, 3 term scores, oldest first: 80, 72, 68",
+  "expected": "Moved down (change -12). Not steady (spread 12). Band of the latest score: C"
+ },
+ {
+  "id": "B-05",
+  "scenario": "Mathematics, 3 term scores, oldest first: 55, 70, 60",
+  "expected": "No pattern named: spread 15 is above 8 and change 5 is below 10. Scores shown with no pattern name. Band of the latest score: C"
+ },
+ {
+  "id": "B-06",
+  "scenario": "English, 2 term scores, oldest first: 60, 70",
+  "expected": "Minimum evidence met, so both scores are used. Moved up (change 10, boundary included). Not steady (spread 10). The report says it is based on 2 scores. Band of the latest score: B"
+ },
+ {
+  "id": "B-07",
+  "scenario": "Science, 1 term score: 64",
+  "expected": "Not enough evidence for a pattern (1 score, minimum 2). The score and its band, C, are shown"
+ },
+ {
+  "id": "B-08",
+  "scenario": "Mathematics, 4 term scores, oldest first: 40, 62, 66, 64",
+  "expected": "Only the last 3 are used: 62, 66, 64. Steady (spread 4). Change 2, so not moved. Band of the latest score: C"
+ },
+ {
+  "id": "B-09",
+  "scenario": "Humanities, 3 term scores, oldest first: 48, 51, 50",
+  "expected": "Steady (spread 3). Change 2, so not moved. The latest score meets the pass mark of 50. Band of the latest score: D"
+ },
+ {
+  "id": "B-10",
+  "scenario": "English, term 1 score 68, term 2 not recorded, term 3 score 75",
+  "expected": "The missing term is not counted and is not zero. 2 scores are used. Steady (spread 7). Change 7, so not moved. Band of the latest score: B"
+ },
+ {
+  "id": "B-11",
+  "scenario": "A request to rank two learners by their latest scores",
+  "expected": "Declined: Baobab does not rank or compare learners. Each learner's own scores are shown"
+ },
+ {
+  "id": "B-12",
+  "scenario": "A request to average a learner's three Mathematics scores",
+  "expected": "Declined: no average is defined. The scores are shown one by one"
+ },
+ {
+  "id": "B-13",
+  "scenario": "A recorded score of 112",
+  "expected": "Not used: it is outside 0 to 100. It goes to the teacher as a question for correction"
+ }
+]

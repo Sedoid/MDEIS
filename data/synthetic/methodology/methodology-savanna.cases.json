@@ -1,0 +1,77 @@
+[
+ {
+  "id": "SV-01",
+  "scenario": "Mathematics, a group of 25 learners, a recorded level for all 25, 17 at level 3 or above",
+  "expected": "Share 68% (17 of 25). Coverage 100%, so no limit"
+ },
+ {
+  "id": "SV-02",
+  "scenario": "English, a group of 12 learners, a recorded level for all 12, 7 at level 3 or above",
+  "expected": "Share 58% (7 of 12, which is 58.33 rounded). Coverage 100%"
+ },
+ {
+  "id": "SV-03",
+  "scenario": "Science, a group of 9 learners, a recorded level for all 9",
+  "expected": "No share is shown. The group is below the minimum group size of 10, and the report says it is too small"
+ },
+ {
+  "id": "SV-04",
+  "scenario": "Social Studies, a group of 20 learners, a recorded level for 14, 9 of them at level 3 or above",
+  "expected": "Share 64% (9 of 14, which is 64.29 rounded). Coverage 70%, below the minimum of 75%, so the result is limited and says so"
+ },
+ {
+  "id": "SV-05",
+  "scenario": "Mathematics, a group of 16 learners, a recorded level for 12, 6 of them at level 3 or above",
+  "expected": "Coverage 75%, which meets the minimum. Share 50% (6 of 12), with no limit"
+ },
+ {
+  "id": "SV-06",
+  "scenario": "Science, one learner, the last 4 recorded levels, oldest first: 2, 2, 3, 4",
+  "expected": "Step change +2, a rise. Last two checks 3 then 4: sustained"
+ },
+ {
+  "id": "SV-07",
+  "scenario": "English, one learner, the last 4 recorded levels, oldest first: 4, 3, 3, 2",
+  "expected": "Step change -2, a fall. Last two checks 3 then 2: not sustained"
+ },
+ {
+  "id": "SV-08",
+  "scenario": "Mathematics, one learner, the last 4 recorded levels, oldest first: 3, 4, 3, 3",
+  "expected": "Step change 0, so no step change. Last two checks 3 then 3: sustained"
+ },
+ {
+  "id": "SV-09",
+  "scenario": "Science, one learner, 2 recorded levels, oldest first: 2, 4",
+  "expected": "Step change not stated, because 2 levels are fewer than the minimum of 3. Last two checks 2 then 4: sustained"
+ },
+ {
+  "id": "SV-10",
+  "scenario": "Social Studies, one learner, the last 4 recorded levels, oldest first: 2, 3, 3, 3",
+  "expected": "Step change +1, which is below 2, so no step change. Last two checks 3 then 3: sustained"
+ },
+ {
+  "id": "SV-11",
+  "scenario": "English, one learner, 5 recorded levels, oldest first: 1, 2, 2, 4, 5",
+  "expected": "Only the last 4 are used: 2, 2, 4, 5. Step change +3, a rise. Last two checks 4 then 5: sustained"
+ },
+ {
+  "id": "SV-12",
+  "scenario": "Mathematics, one learner, a level recorded at check 1 (3), none at check 2, then 4 and 4",
+  "expected": "The check with no level is not recorded and is not level 1. The 3 recorded levels are 3, 4, 4. Step change +1, so no step change. Last two checks 4 then 4: sustained"
+ },
+ {
+  "id": "SV-13",
+  "scenario": "Competence checklist, one learner, last two checks: Confident then Practising",
+  "expected": "Not sustained, because the later level is lower. Shown by name only, with no number"
+ },
+ {
+  "id": "SV-14",
+  "scenario": "A request for the average level of a group, or of one learner across terms",
+  "expected": "Declined: Savanna does not average levels. The counts and levels are shown as recorded"
+ },
+ {
+  "id": "SV-15",
+  "scenario": "A recorded level of 6",
+  "expected": "Not used, because it is outside 1 to 5. It goes to the teacher as a question for correction"
+ }
+]
