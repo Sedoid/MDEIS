@@ -1,0 +1,48 @@
+services:
+  # The measure runner: the only place a generated measure function runs. A small supervisor on a
+  # Unix socket that starts a fresh child process for every call (python -m mdeis.sandbox.supervisor).
+  # It has no network at all and no database: it gets the source, the records and the rules in each
+  # request from mdeis-mcp, and returns exact numbers as text. It holds no key and no secret.
+  # Same image as mdeis-mcp (target runtime), same user id (10001), so mdeis-mcp can open the socket
+  # (the runner makes it owner and group read-write, mode 0660). It holds more packages than it
+  # needs; none of them is reachable by a function (the child has no site and only listed modules).
+  measure-runner:
+    build:
+      context: .
+      dockerfile: deploy/docker/mdeis-mcp.Dockerfile
+      target: runtime
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?set PYTHON_IMAGE in .env}
+    image: mdeis-mcp:local
+    container_name: measure-runner-${STACK_SUFFIX:?set STACK_SUFFIX in .env}
+    restart: unless-stopped
+    command: ["python", "-m", "mdeis.sandbox.supervisor"]
+    # The container's own ceilings. A request is cut to these, so the smaller number applies. They
+    # match the limits in templates/sandbox-v1.yaml. If MAX_PARALLEL goes up, raise mem_limit too:
+    # it must stay above MAX_PARALLEL x MAX_MEMORY_MB plus room for the supervisor.
+    environment:
+      MEASURE_RUNNER_SOCKET: /run/measure-runner/runner.sock
+      MEASURE_RUNNER_MAX_WALL_S: ${MEASURE_RUNNER_MAX_WALL_S:-5}
+      MEASURE_RUNNER_MAX_CPU_S: ${MEASURE_RUNNER_MAX_CPU_S:-2}
+      MEASURE_RUNNER_MAX_MEMORY_MB: ${MEASURE_RUNNER_MAX_MEMORY_MB:-256}
+      MEASURE_RUNNER_MAX_INPUT_KB: ${MEASURE_RUNNER_MAX_INPUT_KB:-1024}
+      MEASURE_RUNNER_MAX_OUTPUT_KB: ${MEASURE_RUNNER_MAX_OUTPUT_KB:-256}
+      MEASURE_RUNNER_MAX_PARALLEL: ${MEASURE_RUNNER_MAX_PARALLEL:-4}
+    # No network: not even the internal ones. The socket volume is the only way in or out.
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1536m
+    pids_limit: 64
+    volumes:
+      # The one folder it may write to (the socket file). Shared with mdeis-mcp and nothing else.
+      - measure_runner_sock:/run/measure-runner
+    # No ports. A connection to the socket is the health check: it sends nothing.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, socket; s = socket.socket(socket.AF_UNIX); s.connect(os.environ['MEASURE_RUNNER_SOCKET'])"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s

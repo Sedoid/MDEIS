@@ -19,6 +19,9 @@ services:
   mdeis-mcp:
     volumes:
       - ./src/mdeis:/usr/local/lib/python3.12/site-packages/mdeis:ro
+  measure-runner:
+    volumes:
+      - ./src/mdeis:/usr/local/lib/python3.12/site-packages/mdeis:ro
   gateway:
     volumes:
       - ./src/mdeis:/usr/local/lib/python3.12/site-packages/mdeis:ro

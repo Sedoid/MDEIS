@@ -82,10 +82,17 @@ services:
       EMBED_DIM: ${EMBED_DIM:-768}
       EMBED_MODEL_FILE: ${EMBED_MODEL_FILE:-}
       INBOX_DIR: /inbox
+      # Where `apply-template-patch` writes the new template file (the read-write mount below).
+      TEMPLATE_DIR: /templates-out
     volumes:
       - inbox:/inbox
       # The clarity gate reads templates/gate-v1.yaml. Without it a methodology upload fails closed.
       - ./templates:/templates:ro
+      # The same folder, read-write, for this service only. `apply-template-patch` adds one new file
+      # here and never changes a file that is there. Every other service mounts ./templates read-only.
+      # A second mount of the one folder is the smallest change: the read-only mount above stays as
+      # it is, so the gate cannot be changed by a slip, and only the admin command knows this path.
+      - ./templates:/templates-out
     networks: [data]
     depends_on:
       postgres:
@@ -117,11 +124,19 @@ services:
       # The human-only approve and reject routes for lesson plans. Unset, those routes answer 503.
       # Only the gateway also holds this value. Never give it to the orchestrator or the web UI.
       HUMAN_ROUTE_KEY: ${HUMAN_ROUTE_KEY:-}
+      # The methodology build tools (build_plan and the rest). Off: none of them is offered. The
+      # owner turns it on for the demo. They run by the system, never for a signed-in person.
+      MEASURE_BUILD_ENABLED: ${MEASURE_BUILD_ENABLED:-false}
+      # The Unix socket of measure-runner, in the shared volume below. compute_measure and the build
+      # tools run a measure function there. Without the runner the answer is runner_unavailable.
+      MEASURE_RUNNER_SOCKET: /run/measure-runner/runner.sock
       MCP_HOST: 0.0.0.0
       MCP_PORT: "8100"
     volumes:
-      # The registry slice reads templates/sandbox-v1.yaml.
+      # The registry slice reads templates/sandbox-v1.yaml; the build tools read measure-build-v1.yaml.
       - ./templates:/templates:ro
+      # The runner's socket. Only measure-runner and this service mount it.
+      - measure_runner_sock:/run/measure-runner
     networks: [agent, data]
     depends_on:
       postgres:
@@ -130,6 +145,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      measure-runner:
+        condition: service_healthy
     # No ports: the orchestrator reaches it at http://mdeis-mcp:8100/mcp over the agent network.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/healthz', timeout=3)"]

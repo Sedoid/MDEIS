@@ -34,6 +34,7 @@ COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yml $(addpref
 .PHONY: help env-init env-sync check-env check-docker models dev-config dev-build dev-up dev-down dev-src up down dev-ps \
         dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules ingest ingest-dir card-lines ack token ask evals probe-gateway prod-config prod-up prod-down prod-check \
         test test-contract gate lint check practice-data class-data usage \
+        build-methodology apply-patch grant-reviewer probe-runner \
         demo demo-data smoke clean \
         probe-embed probe-mcp probe-pg-mcp probe-n8n probe-orchestrator probe-portal probe-signin
 
@@ -83,7 +84,7 @@ dev-src: check-env ## Run the app services from ./src with no image rebuild: mig
 	@echo "== 2/3 Loading the rulebook versions in ./templates (the last one listed becomes active)"
 	$(COMPOSE) -f deploy/dev-src.yml --profile tools run --rm rules
 	@echo "== 3/3 Recreating the app services with the mounted source"
-	$(COMPOSE) -f deploy/dev-src.yml up -d --no-deps --force-recreate mdeis-mcp orchestrator gateway portal
+	$(COMPOSE) -f deploy/dev-src.yml up -d --no-deps --force-recreate measure-runner mdeis-mcp orchestrator gateway portal
 	@$(COMPOSE) -f deploy/dev-src.yml ps
 
 up: dev-up ## Alias of dev-up
@@ -184,6 +185,25 @@ ack: $(ENV_FILE) ## Put a methodology that needs review in force:  make ack DOC=
 	@test -n "$(DOC)" -a -n "$(BY)" || { echo 'usage: make ack DOC=D-000012 BY="Your Name" [NOTE="..."]' >&2; exit 1; }
 	@$(COMPOSE) --profile tools run --rm admin ack-methodology "$(DOC)" --by "$(BY)" --note "$(NOTE)"
 
+grant-reviewer: $(ENV_FILE) ## Record a teacher or developer who may review measures:  make grant-reviewer USER_ID=u-ada NAME="Ada Teacher" ROLE=teacher [REVOKE=1]
+	@test -n "$(USER_ID)" -a -n "$(ROLE)" || { echo 'usage: make grant-reviewer USER_ID=u-ada NAME="Ada Teacher" ROLE=teacher|developer [REVOKE=1]' >&2; exit 1; }
+	@$(COMPOSE) --profile tools run --rm admin grant-reviewer --user-id "$(USER_ID)" --role "$(ROLE)" $(if $(NAME),--name "$(NAME)") $(if $(REVOKE),--revoke)
+
+# The build is by the system: no person is signed in and no token is used. It needs the build tools on
+# (MEASURE_BUILD_ENABLED=true in .env, then `make dev-up` so mdeis-mcp has it), the model key in .env,
+# and the methodology in force. Nothing here approves a measure: a teacher does that at the demo.
+build-methodology: $(ENV_FILE) ## Build measures from the methodology in force:  make build-methodology DOC=D-000012 [ANYWAY="6.4 6.5"]
+	@test -n "$(DOC)" || { echo 'usage: make build-methodology DOC=D-000012 [ANYWAY="6.4 6.5"]  (ANYWAY: sections to build although a template rule covers them)' >&2; exit 1; }
+	@grep -qiE '^MEASURE_BUILD_ENABLED=(true|1|yes|on)$$' $(ENV_FILE) || { echo "The build tools are off. Set MEASURE_BUILD_ENABLED=true in $(ENV_FILE), then run: make dev-up" >&2; exit 1; }
+	@$(COMPOSE) run --rm -T orchestrator python -m orchestrator.build_cli "$(DOC)" $(foreach s,$(ANYWAY),--build-anyway "$(s)")
+
+# Runs as your own user id so the new file in ./templates belongs to you, not to the container's user.
+# It adds one new file there and never changes a file that is there. The new version becomes active
+# unless NO_ACTIVATE=1, and then every unreleased draft needs a new draft (stale_pin).
+apply-patch: $(ENV_FILE) ## Load confirmed patches as a NEW template version:  make apply-patch PATCH="TP-000001 TP-000002" NAME=baobab-v2 BY="Ada Teacher" [NO_ACTIVATE=1]
+	@test -n "$(PATCH)" -a -n "$(NAME)" -a -n "$(BY)" || { echo 'usage: make apply-patch PATCH="TP-000001 [TP-000002 ...]" NAME=baobab-v2 BY="Your Name" [NO_ACTIVATE=1]' >&2; exit 1; }
+	@$(COMPOSE) --profile tools run --rm --build --user "$$(id -u):$$(id -g)" admin apply-template-patch $(foreach p,$(PATCH),--patch "$(p)") --version-name "$(NAME)" --by "$(BY)" $(if $(NO_ACTIVATE),--no-activate)
+
 test: $(ENV_FILE) ## Run pytest in a container (ARGS="-m integration" to pass options)
 	$(COMPOSE) --profile test run --rm --build test pytest $(ARGS)
 
@@ -204,26 +224,6 @@ practice-data: $(ENV_FILE) ## Make the practice school (data/synthetic) in a con
 class-data: $(ENV_FILE) ## Make a card for every learner of the practice school in data/full-class (not committed)
 	$(COMPOSE) --profile test run --rm --build --user "$$(id -u):$$(id -g)" practice-data python synthetic/generate.py --seed 42 --out data/full-class --cards all
 
-check: ## Secret scan, and the structure check when docs/STRUCTURE.md is present
-	@python3 scripts/scan_secrets.py
-	@if [ -f docs/STRUCTURE.md ]; then python3 scripts/check_structure.py; else echo "skipped: structure check (docs/STRUCTURE.md is not on this machine)"; fi
-
-# ── Probes: run from inside the network, through the mdeis-mcp container ──
-
-probe-embed: $(ENV_FILE) ## Embedder: vector size and repeatability
-	@$(COMPOSE) exec -T mdeis-mcp python - < scripts/embed_probe.py
-
-probe-mcp: $(ENV_FILE) ## mdeis-mcp: list its tools
-	@$(COMPOSE) exec -T mdeis-mcp python - http://mdeis-mcp:8100/mcp http < scripts/mcp_probe.py
-
-probe-pg-mcp: $(ENV_FILE) ## Borrowed Postgres MCP server: list its tools
-	@$(COMPOSE) exec -T mdeis-mcp python - http://pg-mcp-ro:8200/sse sse < scripts/mcp_probe.py
-
-probe-n8n: $(ENV_FILE) ## n8n: POST to the echo webhook
-	@$(COMPOSE) exec -T mdeis-mcp python - < scripts/n8n_probe.py
-
-probe-orchestrator: $(ENV_FILE) ## Orchestrator: its health answer (database and mdeis-mcp checks)
-	@$(COMPOSE) exec -T mdeis-mcp python -c "import urllib.request; print(urllib.request.urlopen('http://orchestrator:8300/healthz', timeout=10).read().decode())"
 # Tokens, model calls and cost, from the orchestrator's usage log (one JSON line per finished run), and the
 # reports released and lesson plans approved in the window, from the database (SELECT only, the session is
 # read-only). Nothing is written to disk: the log goes to the script on stdin, the outcomes through bash.
@@ -246,6 +246,30 @@ usage: $(ENV_FILE) ## Tokens, calls and cost per run and per completed outcome: 
 	 fi; \
 	 exit $$FAILED
 
+check: ## Secret scan, and the structure check when docs/STRUCTURE.md is present
+	@python3 scripts/scan_secrets.py
+	@if [ -f docs/STRUCTURE.md ]; then python3 scripts/check_structure.py; else echo "skipped: structure check (docs/STRUCTURE.md is not on this machine)"; fi
+
+# ── Probes: run from inside the network, through the mdeis-mcp container ──
+
+probe-embed: $(ENV_FILE) ## Embedder: vector size and repeatability
+	@$(COMPOSE) exec -T mdeis-mcp python - < scripts/embed_probe.py
+
+probe-mcp: $(ENV_FILE) ## mdeis-mcp: list its tools
+	@$(COMPOSE) exec -T mdeis-mcp python - http://mdeis-mcp:8100/mcp http < scripts/mcp_probe.py
+
+probe-pg-mcp: $(ENV_FILE) ## Borrowed Postgres MCP server: list its tools
+	@$(COMPOSE) exec -T mdeis-mcp python - http://pg-mcp-ro:8200/sse sse < scripts/mcp_probe.py
+
+probe-n8n: $(ENV_FILE) ## n8n: POST to the echo webhook
+	@$(COMPOSE) exec -T mdeis-mcp python - < scripts/n8n_probe.py
+
+probe-runner: $(ENV_FILE) ## Measure runner: no network, no writes, not root, and mdeis-mcp can open its socket
+	@$(COMPOSE) exec -T measure-runner python - < scripts/runner_probe.py
+	@$(COMPOSE) exec -T mdeis-mcp python -c "import os, socket; s = socket.socket(socket.AF_UNIX); s.connect(os.environ['MEASURE_RUNNER_SOCKET']); print('PASS  mdeis-mcp opened the runner socket')"
+
+probe-orchestrator: $(ENV_FILE) ## Orchestrator: its health answer (database and mdeis-mcp checks)
+	@$(COMPOSE) exec -T mdeis-mcp python -c "import urllib.request; print(urllib.request.urlopen('http://orchestrator:8300/healthz', timeout=10).read().decode())"
 
 token: $(ENV_FILE) ## A five-minute approver token for testing by hand:  make token ID=u-ada NAME="Ada Teacher"
 	@test -n "$(ID)" -a -n "$(NAME)" || { echo 'usage: make token ID=u-ada NAME="Ada Teacher"' >&2; exit 1; }

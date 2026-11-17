@@ -113,6 +113,16 @@ SELECT pg_temp.denied('read reports', :'portal_role', $$SELECT 1 FROM reports$$)
 SELECT pg_temp.denied('read the diary', :'portal_role', $$SELECT 1 FROM action_log$$);
 SELECT pg_temp.denied('write the diary', :'portal_role', $$INSERT INTO action_log (tool) VALUES ('x')$$);
 
+-- ---- template patches: who ran the admin step, so not for the read-only role; never deleted -------
+SELECT pg_temp.allowed('read template patches', :'app_role', $$SELECT count(*) FROM template_patches$$);
+SELECT pg_temp.denied('read template patches', :'ro_role', $$SELECT 1 FROM template_patches$$);
+SELECT pg_temp.denied('delete a template patch', :'app_role', $$DELETE FROM template_patches$$);
+SELECT pg_temp.denied('empty the template patches', :'app_role', $$TRUNCATE template_patches$$);
+SELECT pg_temp.denied('read template patches', :'portal_role', $$SELECT 1 FROM template_patches$$);
+SELECT pg_temp.denied('read template patches', :'auto_role', $$SELECT 1 FROM template_patches$$);
+SELECT pg_temp.is_true('template patches has its guard triggers (no delete, no truncate)',
+    (SELECT count(*) FROM pg_trigger WHERE tgrelid = 'template_patches'::regclass AND NOT tgisinternal) = 2);
+
 -- ---- n8n's read-only role: nothing yet (its views come later) -------------------------
 SELECT pg_temp.denied('read learners', :'auto_role', $$SELECT 1 FROM learners$$);
 SELECT pg_temp.denied('read reports', :'auto_role', $$SELECT 1 FROM reports$$);

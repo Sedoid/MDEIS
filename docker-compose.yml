@@ -22,3 +22,5 @@ volumes:
   inbox: {}
   # The orchestrator's usage log (one JSON line per run). Read by `make usage`.
   usage_log: {}
+  # The measure runner's Unix socket. Only measure-runner and mdeis-mcp mount it.
+  measure_runner_sock: {}
