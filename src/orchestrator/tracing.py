@@ -28,6 +28,14 @@ How it works, in four parts:
   swallowed and counted in `Tracer.stats`; a run is never slowed, changed or broken by the tracer.
 
 The cost is what OpenRouter reported (`usage.cost`, in USD). It is never worked out here.
+
+Span types (`langfuse.observation.type`): the root of a run is `agent`, a model call is
+`generation`, a tool call is `tool`, and a call to a verification gate (GUARDRAIL_TOOLS) is
+`guardrail`. The root also carries the run's totals (tokens, the cost the service reported, calls,
+time) as metadata, so one question's cost is on one row. Usage and cost details stay on the model
+calls only: putting them on the root as well would be counted twice in Langfuse's dashboards.
+
+The same collector feeds the usage log (`usage.py`), which works with tracing off.
 """
 
 from __future__ import annotations
@@ -45,6 +53,7 @@ from collections import deque
 
 import httpx
 
+from . import usage as usage_log
 from .lessons import GUARD_TOOL, READ_TOOL, SAVE_TOOL
 from .model import ModelError, usage_of
 
@@ -68,6 +77,10 @@ TRUNCATED_SUFFIX = "...[truncated]"
 NEVER_TOOL_IO = frozenset({GUARD_TOOL, SAVE_TOOL, READ_TOOL})
 _MISSING = object()  # "this tool call has no result" (it raised)
 LEVELS = {"refused": "WARNING", "error": "ERROR"}  # a Langfuse level for a tool outcome
+# Tools that are verification gates, shown as `guardrail` spans. Every other tool is a `tool`.
+GUARDRAIL_TOOLS = frozenset({"check_citations"})
+TYPE_ROOT, TYPE_MODEL, TYPE_TOOL, TYPE_GUARDRAIL = "agent", "generation", "tool", "guardrail"
+REASONING_MAX_CHARS = 2000  # a model's reasoning text shown with content capture is cut to this
 RUN_UUID = re.compile(r"^RUN-([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})$")
 
 log = logging.getLogger("orchestrator.tracing")
@@ -143,6 +156,30 @@ def outcome_of(result) -> str:
     return status if status in ("refused", "error") else "ok"
 
 
+def tool_names(definitions) -> list:
+    """The names of the tools offered to the model, from the definitions it was given. Names only:
+    never a description or a schema."""
+    found = []
+    for item in definitions or []:
+        function = item.get("function") if isinstance(item, dict) else None
+        name = function.get("name") if isinstance(function, dict) else None
+        if isinstance(name, str):
+            found.append(name)
+    return found
+
+
+def conversation_of(conversation_id) -> str | None:
+    return str(conversation_id)[:MAX_ID_CHARS] if conversation_id else None
+
+
+def safe_usage_log(settings):
+    """The usage log for these settings, or None if even that fails: it must not break a run."""
+    try:
+        return usage_log.log_for(settings)
+    except Exception:
+        return None
+
+
 def chat_outcome(item: dict, current: str) -> str:
     """The outcome of a chat run, read from the events the loop yields."""
     if item["event"] == "error":
@@ -171,6 +208,10 @@ class Trace:
         self.user_id, self.session_id = user_id, session_id
         self.trace_id, self.root_id = trace_id_for(run_id), new_span_id()
         self.started = self.begin()
+        self.usage = usage_log.RunUsage(
+            tracer.usage_log, run_id=run_id, kind=kind, conversation_id=session_id,
+            user_id=user_id, model=tracer.settings.model,
+        )
         self.children: list = []
         self.calls = 0
         self.done = False
@@ -229,8 +270,10 @@ class Trace:
         meta["model"] = self.tracer.settings.model
         return found + metadata_attrs("langfuse.trace.metadata", meta)
 
-    def finish(self, outcome: str, **numbers) -> None:
-        """End the run: build the root span and send every span of the run in one request."""
+    def finish(self, outcome: str, *, question=None, answer=None, **numbers) -> None:
+        """End the run: build the root span and send every span of the run in one request.
+        `question` and `answer` are shown on the root only with content capture on, never in a
+        lesson run."""
 
         def build():
             if self.done:
@@ -240,23 +283,42 @@ class Trace:
             meta = {"outcome": outcome}
             meta.update({k: v for k, v in numbers.items() if isinstance(v, int | str)})
             common = self._trace_attributes(meta)
+            # The run's totals go on the root only, as metadata, and never as usage_details or
+            # cost_details: those on a parent as well as its model calls would be counted twice.
+            totals = {**self.usage.totals(), "latency_ms": times[2]}
             failed = outcome == "error"
             root = [
-                attr("langfuse.observation.type", "span"),
+                attr("langfuse.observation.type", TYPE_ROOT),
                 attr("langfuse.observation.level", "ERROR" if failed else "DEFAULT"),
                 *metadata_attrs(
                     "langfuse.observation.metadata",
-                    {"graph_kind": self.kind, "outcome": outcome, "latency_ms": times[2]},
+                    {"graph_kind": self.kind, "outcome": outcome, **totals},
                 ),
+                *self._root_io(question, answer),
             ]
-            spans = [self._span(None, f"mdeis-{self.kind}", times, common + root, failed)]
+            top = self._trace_attributes({**meta, **totals})
+            spans = [self._span(None, f"mdeis-{self.kind}", times, top + root, failed)]
             spans += [{**c, "attributes": common + c["attributes"]} for c in self.children]
             self.children = []
             self.tracer.submit(spans)
 
         self._safe(build)
+        self._safe(lambda: self.usage.finish(outcome, numbers.get("repair_rounds")))
+
+    def _root_io(self, question, answer) -> list:
+        """The question and the answer as the root's input and output, masked like any content.
+        Only with content capture on, and never for a lesson (its notes must not leave)."""
+        if not self.capture or self.kind == "lesson":
+            return []
+        found = []
+        for key, value in (("input", question), ("output", answer)):
+            if isinstance(value, str) and value:
+                found.append(attr(f"langfuse.observation.{key}", self.clean(value)))
+        return found
 
     def generation(self, started: tuple, messages: list, tools: list, reply, error=None) -> None:
+        self._safe(lambda: self.usage.call(self._times(started)[2], reply, error))
+
         def build():
             self.calls += 1
             times = self._times(started)
@@ -264,6 +326,7 @@ class Trace:
             meta = {
                 "graph_kind": self.kind, "call": self.calls, "latency_ms": times[2],
                 "tools_offered": len(tools), "tool_calls_requested": len(asked),
+                "tools_offered_names": json.dumps(tool_names(tools)),  # names only, no schemas
             }
             if asked:
                 meta["tool_names_requested"] = asked
@@ -272,7 +335,7 @@ class Trace:
                 meta["provider"] = provider
             model = self.tracer.settings.model
             attributes = [
-                attr("langfuse.observation.type", "generation"),
+                attr("langfuse.observation.type", TYPE_MODEL),
                 attr("langfuse.observation.model.name", model),
                 attr("gen_ai.request.model", model),
                 attr("langfuse.observation.level", "ERROR" if error is not None else "DEFAULT"),
@@ -288,6 +351,8 @@ class Trace:
             }
             if counts:
                 attributes.append(attr("langfuse.observation.usage_details", json.dumps(counts)))
+            if "reasoning_tokens" in usage:  # metadata only: not a usage_details key
+                meta["reasoning_tokens"] = usage["reasoning_tokens"]
             if "cost" in usage:  # USD, as the service reported it. Never worked out here.
                 cost = json.dumps({"total": usage["cost"]})
                 attributes.append(attr("langfuse.observation.cost_details", cost))
@@ -311,10 +376,13 @@ class Trace:
         self, started: tuple, server: str, name: str, outcome: str,
         arguments=_MISSING, result=_MISSING,
     ) -> None:
+        self._safe(lambda: self.usage.tool(name, self._times(started)[2], outcome))
+
         def build():
             times = self._times(started)
+            kind = TYPE_GUARDRAIL if name in GUARDRAIL_TOOLS else TYPE_TOOL
             attributes = [
-                attr("langfuse.observation.type", "span"),
+                attr("langfuse.observation.type", kind),
                 attr("langfuse.observation.level", LEVELS.get(outcome, "DEFAULT")),
                 *self._tool_io_attributes(name, arguments, result),
                 *metadata_attrs(
@@ -401,6 +469,12 @@ class Trace:
         asked = [c.name for c in getattr(reply, "calls", ())]
         if asked:
             shown["tool_calls"] = asked
+        reasoning = getattr(reply, "reasoning", None)
+        if reasoning and self.kind != "lesson":  # a lesson's reasoning could quote the notes
+            text = self.clean(reasoning)
+            if len(text) > REASONING_MAX_CHARS:
+                text = text[:REASONING_MAX_CHARS] + TRUNCATED_SUFFIX
+            shown["reasoning"] = text
         return shown
 
 
@@ -449,26 +523,67 @@ class TracedServer:
 
 
 class NullTrace:
-    """Tracing is off: every method does nothing and the wrappers hand back what they were given."""
+    """Tracing is off. With no usage log the wrappers hand back what they were given and every
+    method does nothing. With the usage log on, the same wrappers feed the run's `RunUsage`, and
+    nothing else is done."""
+
+    def __init__(self, usage=None):
+        self.usage = usage
 
     def wrap_model(self, model):
-        return model
+        return model if self.usage is None else TracedModel(model, self)
 
     def wrap_servers(self, servers: dict) -> dict:
-        return servers
+        if self.usage is None:
+            return servers
+        return {name: TracedServer(name, server, self) for name, server in servers.items()}
 
-    def finish(self, outcome: str, **numbers) -> None:
+    def begin(self) -> tuple:
+        return Trace.begin()
+
+    def generation(self, started: tuple, messages: list, tools: list, reply, error=None) -> None:
+        self._safely(lambda: self.usage.call(Trace._times(started)[2], reply, error))
+
+    def tool(
+        self, started: tuple, server: str, name: str, outcome: str,
+        arguments=_MISSING, result=_MISSING,
+    ) -> None:
+        self._safely(lambda: self.usage.tool(name, Trace._times(started)[2], outcome))
+
+    def learn_names(self, result, depth: int = 0) -> None:
         return None
+
+    def finish(self, outcome: str, *, question=None, answer=None, **numbers) -> None:
+        self._safely(lambda: self.usage.finish(outcome, numbers.get("repair_rounds")))
+
+    def _safely(self, action) -> None:
+        try:
+            if self.usage is not None:
+                action()
+        except Exception:  # (the usage log must never touch a run)
+            pass
 
 
 class NullTracer:
     enabled = False
 
+    def __init__(self, usage_log_=None):
+        self.usage_log = usage_log_
+
     def summary(self) -> dict:
         return dict(OFF_SUMMARY)
 
-    def start(self, **kwargs) -> NullTrace:
-        return NullTrace()
+    def start(
+        self, *, run_id: str, kind: str, token: str | None = None,
+        conversation_id: str | None = None, mask=(),
+    ) -> NullTrace:
+        found = self.usage_log
+        if found is None or not found.on:
+            return NullTrace()
+        return NullTrace(usage_log.RunUsage(
+            found, run_id=run_id, kind=kind, conversation_id=conversation_of(conversation_id),
+            user_id=user_id_from(token), model=found.model,
+        ))
 
     async def flush(self) -> None:
         return None
@@ -483,6 +598,7 @@ class Tracer:
 
     def __init__(self, settings, client: httpx.AsyncClient | None = None):
         self.settings, self._client = settings, client
+        self.usage_log = safe_usage_log(settings)
         self._queue: deque = deque()
         self._task: asyncio.Task | None = None
         # Counts are of spans, except `errors` (things that went wrong inside the tracer), the
@@ -509,7 +625,7 @@ class Tracer:
     ) -> Trace:
         """Begin a trace for a run. `kind` is chat, lesson or build. `mask` is text that must never
         be sent (a lesson's notes and objective). Nothing is sent until the run finishes."""
-        session = str(conversation_id)[:MAX_ID_CHARS] if conversation_id else None
+        session = conversation_of(conversation_id)
         # The approver token is masked too, so that a tool that repeats it cannot send it.
         hidden = [m for m in (*mask, token) if isinstance(m, str) and m]
         return Trace(self, run_id, kind, hidden, user_id=user_id_from(token), session_id=session)
@@ -616,10 +732,11 @@ async def flush_all() -> None:
 def tracer_for(settings):
     """The tracer for these settings: a real one only when all three variables are set."""
     if not settings.langfuse_on:
-        return NullTracer()
+        return NullTracer(safe_usage_log(settings))
     key = (
         settings.langfuse_host, settings.langfuse_public_key, settings.langfuse_secret_key,
         settings.langfuse_capture_content, settings.langfuse_capture_tool_io, settings.model,
+        settings.usage_log_file,
     )
     if key not in _CACHE:
         _CACHE[key] = Tracer(settings)

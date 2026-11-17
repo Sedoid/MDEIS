@@ -20,3 +20,5 @@ volumes:
   webui_data: {}
   # Uploaded documents. The portal writes, ingestd reads. Both images create /inbox with group 10010.
   inbox: {}
+  # The orchestrator's usage log (one JSON line per run). Read by `make usage`.
+  usage_log: {}

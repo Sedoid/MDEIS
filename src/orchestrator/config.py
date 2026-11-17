@@ -50,6 +50,9 @@ class Settings:
     # arguments and result (not for the lesson tools). Learner names found in results are masked,
     # but a name a user typed into a question can still appear in an argument. Synthetic data only.
     langfuse_capture_tool_io: bool = False
+    # The usage log: one JSON line for each finished run, appended to this file (usage.py). Empty
+    # means off. It works without Langfuse and holds counts, names and times only.
+    usage_log_file: str = ""
 
     @property
     def model_ready(self) -> bool:
@@ -88,4 +91,5 @@ def load_settings(env=None) -> Settings:
         langfuse_host=env.get("LANGFUSE_HOST", "").strip().rstrip("/"),
         langfuse_capture_content=_flag(env.get("LANGFUSE_CAPTURE_CONTENT", "false")),
         langfuse_capture_tool_io=_flag(env.get("LANGFUSE_CAPTURE_TOOL_IO", "false")),
+        usage_log_file=env.get("USAGE_LOG_FILE", "").strip(),
     )

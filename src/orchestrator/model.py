@@ -17,7 +17,8 @@ from .config import Settings
 
 REQUEST_TIMEOUT_SECONDS = 120
 # The usage fields, as OpenRouter names them. `cost` is in USD.
-USAGE_KEYS = ("prompt_tokens", "completion_tokens", "total_tokens", "cost")
+# `reasoning_tokens` is read from `completion_tokens_details` when the service reports it there.
+USAGE_KEYS = ("prompt_tokens", "completion_tokens", "total_tokens", "cost", "reasoning_tokens")
 MAX_PROVIDER_CHARS = 80
 
 
@@ -38,6 +39,7 @@ class Reply:
     calls: tuple = ()
     usage: dict | None = None  # tokens and the USD cost as the service reported them (tracing)
     provider: str | None = None  # which provider served the call (tracing only)
+    reasoning: str | None = None  # the reasoning text, if the service sent it (tracing only)
 
 
 def payload(settings: Settings, messages: list, tools: list) -> dict:
@@ -63,6 +65,9 @@ def usage_of(data: dict) -> dict | None:
     block = data.get("usage")
     if not isinstance(block, dict):
         return None
+    details = block.get("completion_tokens_details")
+    if isinstance(details, dict):
+        block = {"reasoning_tokens": details.get("reasoning_tokens"), **block}
     found = {
         key: block[key]
         for key in USAGE_KEYS
@@ -71,6 +76,25 @@ def usage_of(data: dict) -> dict | None:
         and block[key] >= 0
     }
     return found or None
+
+
+def reasoning_of(message: dict) -> str | None:
+    """The reasoning text, from where OpenRouter puts it: `reasoning`, `reasoning_content`, or the
+    text and summary parts of `reasoning_details` (an encrypted part is skipped). Blank is None."""
+    for key in ("reasoning", "reasoning_content"):
+        value = message.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    parts = message.get("reasoning_details")
+    if isinstance(parts, list):
+        texts = [
+            part.get("text") or part.get("summary")
+            for part in parts
+            if isinstance(part, dict)
+        ]
+        joined = "\n".join(t for t in texts if isinstance(t, str) and t.strip())
+        return joined or None
+    return None
 
 
 def reply_of(data: dict) -> Reply:
@@ -90,7 +114,8 @@ def reply_of(data: dict) -> Reply:
     if not isinstance(provider, str) or len(provider) > MAX_PROVIDER_CHARS:
         provider = None
     return Reply(
-        text=message.get("content") or "", calls=calls, usage=usage_of(data), provider=provider
+        text=message.get("content") or "", calls=calls, usage=usage_of(data), provider=provider,
+        reasoning=reasoning_of(message),
     )
 
 

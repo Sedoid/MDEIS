@@ -29,6 +29,8 @@ services:
       - ./pyproject.toml:/app/pyproject.toml:ro
       # Names and defaults only, no secrets: a test checks that each setting is listed in it.
       - ./.env.example:/app/.env.example:ro
+      # The usage report is a script, and a test runs it on a small hand-made usage file.
+      - ./scripts:/app/scripts:ro
     networks: [data]
     depends_on:
       postgres:

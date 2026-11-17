@@ -20,6 +20,7 @@ ENV_FILE   ?= .env
 DEV_EDITOR ?= 1
 UP_FLAGS   ?= --wait
 SERVICE    ?=
+SINCE      ?= 24h
 FORCE      ?= 0
 STRICT     ?= 0
 ARGS       ?=
@@ -32,7 +33,7 @@ COMPOSE := docker compose --env-file $(ENV_FILE) -f docker-compose.yml $(addpref
 
 .PHONY: help env-init env-sync check-env check-docker models dev-config dev-build dev-up dev-down dev-src up down dev-ps \
         dev-logs dev-restart dev-psql dev-reset dev-health migrate load-criteria rules-status search-rules ingest ingest-dir card-lines ack token ask evals probe-gateway prod-config prod-up prod-down prod-check \
-        test test-contract gate lint check practice-data class-data \
+        test test-contract gate lint check practice-data class-data usage \
         demo demo-data smoke clean \
         probe-embed probe-mcp probe-pg-mcp probe-n8n probe-orchestrator probe-portal probe-signin
 
@@ -223,6 +224,28 @@ probe-n8n: $(ENV_FILE) ## n8n: POST to the echo webhook
 
 probe-orchestrator: $(ENV_FILE) ## Orchestrator: its health answer (database and mdeis-mcp checks)
 	@$(COMPOSE) exec -T mdeis-mcp python -c "import urllib.request; print(urllib.request.urlopen('http://orchestrator:8300/healthz', timeout=10).read().decode())"
+# Tokens, model calls and cost, from the orchestrator's usage log (one JSON line per finished run), and the
+# reports released and lesson plans approved in the window, from the database (SELECT only, the session is
+# read-only). Nothing is written to disk: the log goes to the script on stdin, the outcomes through bash.
+usage: $(ENV_FILE) ## Tokens, calls and cost per run and per completed outcome:  make usage [SINCE=24h|7d|2026-11-01]
+	@CUT=$$(python3 scripts/usage_report.py --print-cutoff --since "$(SINCE)") || exit 1; \
+	 FAILED=0; OUTARG=""; \
+	 if ! LOG=$$($(COMPOSE) exec -T orchestrator sh -c 'cat "$${USAGE_LOG_FILE:-/var/log/mdeis/usage.jsonl}"' 2>/dev/null); then \
+	   echo "No usage file to read yet: no run has finished since the orchestrator started with USAGE_LOG_FILE set, or the orchestrator is not running."; \
+	   LOG=""; \
+	 fi; \
+	 if OUT=$$($(COMPOSE) exec -T postgres sh -c 'PGOPTIONS="-c default_transaction_read_only=on" psql -U "$$POSTGRES_USER" -d "$$MDEIS_DB_NAME" -At -q -v ON_ERROR_STOP=1 -v cut="$$1"' _ "$$CUT" < scripts/usage_outcomes.sql); then \
+	   OUTARG=yes; \
+	 else \
+	   echo "Could not read completed outcomes from the database; the per-run report follows without them." >&2; FAILED=1; \
+	 fi; \
+	 if [ -n "$$OUTARG" ]; then \
+	   printf '%s\n' "$$LOG" | python3 scripts/usage_report.py - --since "$(SINCE)" --outcomes <(printf '%s' "$$OUT") $(if $(FORMAT),--format $(FORMAT)) || exit $$?; \
+	 else \
+	   printf '%s\n' "$$LOG" | python3 scripts/usage_report.py - --since "$(SINCE)" $(if $(FORMAT),--format $(FORMAT)) || exit $$?; \
+	 fi; \
+	 exit $$FAILED
+
 
 token: $(ENV_FILE) ## A five-minute approver token for testing by hand:  make token ID=u-ada NAME="Ada Teacher"
 	@test -n "$(ID)" -a -n "$(NAME)" || { echo 'usage: make token ID=u-ada NAME="Ada Teacher"' >&2; exit 1; }

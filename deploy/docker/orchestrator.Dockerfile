@@ -11,7 +11,9 @@ WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 RUN pip install ".[orchestrator]" \
-    && useradd --system --uid 10004 --no-create-home --shell /usr/sbin/nologin orchestrator
+    && useradd --system --uid 10004 --no-create-home --shell /usr/sbin/nologin orchestrator \
+    && mkdir -p /var/log/mdeis \
+    && chown orchestrator:orchestrator /var/log/mdeis
 USER orchestrator
 EXPOSE 8300
 CMD ["uvicorn", "orchestrator.app:app", "--host", "0.0.0.0", "--port", "8300"]

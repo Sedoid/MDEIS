@@ -15,9 +15,13 @@ Optional tracing (`tracing.py`) watches both routes when the three Langfuse vari
 one trace for each run, with the run's id as the trace id. It is off otherwise, and it never changes
 an answer. It is not the audit log: the action log in Postgres is.
 
+The usage log (`usage.py`) is a second, separate record: one JSON line for each finished run in the
+file named by USAGE_LOG_FILE (tokens, cost, calls, time; no text). It works with tracing off.
+
 It logs the names of things and never message text, tokens or keys.
 """
 
+import asyncio
 import hmac
 import json
 import os
@@ -31,7 +35,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Path, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import graph, loop, tracing
+from . import graph, loop, tracing, usage
 from .config import load_settings
 from .lessons import READ_TOOL
 from .lessons import graph as lesson_graph
@@ -132,6 +136,7 @@ def create_app(
     async def lifespan(_app):
         yield
         await tracing.flush_all()  # send what is still queued, within a bounded time
+        await asyncio.to_thread(usage.wait_all)  # and let the usage log finish its last lines
 
     app = FastAPI(title="MDEIS orchestrator", lifespan=lifespan)
 
@@ -141,6 +146,13 @@ def create_app(
             return tracer_factory(settings).summary()
         except Exception:
             return tracing.NullTracer().summary()
+
+    def usage_state(settings) -> dict:
+        """Counts only. It never decides whether the service is healthy."""
+        try:
+            return usage.log_for(settings).summary()
+        except Exception:
+            return {"on": False, "lines_written": 0, "lines_failed": 0}
 
     @app.get("/healthz")
     def healthz(response: Response) -> dict:
@@ -155,6 +167,7 @@ def create_app(
             "engine": engine_name(settings),
             "model_configured": settings.model_ready,
             "tracing": tracing_state(settings),
+            "usage_log": usage_state(settings),
         }
 
     @app.post("/run", dependencies=[Depends(require_key)])
@@ -172,7 +185,8 @@ def create_app(
                 run_id=run_id, kind="chat", token=body.approver_token,
                 conversation_id=body.conversation_id,
             )
-            outcome = "error"
+            outcome, answer = "error", None
+            question = loop.latest_user_text([m.model_dump() for m in body.messages])
             try:
                 async with servers_factory(settings, body.approver_token, run_id) as servers:
                     async for item in runner(
@@ -184,12 +198,14 @@ def create_app(
                         servers=trace.wrap_servers(servers),
                     ):
                         outcome = tracing.chat_outcome(item, outcome)
+                        if item["event"] == "final":
+                            answer = item["data"].get("answer")
                         yield sse(item["event"], item["data"])
             except Exception as error:  # (the class only: never the message)
                 outcome = "error"
                 yield sse("error", {"text": f"I could not finish ({type(error).__name__})."})
             finally:
-                trace.finish(outcome)
+                trace.finish(outcome, question=question, answer=answer)
 
         return StreamingResponse(stream(), media_type="text/event-stream")
 

@@ -21,6 +21,7 @@ graph give the same answers with the tracer on and off.
 
 import asyncio
 import base64
+import dataclasses
 import hashlib
 import json
 import logging
@@ -147,7 +148,8 @@ class Wire:
 
     def tool_spans(self):
         found = [
-            s for s in self.spans() if "parentSpanId" in s and attrs(s).get(GEN) == "span"
+            s for s in self.spans()
+            if "parentSpanId" in s and attrs(s).get(GEN) in ("tool", "guardrail")
         ]
         return sorted(found, key=lambda s: int(s["startTimeUnixNano"]))
 
@@ -349,7 +351,7 @@ def test_only_documented_attribute_names_are_sent_and_the_trace_ones_are_on_ever
         assert mine["user.id"] == "u-12" and mine["session.id"] == "conv-1"
         assert mine["langfuse.trace.metadata.run_id"] == "RUN-C1"
         assert mine["langfuse.trace.metadata.outcome"] == "ok"
-        assert mine[GEN] in ("span", "generation")
+        assert mine[GEN] in ("agent", "tool", "guardrail", "generation")
 
 
 def test_the_root_span_carries_the_run_outcome_and_a_failed_run_is_an_error_span():
@@ -1298,3 +1300,467 @@ def test_only_the_orchestrator_names_langfuse_in_source():
         if "langfuse" in p.read_text(encoding="utf-8").lower()
     }
     assert mentions == {"orchestrator"}
+
+
+# --------------------------------------------------------------------------- T-074: root totals
+# Written before the code. The numbers are typed by hand; the sums in the comments are worked out
+# on paper, not read from the system's output.
+MT, MO = "langfuse.trace.metadata.", "langfuse.observation.metadata."
+CALL1 = {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120, "cost": 0.0001}
+CALL2 = {"prompt_tokens": 200, "completion_tokens": 50, "total_tokens": 250, "cost": 0.00025}
+NO_COST2 = {"prompt_tokens": 200, "completion_tokens": 50, "total_tokens": 250}
+TOTAL_KEYS = (
+    "total_input_tokens", "total_output_tokens", "total_tokens", "total_cost_usd", "model_calls",
+    "tool_calls", "cost_reported_calls", "models",
+)
+
+
+def with_usage(reply, **usage):
+    return dataclasses.replace(reply, usage=usage)
+
+
+def two_calls(first=CALL1, second=CALL2):
+    return FakeModel(
+        with_usage(ask("get_criterion", {"query": "TR-1"}), **first),
+        with_usage(say("Reading is steady."), **second),
+    )
+
+
+def test_the_root_carries_the_sums_of_what_the_service_reported():
+    wire = Wire()
+    chat(tracer_for(wire), two_calls())
+    mine = attrs(wire.roots()[0])
+    for prefix in (MT, MO):
+        assert mine[prefix + "total_input_tokens"] == 300  # 100 + 200
+        assert mine[prefix + "total_output_tokens"] == 70  # 20 + 50
+        assert mine[prefix + "total_tokens"] == 370  # 120 + 250
+        assert mine[prefix + "total_cost_usd"] == pytest.approx(0.00035)  # 0.0001 + 0.00025
+        assert mine[prefix + "model_calls"] == 2
+        assert mine[prefix + "tool_calls"] == 1
+        assert mine[prefix + "cost_reported_calls"] == 2
+        assert mine[prefix + "models"] == "open/weights-model"
+        assert mine[prefix + "latency_ms"] >= 0
+    assert mine[MO + "outcome"] == "ok" and mine[MO + "graph_kind"] == "chat"
+    assert mine[MT + "outcome"] == "ok" and mine[MT + "run_id"] == "RUN-C1"
+
+
+def test_the_root_has_no_usage_or_cost_details_so_nothing_is_counted_twice():
+    wire = Wire()
+    chat(tracer_for(wire), two_calls())
+    root = attrs(wire.roots()[0])
+    assert "langfuse.observation.usage_details" not in root
+    assert "langfuse.observation.cost_details" not in root
+    assert len(wire.generations()) == 2  # the two calls carry the numbers, once each
+    for gen in wire.generations():
+        assert "langfuse.observation.usage_details" in attrs(gen)
+
+
+def test_the_totals_are_on_the_root_only():
+    wire = Wire()
+    chat(tracer_for(wire), two_calls())
+    root_id = wire.roots()[0]["spanId"]
+    for span in wire.spans():
+        if span["spanId"] == root_id:
+            continue
+        for key in attrs(span):
+            assert not any(key.endswith("." + name) for name in TOTAL_KEYS), key
+
+
+def test_a_partial_cost_sum_shows_how_many_calls_reported_one():
+    wire = Wire()
+    chat(tracer_for(wire), two_calls(second=NO_COST2))
+    mine = attrs(wire.roots()[0])
+    assert mine[MO + "total_cost_usd"] == pytest.approx(0.0001)
+    assert mine[MO + "cost_reported_calls"] == 1 and mine[MO + "total_tokens"] == 370
+
+
+def test_with_no_cost_reported_there_is_no_cost_key_and_the_tokens_are_still_summed():
+    wire = Wire()
+    first = {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120}
+    chat(tracer_for(wire), two_calls(first=first, second=NO_COST2))
+    mine = attrs(wire.roots()[0])
+    for prefix in (MT, MO):
+        assert prefix + "total_cost_usd" not in mine
+        assert mine[prefix + "cost_reported_calls"] == 0
+        assert mine[prefix + "total_input_tokens"] == 300
+    assert not any("cost_usd" in key for key in attrs(wire.generations()[0]))
+
+
+def test_a_run_whose_replies_carry_no_usage_has_zero_tokens_and_no_cost():
+    wire = Wire()
+    chat(tracer_for(wire), script())
+    mine = attrs(wire.roots()[0])
+    assert mine[MO + "total_tokens"] == 0 and mine[MO + "model_calls"] == 2
+    assert mine[MO + "tool_calls"] == 1 and MO + "total_cost_usd" not in mine
+
+
+def test_a_failed_model_call_still_counts_as_a_call():
+    wire = Wire()
+    chat(tracer_for(wire), FakeModel(ModelError("the model service answered with an error (500)")))
+    mine = attrs(wire.roots()[0])
+    assert mine[MO + "model_calls"] == 1 and mine[MO + "tool_calls"] == 0
+    assert mine[MO + "total_tokens"] == 0
+
+
+def test_a_run_with_no_calls_has_zero_counts_and_no_model_list():
+    wire = Wire()
+    tracer = tracer_for(wire)
+    tracer.start(run_id="RUN-Z1", kind="chat", token=TOKEN).finish("refused")
+    asyncio.run(tracer.flush())
+    mine = attrs(wire.roots()[0])
+    assert mine[MO + "model_calls"] == 0 and mine[MO + "tool_calls"] == 0
+    assert mine[MO + "total_tokens"] == 0 and MO + "models" not in mine
+
+
+def test_a_lesson_root_has_the_totals_too():
+    wire = Wire()
+    lesson(tracer_for(wire), FakeModel(with_usage(say(GOOD), **CALL1)))
+    mine = attrs(wire.roots()[0])
+    for prefix in (MT, MO):
+        assert mine[prefix + "total_input_tokens"] == 100
+        assert mine[prefix + "total_output_tokens"] == 20
+        assert mine[prefix + "total_tokens"] == 120
+        assert mine[prefix + "total_cost_usd"] == pytest.approx(0.0001)
+        assert mine[prefix + "model_calls"] == 1
+        assert mine[prefix + "cost_reported_calls"] == 1
+    assert mine[MO + "tool_calls"] == len(wire.tool_spans()) >= 1
+    assert mine[MT + "repair_rounds"] == 0
+
+
+# --------------------------------------------------------------------------- T-074: span types
+def tool_called_directly(tracer, name):
+    async def go():
+        trace = tracer.start(run_id="RUN-T1", kind="chat", token=TOKEN, conversation_id="c")
+        servers = trace.wrap_servers({tools.MDEIS: FakeServer(MDEIS_LISTING, {})})
+        await servers[tools.MDEIS].call(name, {})
+        trace.finish("ok")
+        await tracer.flush()
+
+    asyncio.run(go())
+
+
+def test_the_root_is_an_agent_a_model_call_a_generation_and_a_tool_a_tool():
+    wire = Wire()
+    chat(tracer_for(wire), script())
+    assert attrs(wire.roots()[0])[GEN] == "agent"
+    assert [attrs(g)[GEN] for g in wire.generations()] == ["generation", "generation"]
+    [span] = wire.tool_spans()
+    assert span["name"] == "get_criterion" and attrs(span)[GEN] == "tool"
+
+
+def test_a_lesson_root_is_an_agent_and_its_tool_spans_are_tools():
+    wire = Wire()
+    lesson(tracer_for(wire), FakeModel(say(GOOD)))
+    assert attrs(wire.roots()[0])[GEN] == "agent"
+    assert {attrs(s)[GEN] for s in wire.tool_spans()} == {"tool"}
+
+
+def test_a_check_citations_call_is_a_guardrail_and_an_unknown_tool_is_a_tool():
+    assert "check_citations" in tracing.GUARDRAIL_TOOLS
+    assert "get_criterion" not in tracing.GUARDRAIL_TOOLS
+    wire = Wire()
+    tool_called_directly(tracer_for(wire), "check_citations")
+    [span] = wire.tool_spans()
+    assert span["name"] == "check_citations" and attrs(span)[GEN] == "guardrail"
+    other = Wire()
+    tool_called_directly(tracer_for(other), "some_tool_added_later")
+    [span] = other.tool_spans()
+    assert attrs(span)[GEN] == "tool"
+
+
+def test_a_failed_guardrail_call_is_still_a_guardrail_with_an_error_level():
+    class Boom:
+        async def list_tools(self):
+            return []
+
+        async def call(self, name, arguments):
+            raise RuntimeError("down")
+
+    wire = Wire()
+    tracer = tracer_for(wire)
+
+    async def go():
+        trace = tracer.start(run_id="RUN-T2", kind="chat", token=TOKEN)
+        with pytest.raises(RuntimeError):
+            await trace.wrap_servers({tools.MDEIS: Boom()})[tools.MDEIS].call("check_citations", {})
+        trace.finish("error")
+        await tracer.flush()
+
+    asyncio.run(go())
+    mine = attrs(wire.tool_spans()[0])
+    assert mine[GEN] == "guardrail" and mine["langfuse.observation.level"] == "ERROR"
+
+
+def test_every_other_attribute_of_a_tool_span_is_kept():
+    wire = Wire()
+    chat(tracer_for(wire), script())
+    mine = attrs(wire.tool_spans()[0])
+    assert mine["langfuse.observation.level"] == "DEFAULT"
+    assert mine[MO + "server"] == tools.MDEIS and mine[MO + "outcome"] == "ok"
+    assert mine[MO + "graph_kind"] == "chat" and MO + "latency_ms" in mine
+
+
+# --------------------------------------------------------------------------- T-074: tools offered
+OFFERED = [
+    {"type": "function", "function": {
+        "name": "alpha", "description": "SENTINEL-DESCRIPTION",
+        "parameters": {"properties": {"SENTINEL-PARAM": {"type": "string"}}},
+    }},
+    {"type": "function", "function": {"name": "beta", "description": "SENTINEL-DESCRIPTION-2"}},
+    {"junk": True},
+]
+
+
+def generation_direct(tracer, reply, *, kind="chat", messages=None, offered=(), mask=()):
+    async def go():
+        trace = tracer.start(run_id="RUN-G1", kind=kind, token=TOKEN, mask=mask)
+        trace.generation(
+            trace.begin(), messages or [{"role": "user", "content": "q"}], list(offered), reply
+        )
+        trace.finish("ok")
+        await tracer.flush()
+
+    asyncio.run(go())
+
+
+@pytest.mark.parametrize("kind", ["chat", "lesson"])
+@pytest.mark.parametrize("extra", [{}, {"LANGFUSE_CAPTURE_CONTENT": "true"}])
+def test_the_names_of_the_tools_offered_are_recorded_in_every_mode_and_no_schema(kind, extra):
+    wire = Wire()
+    generation_direct(tracer_for(wire, **extra), Reply("fine"), kind=kind, offered=OFFERED)
+    mine = attrs(wire.generations()[0])
+    assert json.loads(mine[MO + "tools_offered_names"]) == ["alpha", "beta"]
+    assert mine[MO + "tools_offered"] == 3  # the count is as before: every entry offered
+    for text in ("SENTINEL-DESCRIPTION", "SENTINEL-PARAM", "inputSchema", "properties"):
+        assert text not in wire.text()
+
+
+def test_with_no_tools_offered_the_list_is_empty():
+    wire = Wire()
+    generation_direct(tracer_for(wire), Reply("fine"))
+    assert json.loads(attrs(wire.generations()[0])[MO + "tools_offered_names"]) == []
+
+
+def test_a_real_loop_run_names_the_tools_the_model_was_shown():
+    wire = Wire()
+    model = script()
+    chat(tracer_for(wire), model)
+    shown = [d["function"]["name"] for d in model.seen[0][1]]
+    mine = attrs(wire.generations()[0])
+    assert shown and json.loads(mine[MO + "tools_offered_names"]) == shown
+    assert mine[MO + "tools_offered"] == len(shown)
+    assert mine[MO + "tool_names_requested"] == "get_criterion"  # unchanged
+
+
+# --------------------------------------------------------------------------- T-074: root question
+def chat_qa(tracer, model, text, *, pg=None, results=None):
+    """A chat run finished the way the service finishes it: with the question and the answer."""
+
+    async def go():
+        servers = {tools.MDEIS: FakeServer(MDEIS_LISTING, results or {})}
+        if pg is not None:
+            servers[tools.PG] = pg
+        trace = tracer.start(run_id="RUN-Q1", kind="chat", token=TOKEN, conversation_id="conv-1")
+        out = [
+            e
+            async for e in loop.run(
+                messages=[{"role": "user", "content": text}], token=TOKEN, run_id="RUN-Q1",
+                settings=SETTINGS, model=trace.wrap_model(model),
+                servers=trace.wrap_servers(servers),
+            )
+        ]
+        final = [e for e in out if e["event"] == "final"][-1]["data"]
+        trace.finish("ok", question=text, answer=final["answer"])
+        await tracer.flush()
+        return final
+
+    return asyncio.run(go())
+
+
+QUESTION = "How is the reading going this term?"
+
+
+def test_the_default_puts_no_question_and_no_answer_on_the_root():
+    wire = Wire()
+    chat_qa(tracer_for(wire), script(), QUESTION)
+    root = attrs(wire.roots()[0])
+    assert IO_IN not in root and IO_OUT not in root
+    assert QUESTION not in wire.text()
+
+
+def test_with_content_capture_on_the_root_has_the_question_and_the_answer():
+    wire = Wire()
+    final = chat_qa(tracer_for(wire, LANGFUSE_CAPTURE_CONTENT="true"), script(), QUESTION)
+    root = attrs(wire.roots()[0])
+    assert root[IO_IN] == QUESTION and root[IO_OUT] == final["answer"]
+    assert "Reading is steady." in root[IO_OUT]
+    for span in wire.spans():  # the trace-level input and output names are not used
+        assert "langfuse.trace.input" not in attrs(span)
+        assert "langfuse.trace.output" not in attrs(span)
+
+
+def test_a_learner_name_in_the_answer_is_masked_on_the_root():
+    wire = Wire()
+    pg = FakeServer(PG_LISTING, {"execute_sql": {"rows": [{"display_name": LEARNER}]}})
+    model = FakeModel(ask("execute_sql", {"sql": "select 1"}), say(f"{LEARNER} is reading well."))
+    chat_qa(tracer_for(wire, LANGFUSE_CAPTURE_CONTENT="true"), model, QUESTION, pg=pg)
+    root = attrs(wire.roots()[0])
+    assert LEARNER not in root[IO_OUT] and tracing.WITHHELD in root[IO_OUT]
+    assert LEARNER not in wire.text()
+
+
+def test_the_approver_token_is_masked_on_the_root_input():
+    wire = Wire()
+    chat_qa(tracer_for(wire, LANGFUSE_CAPTURE_CONTENT="true"), script(), "Tell me " + TOKEN)
+    assert TOKEN not in wire.text()
+
+
+def test_a_lesson_root_never_has_input_or_output_in_any_mode():
+    wire = Wire()
+    tracer = tracer_for(wire, LANGFUSE_CAPTURE_CONTENT="true", LANGFUSE_CAPTURE_TOOL_IO="true")
+
+    async def go():
+        trace = tracer.start(run_id="RUN-L9", kind="lesson", token=TOKEN, mask=(LESSON, OBJECTIVE))
+        trace.finish("stored", question=LESSON, answer=OBJECTIVE)
+        await tracer.flush()
+
+    asyncio.run(go())
+    root = attrs(wire.roots()[0])
+    assert IO_IN not in root and IO_OUT not in root
+    assert LESSON not in wire.text() and OBJECTIVE not in wire.text()
+    answered = Wire()
+    lesson(tracer_for(answered, LANGFUSE_CAPTURE_CONTENT="true"), FakeModel(say(GOOD)))
+    assert IO_IN not in attrs(answered.roots()[0]) and IO_OUT not in attrs(answered.roots()[0])
+
+
+def test_a_run_that_ended_without_an_answer_has_an_input_and_no_output():
+    wire = Wire()
+    tracer = tracer_for(wire, LANGFUSE_CAPTURE_CONTENT="true")
+    tracer.start(run_id="RUN-N1", kind="chat", token=TOKEN).finish("error", question=QUESTION)
+    asyncio.run(tracer.flush())
+    root = attrs(wire.roots()[0])
+    assert root[IO_IN] == QUESTION and IO_OUT not in root
+
+
+def test_the_question_and_the_answer_never_become_metadata():
+    wire = Wire()
+    chat_qa(tracer_for(wire, LANGFUSE_CAPTURE_CONTENT="true"), script(), QUESTION)
+    for key, value in attrs(wire.roots()[0]).items():
+        if key.startswith((MT, MO)):
+            assert QUESTION not in str(value), key
+
+
+# --------------------------------------------------------------------------- T-074: reasoning
+REASON = "SENTINEL-REASONING first I look at the three results and the stage standard"
+
+
+def message_with(**extra):
+    return {"choices": [{"message": {"role": "assistant", "content": "ok", **extra}}]}
+
+
+def test_the_reply_reads_reasoning_from_the_three_places_openrouter_uses():
+    assert reply_of(message_with(reasoning="r1")).reasoning == "r1"
+    assert reply_of(message_with(reasoning_content="r2")).reasoning == "r2"
+    details = [
+        {"type": "reasoning.text", "text": "a"}, {"type": "reasoning.summary", "summary": "b"},
+        {"type": "reasoning.encrypted", "data": "SECRET-BLOB"},
+    ]
+    found = reply_of(message_with(reasoning_details=details)).reasoning
+    assert found == "a\nb" and "SECRET-BLOB" not in found
+    assert reply_of(message_with(reasoning="x", reasoning_content="y")).reasoning == "x"
+
+
+def test_a_reply_without_usable_reasoning_has_none():
+    assert reply_of(message_with()).reasoning is None
+    assert reply_of(message_with(reasoning="   ")).reasoning is None
+    assert reply_of(message_with(reasoning=5)).reasoning is None
+    assert reply_of(message_with(reasoning_details="text")).reasoning is None
+    assert reply_of(SAMPLE).reasoning is None
+
+
+def test_reasoning_tokens_are_read_from_the_completion_details_and_nothing_else_changes():
+    block = {**SAMPLE["usage"], "completion_tokens_details": {"reasoning_tokens": 12}}
+    assert reply_of({**SAMPLE, "usage": block}).usage == {
+        "prompt_tokens": 120, "completion_tokens": 30, "total_tokens": 150, "cost": 0.000345,
+        "reasoning_tokens": 12,
+    }
+    for odd in (-1, "12", True, None):
+        bad = {**SAMPLE["usage"], "completion_tokens_details": {"reasoning_tokens": odd}}
+        assert "reasoning_tokens" not in reply_of({**SAMPLE, "usage": bad}).usage
+    assert "reasoning_tokens" not in reply_of(SAMPLE).usage
+
+
+def reasoning_reply(text=REASON, tokens=12):
+    usage = {**CALL1, "reasoning_tokens": tokens}
+    return Reply("The records show a steady trend.", usage=usage, reasoning=text)
+
+
+def test_reasoning_tokens_are_metadata_and_not_a_usage_details_key():
+    wire = Wire()
+    generation_direct(tracer_for(wire), reasoning_reply())
+    mine = attrs(wire.generations()[0])
+    assert mine[MO + "reasoning_tokens"] == 12
+    assert json.loads(mine["langfuse.observation.usage_details"]) == {
+        "input": 100, "output": 20, "total": 120,
+    }
+    assert attrs(wire.roots()[0])[MO + "total_reasoning_tokens"] == 12
+
+
+def test_by_default_the_reasoning_text_is_sent_nowhere():
+    wire = Wire()
+    generation_direct(tracer_for(wire), reasoning_reply())
+    assert "SENTINEL-REASONING" not in wire.text()
+    assert IO_OUT not in attrs(wire.generations()[0])
+
+
+def test_with_content_capture_on_the_reasoning_is_in_the_generation_output():
+    wire = Wire()
+    generation_direct(tracer_for(wire, LANGFUSE_CAPTURE_CONTENT="true"), reasoning_reply())
+    shown = json.loads(attrs(wire.generations()[0])[IO_OUT])
+    assert shown["reasoning"] == REASON and shown["text"] == "The records show a steady trend."
+
+
+def test_the_reasoning_is_cut_to_the_named_length_and_masked():
+    wire = Wire()
+    long_text = "Quillfeather " + "x" * (tracing.REASONING_MAX_CHARS + 500)
+    tracer = tracer_for(wire, LANGFUSE_CAPTURE_CONTENT="true")
+    generation_direct(tracer, reasoning_reply(long_text), mask=("Quillfeather",))
+    shown = json.loads(attrs(wire.generations()[0])[IO_OUT])["reasoning"]
+    assert len(shown) == tracing.REASONING_MAX_CHARS + len(tracing.TRUNCATED_SUFFIX)
+    assert shown.endswith(tracing.TRUNCATED_SUFFIX) and shown.startswith(tracing.WITHHELD)
+    assert "Quillfeather" not in wire.text()
+
+
+def test_a_lesson_never_sends_the_reasoning_text_but_does_count_its_tokens():
+    wire = Wire()
+    tracer = tracer_for(wire, LANGFUSE_CAPTURE_CONTENT="true")
+    generation_direct(tracer, reasoning_reply(), kind="lesson")
+    assert "SENTINEL-REASONING" not in wire.text()
+    mine = attrs(wire.generations()[0])
+    assert mine[MO + "reasoning_tokens"] == 12
+    assert "reasoning" not in json.loads(mine[IO_OUT])
+
+
+def test_a_reply_without_reasoning_has_no_reasoning_keys_anywhere():
+    wire = Wire()
+    generation_direct(tracer_for(wire, LANGFUSE_CAPTURE_CONTENT="true"), Reply("fine", usage=CALL1))
+    mine = attrs(wire.generations()[0])
+    assert "reasoning" not in json.loads(mine[IO_OUT])
+    assert MO + "reasoning_tokens" not in mine
+    assert MO + "total_reasoning_tokens" not in attrs(wire.roots()[0])
+
+
+def test_reasoning_text_without_a_token_count_is_still_handled():
+    wire = Wire()
+    reply = Reply("fine", usage=CALL1, reasoning=REASON)
+    generation_direct(tracer_for(wire, LANGFUSE_CAPTURE_CONTENT="true"), reply)
+    mine = attrs(wire.generations()[0])
+    assert MO + "reasoning_tokens" not in mine
+    assert json.loads(mine[IO_OUT])["reasoning"] == REASON
+
+
+def test_the_loop_never_hands_the_reasoning_back_to_the_model():
+    asking = dataclasses.replace(ask("get_criterion", {"query": "TR-1"}), reasoning=REASON)
+    model = FakeModel(asking, say("Done."))
+    chat(tracing.NullTracer(), model)
+    assert "SENTINEL-REASONING" not in json.dumps(model.seen[1][0])

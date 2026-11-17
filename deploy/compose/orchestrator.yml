@@ -42,6 +42,13 @@ services:
       LANGFUSE_HOST: ${LANGFUSE_HOST:-}
       LANGFUSE_CAPTURE_CONTENT: ${LANGFUSE_CAPTURE_CONTENT:-false}
       LANGFUSE_CAPTURE_TOOL_IO: ${LANGFUSE_CAPTURE_TOOL_IO:-false}
+      # One JSON line per finished run (tokens, cost, calls, latency, tool names; no prompts, no
+      # replies). Read by `make usage`. The path is on the usage_log volume below.
+      USAGE_LOG_FILE: ${USAGE_LOG_FILE:-/var/log/mdeis/usage.jsonl}
+    # Named volume so the log survives a restart. The image makes /var/log/mdeis owned by the
+    # orchestrator user (uid 10004), and Docker copies that owner into a new empty volume.
+    volumes:
+      - usage_log:/var/log/mdeis
     networks: [agent, data]
     depends_on:
       postgres:
