@@ -31,6 +31,8 @@ SHAPE = {
     "entry_parameters": WORD_LIST,
     "output_kind_constant": SINGLE_VALUE,
     "output_kinds": WORD_LIST,
+    "params_parameter": SINGLE_VALUE,
+    "params_key_separator": SINGLE_VALUE,
     "allowed_modules": WORD_MAP,
     "allowed_builtins": WORD_LIST,
     "float_names": WORD_LIST,
@@ -84,6 +86,8 @@ class Rules:
     entry_parameters: tuple[str, ...]
     output_kind_constant: str
     output_kinds: tuple[str, ...]
+    params_name: str  # the entry parameter that holds the template values, read by key only
+    key_separator: str  # between a clause ID and a field name in a key
     modules: dict  # module name -> tuple of the members that may be used
     builtins: frozenset[str]
     float_names: frozenset[str]
@@ -130,6 +134,8 @@ class Rules:
             entry_parameters=tuple(data["entry_parameters"]),
             output_kind_constant=data["output_kind_constant"],
             output_kinds=tuple(data["output_kinds"]),
+            params_name=data["params_parameter"],
+            key_separator=data["params_key_separator"],
             modules={m: tuple(members) for m, members in data["allowed_modules"].items()},
             builtins=frozenset(data["allowed_builtins"]),
             float_names=frozenset(data["float_names"]),
@@ -152,6 +158,8 @@ class Rules:
             "entry_parameters": list(self.entry_parameters),
             "output_kind_constant": self.output_kind_constant,
             "output_kinds": list(self.output_kinds),
+            "params_parameter": self.params_name,
+            "params_key_separator": self.key_separator,
             "allowed_modules": {m: list(members) for m, members in sorted(self.modules.items())},
             "allowed_builtins": sorted(self.builtins),
             "float_names": sorted(self.float_names),

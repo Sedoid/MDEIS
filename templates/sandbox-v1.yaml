@@ -28,6 +28,15 @@ entry_parameters: [records, params]            # PROPOSED: owner to confirm
 output_kind_constant: OUTPUT_KIND              # PROPOSED: owner to confirm
 output_kinds: [number, label, series, table]   # PROPOSED: owner to confirm
 
+# How a function reads the school's values. They arrive in the entry parameter named here, as text
+# keyed by clause ID (`params["MP-1"]`) or by clause ID, the separator and a field name
+# (`params["TR-1.window_terms"]`). The key must be written as plain text, so the static check can see
+# which values the function reads. The static check refuses a key the version does not declare
+# (`param_key_not_declared`), the parameter used in any other way, and a declared clause that is never
+# read (`param_unused`). A list of names arrives as one text, the names joined by a line break.
+params_parameter: params                       # PROPOSED: owner to confirm
+params_key_separator: "."                      # PROPOSED: owner to confirm
+
 # Imports. Only these modules, and only these members of them. `import math` then `math.isqrt` is
 # allowed; `math.sqrt` is not (it gives a float). `decimal.getcontext` is not (it is global state).
 # An import with `as` is not allowed, so a name always says what it is.

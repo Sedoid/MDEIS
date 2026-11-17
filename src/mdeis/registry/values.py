@@ -9,24 +9,42 @@ from __future__ import annotations
 
 from fractions import Fraction
 
-from ..core.template import SECTION_AREAS
+from ..core.template import OPTIONAL_SECTION_AREAS, SECTION_AREAS
 
 NOT_VALUES = ("id", "text", "method_ref")  # the fields of a rule that are never a value
+PARAMS_SECTION = "measure_params"  # its rules hold one typed `value` each
 
 
 def template_values(content: dict) -> dict[str, list[str]]:
     """{clause ID: [every number in that rule, as exact text]}. A rule with no number is left
     out."""
     held: dict[str, list[str]] = {}
-    for section in SECTION_AREAS:
+    for section in (*SECTION_AREAS, *OPTIONAL_SECTION_AREAS):
         for rule in content.get(section) or []:
             if not isinstance(rule, dict) or not isinstance(rule.get("id"), str):
                 continue
             found: list[str] = []
-            _collect({k: v for k, v in rule.items() if k not in NOT_VALUES}, found)
+            if section == PARAMS_SECTION:
+                _collect_param(rule, found)
+            else:
+                _collect({k: v for k, v in rule.items() if k not in NOT_VALUES}, found)
             if found:
                 held[rule["id"]] = found
     return held
+
+
+def _collect_param(rule: dict, found: list[str]) -> None:
+    """A measure parameter holds one value. A whole number or a quoted exact number is read as an
+    exact fraction; a list of names holds no number. Its unit, source and confirmer are not
+    values."""
+    value = rule.get("value")
+    if rule.get("value_type") == "rational" and isinstance(value, str):
+        try:
+            found.append(str(Fraction(value)))
+        except (ValueError, ZeroDivisionError):
+            pass
+    elif rule.get("value_type") == "integer":
+        _collect(value, found)
 
 
 def _collect(node, found: list[str]) -> None:

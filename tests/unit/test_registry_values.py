@@ -63,3 +63,68 @@ def test_a_value_the_template_holds_is_what_the_static_check_reports_as_a_duplic
     found = [f for f in report.findings if f.code == "duplicates_template_value"]
     # 3 is the number of terms in a year (CA-1) and the minimum for a trend (TR-1)
     assert [f.clause_ids for f in found] == [("CA-1", "TR-1")]
+
+
+# --------------------------------------------------------------------------- T-070: more sections
+V11 = yaml.safe_load(
+    (Path(__file__).resolve().parents[2] / "templates" / "v1.1.yaml").read_text(encoding="utf-8")
+)
+
+
+def mp(rule_id, value_type, value, unit="points"):
+    return {
+        "id": rule_id, "name": "n_" + rule_id.split("-")[1], "value_type": value_type,
+        "value": value, "unit": unit, "source_document": "BAO-METH-1.0", "method_ref": "6.4",
+        "confirmed_by": "Ada Teacher", "text": "t",
+    }  # fmt: skip
+
+
+def test_the_numbers_of_the_lessons_rule_are_now_seen():
+    # LS-1 in v1.1.yaml: 8000 characters of notes, 12 edits, 1500 characters per edit. The old
+    # loop over the required sections only never saw them.
+    got = template_values(V11)
+    assert got["LS-1"] == ["8000", "12", "1500"]
+    assert "LS-1" not in template_values(V1), "v1.yaml has no lessons section"
+
+
+def test_the_class_view_numbers_of_v1_1_are_still_seen():
+    assert template_values(V11)["GM-2"] == ["5"]
+
+
+def test_a_measure_parameter_is_read_by_its_clause_id_with_an_exact_value():
+    content = {
+        "measure_params": [
+            mp("MP-1", "integer", 10),
+            mp("MP-2", "rational", "3/5", "percent"),
+            mp("MP-3", "rational", "0.6", "percent"),
+            mp("MP-4", "integer", 0),
+        ]
+    }
+    assert template_values(content) == {
+        "MP-1": ["10"], "MP-2": ["3/5"], "MP-3": ["3/5"], "MP-4": ["0"],
+    }  # fmt: skip
+
+
+def test_a_names_value_holds_no_number_and_the_other_fields_of_a_parameter_are_not_values():
+    levels = mp("MP-5", "names", ["Starting", "Practising"], "none")
+    levels["unit"] = "none"
+    levels["method_ref"] = "3"
+    assert template_values({"measure_params": [levels]}) == {}
+    # the document name (BAO-METH-1.0) and the method_ref (6.4) are text, not values of the rule
+    assert template_values({"measure_params": [mp("MP-6", "integer", 7)]}) == {"MP-6": ["7"]}
+
+
+def test_a_literal_equal_to_a_measure_parameter_is_reported_with_its_clause_id():
+    from mdeis.sandbox import static_check
+    from mdeis.sandbox.config import load_rules
+
+    source = (
+        'OUTPUT_KIND = "number"\n\n\ndef measure(records, params):\n'
+        '    return {"value": str(len(records) * 10)}\n'
+    )
+    content = {"measure_params": [mp("MP-1", "integer", 10)]}
+    report = static_check.check_source(
+        source, output_kind="number", rules=load_rules(), template_values=template_values(content)
+    )
+    found = [f for f in report.findings if f.code == "duplicates_template_value"]
+    assert [f.clause_ids for f in found] == [("MP-1",)]

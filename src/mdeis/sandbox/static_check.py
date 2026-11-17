@@ -19,7 +19,11 @@ What it holds the source to (every list and every limit is in the rules file, no
     in the template is also reported with its clause ID. The check reports it and does not guess
     which clause the author meant;
   * one entry function with the fixed parameters, and one module constant that declares the output
-    kind and equals the kind the registry holds. Without it the function is rejected.
+    kind and equals the kind the registry holds. Without it the function is rejected;
+  * when the clause IDs the version declares are given: the school's values are read only by a key
+    written as plain text and naming a declared clause (`param_key_not_declared`), the values
+    parameter is used in no other way, and every declared clause is read (`param_unused`). When they
+    are not given (the runner, which does not know them), these two checks are not made.
 """
 
 from __future__ import annotations
@@ -71,8 +75,12 @@ def check_source(
     output_kind: str | None,
     rules: Rules,
     template_values: Mapping[str, Iterable[str]] | None = None,
+    declared_clause_ids: Iterable[str] | None = None,
 ) -> Report:
-    """Check one generated function against the rules. Never runs the source."""
+    """Check one generated function against the rules. Never runs the source.
+
+    `declared_clause_ids` are the clauses the registry version says it reads (`clause_ids`). Give
+    them to make the two value-reading checks; leave them out and those checks are skipped."""
     if len(source) > rules.source_max_chars:
         size = f"the source has {len(source)} characters; the rules allow {rules.source_max_chars}"
         return _report(rules, [Finding("source_too_large", 1, size)])
@@ -88,7 +96,21 @@ def check_source(
         _inspect(node, line, scope, found)
     _entry(tree, rules, found)
     _declared_kind(tree, output_kind, rules, found)
+    if declared_clause_ids is not None:
+        _values_read(nodes, rules, frozenset(declared_clause_ids), found)
     return _report(rules, found)
+
+
+def params_read(source: str, rules: Rules) -> tuple[str, ...]:
+    """The keys the source reads from the values parameter, as plain text, sorted and without
+    repeats. Reads the source and never runs it. A source that does not parse reads none. The build
+    keeps this list with the version; the wrapper builds exactly these values for a run."""
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError, RecursionError, MemoryError):
+        return ()
+    keys = {key for key, _, _ in _reads(_nodes(tree), rules) if key is not None}
+    return tuple(sorted(keys))
 
 
 def _report(rules: Rules, found: list[Finding]) -> Report:
@@ -215,7 +237,9 @@ def _import(node: ast.Import, line: int, rules: Rules, found: list[Finding]) -> 
 def _import_from(node: ast.ImportFrom, line: int, rules: Rules, found: list[Finding]) -> None:
     module = node.module or ""
     if node.level or module not in rules.modules:
-        shown = ("." * node.level) + module
+        # No dot is written here: the key separator is a rule value, and a test keeps rule values
+        # out of the Python. The message says "relative" in words instead.
+        shown = f"a relative import (level {node.level}) of {module}" if node.level else module
         _add(found, "import_not_allowed", line, f"the module {shown} cannot be imported")
         return
     for alias in node.names:
@@ -227,7 +251,7 @@ def _import_from(node: ast.ImportFrom, line: int, rules: Rules, found: list[Find
             continue
         _under_another_name(alias, line, found)
         if alias.name not in rules.modules[module]:
-            detail = f"{module}.{alias.name} cannot be imported"
+            detail = f"{alias.name} from {module} cannot be imported"
             _add(found, "import_member_not_allowed", line, detail)
 
 
@@ -254,7 +278,7 @@ def _attribute(node: ast.Attribute, line: int, scope: _Scope, found: list[Findin
         _add(found, "attribute_not_allowed", line, f"the attribute {attribute} is not allowed")
     elif isinstance(node.value, ast.Name) and node.value.id in scope.modules:
         if attribute not in rules.modules[node.value.id]:
-            detail = f"{node.value.id}.{attribute} cannot be used"
+            detail = f"{attribute} of {node.value.id} cannot be used"
             _add(found, "module_member_not_allowed", line, detail)
 
 
@@ -285,6 +309,52 @@ def _duplicate(number, shown: str, line: int, scope: _Scope, found: list[Finding
     if clauses:
         detail = f"{shown} is a value the template holds: read it from the template"
         _add(found, "duplicates_template_value", line, detail, clauses)
+
+
+# --- the school's values ----------------------------------------------------------------------
+def _reads(nodes, rules: Rules):
+    """(key, line, problem) for each use of the values parameter. `key` is the plain text key of a
+    subscript read, or None; `problem` is None for a good read, else what is wrong with the use."""
+    based: set[int] = set()
+    for node, _ in nodes:
+        if (
+            isinstance(node, ast.Subscript)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == rules.params_name
+        ):
+            based.add(id(node.value))
+    for node, line in nodes:
+        if isinstance(node, ast.Subscript) and id(node.value) in based:
+            key = node.slice
+            if not isinstance(node.ctx, ast.Load):
+                yield None, line, "a value is written to the values parameter"
+            elif isinstance(key, ast.Constant) and isinstance(key.value, str):
+                yield key.value, line, None
+            else:
+                yield None, line, "the key is not plain text written in the source"
+        elif (
+            isinstance(node, ast.Name)
+            and node.id == rules.params_name
+            and id(node) not in based
+        ):
+            yield None, line, "the values parameter is used without a key"
+
+
+def _values_read(nodes, rules: Rules, declared: frozenset, found: list[Finding]) -> None:
+    read: set[str] = set()
+    for key, line, problem in _reads(nodes, rules):
+        if problem is not None:
+            _add(found, "param_key_not_declared", line, problem)
+            continue
+        clause = key.partition(rules.key_separator)[0]
+        if clause in declared:
+            read.add(clause)
+        else:
+            detail = f"the key {key!r} names a clause the version does not declare"
+            _add(found, "param_key_not_declared", line, detail, (clause,) if clause else ())
+    for clause in sorted(declared - read):
+        detail = f"the version declares {clause} and the source never reads it"
+        _add(found, "param_unused", 1, detail, (clause,))
 
 
 # --- the shape of the whole source -------------------------------------------------------------

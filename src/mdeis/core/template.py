@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+from fractions import Fraction
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -41,10 +42,32 @@ SECTION_AREAS: dict[str, str] = {
 
 # Sections a template may leave out. A template without one still loads (v1 and v2-strict have no
 # `lessons`); when present, its rules are checked and cited like every other rule.
-OPTIONAL_SECTION_AREAS: dict[str, str] = {"lessons": "LS"}
+# `measure_params` (area MP) holds the values a generated measure reads, one value per rule.
+OPTIONAL_SECTION_AREAS: dict[str, str] = {"lessons": "LS", "measure_params": "MP"}
 
 # Limits a `lessons` section must set, each by exactly one rule.
 LESSON_PARAMS: tuple[str, ...] = ("max_notes_chars", "max_edits", "max_edit_chars")
+
+# What a `measure_params` rule may hold. Schema vocabulary, like BIN_NAMES, not school values.
+# integer: a whole number from 0 up. rational: a quoted exact number such as "3/5" or "0.6", never a
+# YAML float. names: an ordered list of different texts, where the order is the meaning.
+MEASURE_PARAM_TYPES: tuple[str, ...] = ("integer", "rational", "names")
+MEASURE_UNITS: tuple[str, ...] = (
+    "points",
+    "scores",
+    "checks",
+    "terms",
+    "grades",
+    "learners",
+    "percent",
+    "none",
+)
+NAMES_TYPE = "names"  # the type whose unit must be "none"
+NO_UNIT = "none"
+# lower case words joined by underscores: the boundary is meant to be in the name
+PARAM_NAME = re.compile(r"^[a-z][a-z0-9]*(_[a-z0-9]+)*$")
+# a quoted exact number: digits, or digits with a decimal part, or a fraction with a non-zero bottom
+RATIONAL_TEXT = re.compile(r"^(?:[0-9]+(?:\.[0-9]+)?|[0-9]+/[0-9]+)$")
 
 # The five counts a class view shows for a learning area. Schema, not a school rule: the code
 # knows these five and no others; the template (GM-3) says in what order they are shown.
@@ -258,6 +281,100 @@ class LessonRule(_Rule):
     max_edit_chars: PosInt | None = None
 
 
+class MeasureParamRule(_Rule):
+    """One value a generated measure reads, with where it came from and who confirmed it.
+
+    One value per rule, so each number can be cited by itself. `confirmed_by` is null until a
+    registered teacher confirms the value; a template with null still loads, and a measure that
+    reads such a value refuses to run (mdeis.core.measure_params)."""
+
+    name: Name
+    value_type: str
+    value: Any
+    unit: str
+    source_document: Name
+    method_ref: Name  # required here (optional on other rules)
+    confirmed_by: Name | None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _typed_value(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        rid = data.get("id", "(no id)")
+        for key in ("source_document", "method_ref"):
+            got = data.get(key)
+            if not isinstance(got, str) or not got.strip():
+                raise ValueError(f"measure_params rule {rid} needs {key} as quoted, non-empty text")
+        if "confirmed_by" not in data:
+            raise ValueError(
+                f"measure_params rule {rid} must carry the key confirmed_by "
+                "(null until a registered teacher confirms the value)"
+            )
+        who = data["confirmed_by"]
+        if who is not None and (not isinstance(who, str) or not who.strip()):
+            raise ValueError(f"confirmed_by of {rid} must be null or a name")
+        name = data.get("name")
+        if not isinstance(name, str) or not PARAM_NAME.match(name):
+            raise ValueError(f"name of {rid} must be lower case words joined by underscores")
+        kind, value, unit = data.get("value_type"), data.get("value"), data.get("unit")
+        if kind not in MEASURE_PARAM_TYPES:
+            known = ", ".join(MEASURE_PARAM_TYPES)
+            raise ValueError(f"value_type of {rid} must be one of {known}")
+        if unit not in MEASURE_UNITS:
+            raise ValueError(f"unit of {rid} must be one of {', '.join(MEASURE_UNITS)}")
+        if kind == NAMES_TYPE and unit != NO_UNIT:
+            raise ValueError(f"unit of {rid} must be {NO_UNIT} for a names value")
+        _check_param_value(rid, kind, value)
+        _check_text_says_value(rid, kind, value, data.get("text"))
+        return data
+
+
+def _one_line(text: str) -> bool:
+    return not any(ch in text for ch in ("\n", "\r"))
+
+
+def _check_param_value(rid: str, kind: str, value: Any) -> None:
+    if kind == "integer":
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"value of {rid} must be a whole number from 0 up, written unquoted")
+    elif kind == "rational":
+        if not isinstance(value, str) or not RATIONAL_TEXT.match(value):
+            raise ValueError(
+                f"value of {rid} must be a quoted exact number such as \"3/5\" or \"0.6\""
+            )
+        try:
+            Fraction(value)
+        except ZeroDivisionError:
+            raise ValueError(f"value of {rid} has a zero bottom") from None
+    else:
+        ok = isinstance(value, list) and bool(value)
+        ok = ok and all(isinstance(v, str) and v.strip() and _one_line(v) for v in value)
+        if not ok:
+            raise ValueError(
+                f"value of {rid} must be a list of one or more texts, each on one line"
+            )
+        if len(set(value)) != len(value):
+            raise ValueError(f"value of {rid} lists the same name twice")
+
+
+def _says(text: str, number: str) -> bool:
+    """The number appears in the text as a separate number (not inside 100, 1.5 or 3/5)."""
+    pattern = r"(?<![0-9.,/])" + re.escape(number) + r"(?![0-9]|[.,/][0-9])"
+    return re.search(pattern, text) is not None
+
+
+def _check_text_says_value(rid: str, kind: str, value: Any, text: Any) -> None:
+    if not isinstance(text, str):
+        return  # the base rule reports a missing text
+    if kind == NAMES_TYPE:
+        missing = [v for v in value if v not in text]
+        if missing:
+            raise ValueError(f"the text of {rid} does not say the name {missing[0]!r}")
+    elif not _says(text, str(value)):
+        raise ValueError(f"the text of {rid} does not say the value {value}")
+
+
 class GroupMinimumRule(_Rule):
     """GM-1 sets the smallest group that may be shown. GM-2 and GM-3 are the class-view rules: the
     smallest count that may be shown, and what is hidden along with a small count. They come
@@ -277,6 +394,24 @@ class GroupMinimumRule(_Rule):
                 "each once, in the order the class view shows them"
             )
         return self
+
+
+# The rule models whose field names a measure parameter may not reuse (one home per setting).
+_HAND_WRITTEN_RULES = (
+    ScaleRule,
+    CoefficientRule,
+    StageWeightRule,
+    CalculationRule,
+    AreaRule,
+    StageRule,
+    LevelRule,
+    TrendRule,
+    ExceptionRule,
+    WordingRule,
+    GroupMinimumRule,
+    LessonRule,
+)
+_NOT_SETTINGS = frozenset(_Rule.model_fields)
 
 
 class Institution(_Model):
@@ -325,6 +460,7 @@ class Template(_Model):
     wording: list[WordingRule]
     group_minimum: list[GroupMinimumRule]
     lessons: list[LessonRule] = Field(default_factory=list)
+    measure_params: list[MeasureParamRule] = Field(default_factory=list)
 
     # -- rejection of a missing area comes first, with a clear message --------------------------
 
@@ -355,6 +491,7 @@ class Template(_Model):
         self._check_required_params()
         self._check_class_view_rules()
         self._check_lesson_rules()
+        self._check_measure_params()
         self._check_dates_and_window(max_score)
         return self
 
@@ -518,6 +655,31 @@ class Template(_Model):
                 raise ValueError(f"no lessons rule sets {param}")
             if len(setters) != 1:
                 raise ValueError(f"{param} is set by both {setters[0]} and {setters[1]}")
+
+    def _check_measure_params(self) -> None:
+        """A name is used once per source document, is not the name of a field of a hand-written
+        rule, and a parameter's text is not the text of any other clause."""
+        if not self.measure_params:
+            return
+        taken = {f for model in _HAND_WRITTEN_RULES for f in model.model_fields} - _NOT_SETTINGS
+        seen: set[tuple[str, str]] = set()
+        for rule in self.measure_params:
+            key = (rule.source_document, rule.name)
+            if key in seen:
+                raise ValueError(
+                    f"{rule.source_document} gives the setting {rule.name} twice (see {rule.id})"
+                )
+            seen.add(key)
+            if rule.name in taken:
+                raise ValueError(
+                    f"{rule.id}: the name {rule.name} is a field of a hand-written rule; "
+                    "read that rule instead of making a second copy"
+                )
+        area = OPTIONAL_SECTION_AREAS["measure_params"]
+        others = [c.text for c in self.clauses() if c.area != area]
+        for rule in self.measure_params:
+            if rule.text in others:
+                raise ValueError(f"{rule.id} repeats the text of another clause")
 
     def _check_class_view_rules(self) -> None:
         """GM-2 and GM-3 together or not at all, each parameter set once, and a cell never larger
