@@ -16,6 +16,12 @@ refused, so no field can name a person, a school, a learner, a status or a decis
     POST /human/measures/{measure_id}/{version}/case     {"stage", "entries", "expected", "agreed"}
     POST /human/measures/{measure_id}/{version}/confirm  {"note"} (the note is optional)
     POST /human/measures/{measure_id}/{version}/reject   {"note"} (the note is needed)
+    GET  /human/measures/held                         the versions the automated review holds
+    POST /human/measures/{measure_id}/{version}/clear-hold  {"note"} (the note is needed)
+
+The last two are the approver's: a hold of the automated review is cleared by a named signed-in
+person with a note (T-077). Clearing removes the hold only: it approves nothing, and the version
+goes on to the demo, where a teacher still decides. The automated review can only hold.
 
 Each route calls one function of the demo's store, which reads the signed-in person from the context
 made here, checks that the person is a registered teacher, and writes its own action-log row,
@@ -46,6 +52,7 @@ TRY_FIELDS = compose.TRY_FIELDS
 CASE_FIELDS = compose.CASE_FIELDS
 CONFIRM_FIELDS = ("note",)
 REJECT_FIELDS = ("note",)
+CLEAR_HOLD_FIELDS = ("note",)
 MEASURE_ID = re.compile(r"^MS-[0-9]{4,}$")  # the form the database gives a measure number
 VERSION = re.compile(r"^[1-9][0-9]*$")  # a version is a whole number from one
 
@@ -56,14 +63,16 @@ PATHS = {
     "case": "/human/measures/{measure_id}/{version}/case",
     "confirm": "/human/measures/{measure_id}/{version}/confirm",
     "reject": "/human/measures/{measure_id}/{version}/reject",
+    "held": "/human/measures/held",
+    "clear_hold": "/human/measures/{measure_id}/{version}/clear-hold",
 }
 STORE_FUNCTIONS = {
     "list": "list_awaiting", "open": "open_demo", "try": "try_measure", "case": "save_case",
-    "confirm": "confirm", "reject": "reject",
+    "confirm": "confirm", "reject": "reject", "held": "list_held", "clear_hold": "lift_hold",
 }
 GOOD_STATUS = {
     "list": "ok", "open": "ok", "try": "ok", "case": "saved", "confirm": "confirmed",
-    "reject": "rejected",
+    "reject": "rejected", "held": "ok", "clear_hold": "cleared",
 }
 # What a refusal may carry besides its words: what the page needs to say what is missing or to show
 # both answers. Nothing else of the store's answer is handed on with a refusal.
@@ -75,6 +84,8 @@ CODES = {
     "not_signed_in": ("not_signed_in", 401),
     "no_school": ("no_school", 403),
     "not_a_teacher": ("not_a_teacher", 403),
+    "not_a_developer": ("not_a_developer", 403),
+    "not_held": ("not_held", 409),
     "not_found": ("measure_not_found", 404),
     "not_at_demo": ("not_at_demo", 409),
     "approval_conditions_not_met": ("approval_conditions_not_met", 409),
@@ -89,6 +100,9 @@ REFUSAL_TYPES = (
     ("no one is signed in", "not_signed_in", 401),
     ("no school is attached", "no_school", 403),
     ("not recorded as a teacher", "not_a_teacher", 403),
+    ("not recorded as a developer", "not_a_developer", 403),
+    ("no hold on this version", "not_held", 409),
+    ("the hold was already cleared", "not_held", 409),
     ("there is no version", "measure_not_found", 404),
     ("a decision is taken at the demo", "not_at_demo", 409),
     ("the registry refused it", "approval_conditions_not_met", 409),
@@ -158,7 +172,7 @@ class _MeasureRoutes(human_routes._Routes):
         if problem:
             status, reason = problem
             return refuse(status, reason)
-        if name != "list" and (shown is None or number is None):
+        if name not in ("list", "held") and (shown is None or number is None):
             return refuse(404, "measure_not_found", who=who)
         try:
             return self._serve(name, who, run_id, url, shown, number, raw, refuse)
@@ -167,11 +181,11 @@ class _MeasureRoutes(human_routes._Routes):
 
     def _serve(self, name, who, run_id, url, measure_id, number, raw, refuse) -> tuple:
         arguments: dict = {}
-        if name != "list":
+        if name not in ("list", "held"):
             arguments = {"measure_id": measure_id, "version": int(number)}
-        if name in ("try", "case", "confirm", "reject"):
+        if name in ("try", "case", "confirm", "reject", "clear_hold"):
             fields = {"try": TRY_FIELDS, "case": CASE_FIELDS, "confirm": CONFIRM_FIELDS,
-                      "reject": REJECT_FIELDS}[name]  # fmt: skip
+                      "reject": REJECT_FIELDS, "clear_hold": CLEAR_HOLD_FIELDS}[name]  # fmt: skip
             if name == "confirm" and not raw.strip():
                 body, problem = {}, None  # a confirmation may carry no body at all
             else:
@@ -213,7 +227,7 @@ class _MeasureRoutes(human_routes._Routes):
         if name == "confirm":
             return bad if note is not None and not isinstance(note, str) else {"note": note}
         if not isinstance(note, str) or not note.strip():
-            return (422, "note_needed")
+            return (422, "note_needed")  # a rejection and a cleared hold both need their note
         return {"note": note}
 
     def _reply(self, name, result, who, refuse) -> tuple:
@@ -230,7 +244,7 @@ class _MeasureRoutes(human_routes._Routes):
 
 
 def install(app, *, store=demo_api, connect=None, env=None, commit=True) -> None:
-    """Add the six routes to `app` (the FastMCP server, or anything with `custom_route`).
+    """Add the eight routes to `app` (the FastMCP server, or anything with `custom_route`).
 
     `env` is read at each request, so the key and the secret are never copied. `connect`, `commit`
     and `store` are there so a test can put a fake in their place. Unlike the lesson routes these do
@@ -256,3 +270,5 @@ def install(app, *, store=demo_api, connect=None, env=None, commit=True) -> None
     app.custom_route(PATHS["case"], methods=["POST"])(serve("case"))
     app.custom_route(PATHS["confirm"], methods=["POST"])(serve("confirm"))
     app.custom_route(PATHS["reject"], methods=["POST"])(serve("reject"))
+    app.custom_route(PATHS["held"], methods=["GET"])(serve("held"))
+    app.custom_route(PATHS["clear_hold"], methods=["POST"])(serve("clear_hold"))

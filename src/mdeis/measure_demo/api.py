@@ -1,4 +1,6 @@
 """The demo's functions: what a registered teacher can do with a measure that waits at the demo.
+With the server setting `REVIEWERS_ARE_APPROVERS` on, a signed-in approver with a school counts as
+one (T-077).
 
     list_awaiting   the versions waiting for a teacher
     open_demo       everything a teacher needs to decide, with the worked examples run for real
@@ -7,6 +9,8 @@
                     build (only when the function's answer is the same)
     confirm         the teacher's decision to confirm, with a note if they wish
     reject          the teacher's decision to reject, with the reason
+    list_held       the versions the automated review holds (the approver's)
+    lift_hold       the approver clears one hold, with a note (the approver's)
 
 Each takes the context first (the connection, the run and the signed-in person) and plain arguments.
 None has an argument that names a person, a school, a learner or a decision: the person and the
@@ -16,10 +20,13 @@ person, including when it refuses.
 
 What these functions never do. They never approve by themselves: opening, trying and saving a case
 leave the version where it was, and only `confirm` records a decision (through the registry's own
-function, which the database backs with its own constraint). They never move a version along, clear
-a hold, create or retire anything, and never write SQL of their own to the registry. They call no
-model. Every number comes from the function, run in the sandbox through `sandbox.with_template`,
-with the values the rulebook and the build's proposed patch give it.
+function, which the database backs with its own constraint). They never move a version along by a
+call of their own, create or retire anything, and never write SQL of their own to the registry. The
+one place a hold is cleared is `lift_hold`, through the registry's own function, for a named
+signed-in person with a note: it removes the hold only, approves nothing, and the registry moves the
+version on to the demo, where a teacher still decides. The automated review can only hold. They
+call no model. Every number comes from the function, run in the sandbox through
+`sandbox.with_template`, with the values the rulebook and the build's proposed patch give it.
 
 A refusal is a `Refusal` whose first words are a code in square brackets, so the routes can type it.
 """
@@ -30,12 +37,13 @@ from typing import NoReturn
 
 from psycopg.rows import dict_row
 
+from .. import approver_setting as setting
 from ..core import measures as core
 from ..core.numbers import exact_text
 from ..core.rules import load_rules
 from ..measure_build import engine
 from ..measure_build import store as build_store
-from ..registry import record_teacher_decision, record_tests
+from ..registry import clear_hold, record_teacher_decision, record_tests
 from ..registry import transitions as t
 from ..sandbox import with_template
 from ..sandbox.protocol import UNAVAILABLE
@@ -45,6 +53,10 @@ from ..tools.context import Refusal, ToolContext
 from . import compose
 
 SKIPPED_FIELDS = ("section_id", "title", "change", "clause_ids", "tool", "reason")
+HOLD_NEXT_STEP = (
+    "The hold is cleared. Nothing is approved: the version now waits at the demo, where a teacher "
+    "still tries it and decides."
+)
 NEXT_STEP = (
     "An administrator now applies the template patch with apply-template-patch, so the values you "
     "confirmed enter the school's rulebook. Until then this measure is approved but is not offered "
@@ -76,29 +88,49 @@ def _cursor(ctx: ToolContext):
     return ctx.conn.cursor(row_factory=dict_row)
 
 
-def _teacher(ctx: ToolContext) -> str:
-    """The name the registry holds for the signed-in teacher, or a refusal. The person is the one in
-    the session; the school must be attached to it. Nothing here reads either from an argument."""
+def _person(ctx: ToolContext, role: str, code: str) -> str:
+    """The name the registry holds for the signed-in person in `role`, or a refusal. The person is
+    the one in the session; the school must be attached to it. Nothing here reads either from an
+    argument.
+
+    With `REVIEWERS_ARE_APPROVERS` on, a signed-in approver with a school and no record in the
+    registry is accepted under the name the token gave. Nothing is written here: the registry makes
+    the row, in the same savepoint as the decision (`registry.approvers`). A record an administrator
+    ended is still refused."""
     who = ctx.approver
     if who is None:
         _refuse("not_signed_in", "no one is signed in, so this cannot be done")
-    school = getattr(ctx, "school", None)
-    if not isinstance(school, str) or not school.strip():
+    if setting.school_of(ctx) is None:
         _refuse("no_school", "no school is attached to this session")
     row = (
         _cursor(ctx)
         .execute(
             "SELECT name FROM registry_reviewers "
             "WHERE user_id = %s AND role = %s AND revoked_at IS NULL",
-            (who.id, t.TEACHER),
+            (who.id, role),
         )
         .fetchone()
     )
-    if row is None:
-        _refuse(
-            "not_a_teacher", "the signed-in person is not recorded as a teacher in the registry"
-        )
-    return row["name"]
+    if row is not None:
+        return row["name"]
+    if setting.enabled():
+        if setting.ended(ctx.conn, who.id, role):
+            _refuse(code, setting.ended_text(role))
+        name = setting.name_of(who)
+        if name is None:
+            _refuse(code, "the signed-in approver has no name in the session")
+        return name
+    _refuse(code, f"the signed-in person is not recorded as a {role} in the registry")
+
+
+def _teacher(ctx: ToolContext) -> str:
+    """The signed-in teacher (see `_person`): the demo's functions are a teacher's."""
+    return _person(ctx, t.TEACHER, "not_a_teacher")
+
+
+def _developer(ctx: ToolContext) -> str:
+    """The signed-in developer (see `_person`): who may see and clear a hold."""
+    return _person(ctx, t.DEVELOPER, "not_a_developer")
 
 
 def _load(ctx: ToolContext, measure_id, version) -> dict:
@@ -541,4 +573,60 @@ def reject(ctx: ToolContext, measure_id, version, note):
         "teacher_name": after["teacher_name"],
         "note": note,
         "next_step": KEPT_STEP,
+    }, "ok"
+
+
+# --- the approver's: a hold of the automated review ----------------------------------------------
+@logged_tool("measure_demo_held")
+def list_held(ctx: ToolContext):
+    """The versions the automated review holds and nobody has cleared, oldest first, with the
+    reasons the review gave. Nothing is changed."""
+    _developer(ctx)
+    rows = (
+        _cursor(ctx)
+        .execute(
+            "SELECT m.measure_id, v.version, m.name, m.method_ref, v.description, "
+            "v.review_reasons FROM measure_versions v JOIN measures m USING (measure_id) "
+            "WHERE v.status = %s AND v.review_result = %s AND v.hold_cleared_by_id IS NULL "
+            "AND m.status = 'active' ORDER BY m.measure_id, v.version",
+            (t.AWAITING_REVIEW, t.HOLD),
+        )
+        .fetchall()
+    )
+    listed = [compose.held_item(r) for r in rows]
+    return {"status": "ok", "held": len(listed), "measures": listed}, "ok"
+
+
+@logged_tool("measure_demo_lift_hold")
+def lift_hold(ctx: ToolContext, measure_id, version, note):
+    """The signed-in approver clears the hold on one version, with a note saying what they checked.
+
+    This removes the hold and nothing else. It approves nothing and makes no decision: the registry
+    moves the version on to the demo, and a teacher still tries it and decides. The person and the
+    note are recorded by the registry's own function (`clear_hold`), which the database backs with
+    its own guard. The automated review can only hold: it never reaches this."""
+    _developer(ctx)
+    note = _clean_note(note)
+    if note is None:
+        _refuse("note_needed", "a note saying what you checked is needed")
+    row = _load(ctx, measure_id, version)
+    if (
+        row["status"] != t.AWAITING_REVIEW
+        or row["review_result"] != t.HOLD
+        or row["hold_cleared_name"] is not None
+    ):
+        _refuse("not_held", "there is no hold on this version to clear")
+    cleared = clear_hold(ctx, measure_id=measure_id, version=version, note=note, to_demo=True)
+    if cleared.get("status") != "ok":
+        return {"status": "refused", "reason": cleared.get("reason") or "refused"}, "refused"
+    after = _load(ctx, measure_id, version)
+    return {
+        "status": "cleared",
+        "measure_id": measure_id,
+        "version": version,
+        "from_status": row["status"],
+        "to_status": after["status"],
+        "cleared_by_name": after["hold_cleared_name"],
+        "note": note,
+        "next_step": HOLD_NEXT_STEP,
     }, "ok"

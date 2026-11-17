@@ -42,6 +42,9 @@ ROUTES = [
     ("POST", f"{BASE}/case", CASE, f"/human/measures/{MS}/1/case"),
     ("POST", f"{BASE}/confirm", {"note": "checked"}, f"/human/measures/{MS}/1/confirm"),
     ("POST", f"{BASE}/reject", {"note": "no"}, f"/human/measures/{MS}/1/reject"),
+    # T-077: the approver's list of held versions and the clearing of one hold
+    ("GET", "/portal/measures/held", None, "/human/measures/held"),
+    ("POST", f"{BASE}/clear-hold", {"note": "read it"}, f"/human/measures/{MS}/1/clear-hold"),
 ]
 
 
@@ -177,7 +180,7 @@ NAMING = ["approver", "approver_id", "approver_name", "user", "user_id", "name",
 @pytest.mark.parametrize("field", NAMING)
 @pytest.mark.parametrize("path,body", [
     (f"{BASE}/try", TRY), (f"{BASE}/case", CASE), (f"{BASE}/confirm", {"note": "n"}),
-    (f"{BASE}/reject", {"note": "n"}),
+    (f"{BASE}/reject", {"note": "n"}), (f"{BASE}/clear-hold", {"note": "n"}),
 ])
 def test_a_body_cannot_name_a_person_a_school_a_status_or_a_decision(world, path, body, field):
     client, backends = world
@@ -206,6 +209,10 @@ def test_an_entry_cannot_carry_a_learner_a_name_a_school_or_a_person(world, fiel
     (f"{BASE}/reject", {}),
     (f"{BASE}/reject", {"note": ""}),
     (f"{BASE}/confirm", {"note": 3}),
+    (f"{BASE}/clear-hold", {}),
+    (f"{BASE}/clear-hold", {"note": ""}),
+    (f"{BASE}/clear-hold", {"note": 3}),
+    (f"{BASE}/clear-hold", {"note": None}),
 ])
 def test_a_body_of_the_wrong_shape_is_refused_here_and_sent_nowhere(world, path, body):
     client, backends = world
@@ -221,6 +228,7 @@ def test_a_measure_number_or_version_that_is_not_one_of_ours_is_refused_here(wor
     client, backends = world
     assert call(client, "GET", path, None).status_code == 422
     assert call(client, "POST", path + "/confirm", {}).status_code == 422
+    assert call(client, "POST", path + "/clear-hold", {"note": "n"}).status_code == 422
     assert backends.seen == []
 
 
@@ -261,5 +269,31 @@ def test_the_gateway_has_exactly_these_methods_routes_and_none_is_a_chat_route()
         ("/portal/measures/{measure_id}/{version}/case", "POST"),
         ("/portal/measures/{measure_id}/{version}/confirm", "POST"),
         ("/portal/measures/{measure_id}/{version}/reject", "POST"),
+        ("/portal/measures/held", "GET"),
+        ("/portal/measures/{measure_id}/{version}/clear-hold", "POST"),
     }
     assert not [p for p in found if "measure" in p[0] and not p[0].startswith("/portal/")]
+
+
+def test_a_clear_hold_needs_a_note_even_with_no_body_at_all(world):
+    client, backends = world
+    assert client.post(f"{BASE}/clear-hold", headers=PORTAL).status_code == 422
+    assert backends.seen == []
+
+
+def test_the_held_list_is_read_with_the_same_gate_and_names_no_measure(world):
+    client, backends = world
+    answer = call(client, "GET", "/portal/measures/held", None)
+    assert answer.status_code == 200
+    (sent,) = backends.seen
+    assert str(sent.url) == MCP + "/human/measures/held" and sent.method == "GET"
+    who = approver_token.verify(SECRET, sent.headers["x-approver-token"])
+    assert (who.id, who.name, who.school) == ("u-1", "Ms Teacher", "TST")
+
+
+def test_the_gateway_names_no_function_of_the_registry_or_the_demo_for_a_hold():
+    from pathlib import Path
+
+    text = Path(gateway.__file__).read_text("utf-8")
+    for word in ("clear_hold", "lift_hold", "list_held", "record_review", "mdeis.registry"):
+        assert word not in text, word

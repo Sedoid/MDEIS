@@ -9,7 +9,9 @@ package is what the teacher sees and does while it waits:
     api       the demo's functions. Each takes the context (the connection and the signed-in
               person) and plain arguments, and writes one action-log row. They open the demo, run
               the function in the sandbox on the teacher's synthetic scores, store a teacher case,
-              and record the teacher's decision.
+              and record the teacher's decision. Two more are the approver's (T-077): list the
+              versions the automated review holds, and clear one hold with a note (it approves
+              nothing; the version goes on to the demo and a teacher still decides).
 
 Two rules hold everywhere here:
 

@@ -5,10 +5,14 @@
 // a measure comes from the server. This file holds no stage, subject, scale, rule or number about a
 // school, and it names no person in anything it sends: the server reads the signed-in teacher.
 //
+// A hold of the automated review is cleared here by a named signed-in person with a note: the block
+// "Held by the automated review" (made by this file) asks the server, and approves nothing.
+//
 // Two groups of code: the plain functions (`window.methodsLogic`, which a test runs on their own),
 // and the view (`window.methodsView`, which app.js opens, resets and asks for the waiting count).
 (function () {
   const MEASURES = "api/measures";
+  const HELD = "api/measures/held";
   const STATE_WORDS = {
     placeholder: "PLACEHOLDER: proposed from the methodology, not yet confirmed by a teacher",
     in_rulebook: "A rule of the school's rulebook",
@@ -76,6 +80,22 @@
     return { enabled: true, why: "" };
   }
 
+  // The versions the automated review holds. The review can only hold; a person clears a hold.
+  function heldText(count) {
+    const n = Number(count) || 0;
+    if (n === 0) return "Nothing is held by the automated review.";
+    if (n === 1) return "1 version is held by the automated review.";
+    return n + " versions are held by the automated review.";
+  }
+
+  // A hold is cleared only with a note saying what was checked. The server checks this again.
+  function clearHoldState(note) {
+    if (!noteBody(note).note) {
+      return { enabled: false, why: "Write what you checked, then clear the hold." };
+    }
+    return { enabled: true, why: "" };
+  }
+
   function exampleWord(example) {
     if (example && example.match === true) return "Matches what the document says.";
     if (example && example.match === false) return "Does not match what the document says.";
@@ -95,7 +115,7 @@
   }
 
   const logic = { waitingText, tryBody, caseBody, noteBody, confirmState, rejectState, exampleWord,
-    stateWord, answerLines };
+    stateWord, answerLines, heldText, clearHoldState };
 
   // ---- the view --------------------------------------------------------------------------------
   let api = null;       // { call, text, csrf, me }, given by app.js
@@ -167,7 +187,7 @@
     const reply = await getJson(MEASURES);
     if (!api) return;
     if (reply.ok && typeof reply.body.waiting === "number") showCount(reply.body.waiting);
-    else showCount(0);  // not a registered teacher, or the page is off: nothing is shown
+    else showCount(0);  // not a registered teacher or a signed-in approver, or the page is off: nothing is shown
   }
 
   function listRow(item) {
@@ -179,8 +199,86 @@
     return row;
   }
 
+  // ---- the held block: versions the automated review holds, for a person to clear --------------
+  function heldArea() {
+    let area = el("methods-held");
+    if (!area) {
+      const list = el("methods-list");
+      if (!list) return null;
+      area = node("div", null, "methods-held");
+      area.id = "methods-held";
+      list.after(area);
+    }
+    return area;
+  }
+
+  async function loadHeld() {
+    const area = heldArea();
+    if (!area) return;
+    const reply = await getJson(HELD);
+    if (!api) return;
+    area.replaceChildren();
+    // not a signed-in approver, or the page is off: the block is not shown
+    if (!reply.ok || !Array.isArray(reply.body.measures)) return;
+    area.appendChild(heldBlock(reply.body.measures));
+  }
+
+  function heldBlock(items) {
+    const box = block("Held by the automated review");
+    box.appendChild(node("p", heldText(items.length), "summary"));
+    box.appendChild(node("p", "The automated review can only hold; it never approves. Clearing a hold " +
+      "approves nothing: the version then waits at the demo, where a teacher still tries it and " +
+      "decides. Your name and your note are recorded.", "hint"));
+    for (const item of items) box.appendChild(heldItem(item));
+    return box;
+  }
+
+  function heldItem(item) {
+    const card = node("div", null, "methods-example");
+    card.appendChild(node("strong", item.measure_id + " version " + item.version));
+    card.appendChild(node("span", " " + item.name + " · section " + item.method_ref, "hint"));
+    card.appendChild(node("p", item.description));
+    for (const reason of item.reasons || []) {
+      card.appendChild(node("p", "Held because: " + reason, "lesson-notice"));
+    }
+    const note = node("textarea");
+    note.rows = 2;
+    note.setAttribute("aria-label", "Note");
+    note.placeholder = "What you checked (needed)";
+    const line = node("p", "", "message");
+    line.setAttribute("role", "status");
+    const clear = button("Clear the hold", "primary", () => {
+      if (clearHoldState(note.value).enabled) clearHold(item, note.value, line);
+    });
+    clear.disabled = true;
+    note.addEventListener("input", () => { clear.disabled = !clearHoldState(note.value).enabled; });
+    const actions = node("div", null, "methods-actions");
+    actions.appendChild(clear);
+    for (const part of [note, actions, line]) card.appendChild(part);
+    return card;
+  }
+
+  async function clearHold(item, note, line) {
+    if (working) return;
+    working = true;
+    line.textContent = "Clearing the hold.";
+    line.className = "message";
+    const reply = await postJson(path(item, "clear-hold"), noteBody(note));
+    working = false;
+    if (!api) return;
+    if (reply.ok && reply.body.status === "cleared") {
+      say("methods-message", "Hold cleared on " + item.measure_id + " version " + item.version + " by " +
+        reply.body.cleared_by_name + ". " + reply.body.next_step, false);
+      loadList();
+      return;
+    }
+    line.textContent = words(reply);
+    line.className = "message bad";
+  }
+
   async function loadList() {
     const box = el("methods-list");
+    loadHeld();
     const reply = await getJson(MEASURES);
     if (!api) return;
     box.replaceChildren();
@@ -477,8 +575,9 @@
 
   function decisionBlock(view) {
     const box = block("Your decision");
-    box.appendChild(node("p", "Confirming as " + api.me.name + ". This name will be recorded as the teacher " +
-      "who confirmed this measure and the values it reads. Only you can confirm or reject as yourself."));
+    box.appendChild(node("p", "Confirming as " + api.me.name + ". This name will be recorded as the signed-in approver " +
+      "(the teacher) who confirmed this measure and the values it reads. Only you can confirm or " +
+      "reject as yourself."));
     const note = node("textarea");
     note.id = "methods-note";
     note.rows = 3;
@@ -551,7 +650,7 @@
     current = null;
     lastTry = null;
     working = false;
-    for (const id of ["methods-list", "methods-demo"]) {
+    for (const id of ["methods-list", "methods-demo", "methods-held"]) {
       const area = el(id);
       if (area) area.replaceChildren();
     }

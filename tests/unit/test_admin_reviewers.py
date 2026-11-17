@@ -180,7 +180,7 @@ def test_the_registry_accepts_a_granted_teacher_and_a_developer_for_their_own_ro
     grant(user="u-teach", name="Ms Teacher", role="teacher")
     grant(user="u-dev", name="Dev One", role="developer")
     teacher = Approver("u-teach", "Whatever the browser says")
-    who, name = store._registered(ctx(db, teacher), "teacher")
+    who, name, _ = store._registered(ctx(db, teacher), "teacher")
     assert who.id == "u-teach" and name == "Ms Teacher"  # the recorded name, not the typed one
     with pytest.raises(Refusal):
         store._registered(ctx(db, teacher), "developer")
@@ -305,7 +305,7 @@ def test_a_grant_after_a_revoke_makes_the_person_a_reviewer_again_with_the_new_n
     (row,) = rows(db)
     assert row["revoked_at"] is None and row["name"] == "Ms T. Teacher"
     assert row["granted_by"] == GRANTED_BY
-    who, name = store._registered(ctx(db, Approver("u-teach", "x")), "teacher")
+    who, name, _ = store._registered(ctx(db, Approver("u-teach", "x")), "teacher")
     assert name == "Ms T. Teacher"
 
 

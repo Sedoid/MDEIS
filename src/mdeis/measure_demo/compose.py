@@ -9,6 +9,7 @@ What lives here:
   case_rows         the teacher's own cases already stored
   clause_rows       the rules and values the measure reads, each with its state
   approval_gaps     what the registry still needs before a confirmation (named in plain words)
+  held_item         one version held by the automated review, for the approver's list
   demo_view         everything above in one answer the page shows
 
 Every number shown is passed in as a result of the sandbox run (a Fraction, or exact text from the
@@ -291,6 +292,20 @@ def case_rows(tests: Iterable[Mapping], test_result: Mapping | None) -> list[dic
         for test in tests
         if test.get("source") == "teacher"
     ]
+
+
+def held_item(row: Mapping) -> dict:
+    """One held version as the approver's list shows it: what is needed to recognise it and the
+    reasons the automated review gave, as plain sentences. Nothing about a person, and no number."""
+    reasons = row.get("review_reasons") or []
+    return {
+        "measure_id": row["measure_id"],
+        "version": row["version"],
+        "name": row["name"],
+        "method_ref": row["method_ref"],
+        "description": row["description"],
+        "reasons": [r for r in reasons if isinstance(r, str) and r.strip()],
+    }
 
 
 def test_summary(tests: Iterable[Mapping], result: Mapping | None) -> dict:

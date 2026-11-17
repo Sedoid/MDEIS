@@ -121,6 +121,9 @@ services:
       CLASS_VIEW_ENABLED: ${CLASS_VIEW_ENABLED:-false}
       # Adds the line "Practice data only" to the footer of an exported report PDF.
       PRACTICE_DATA_ONLY: ${PRACTICE_DATA_ONLY:-true}
+      # true: a signed-in approver of a school may also review a built measure (teacher) and clear a
+      # hold, with no entry in the registry list. One school per server only. false: only listed people.
+      REVIEWERS_ARE_APPROVERS: ${REVIEWERS_ARE_APPROVERS:-true}
       # The human-only approve and reject routes for lesson plans. Unset, those routes answer 503.
       # Only the gateway also holds this value. Never give it to the orchestrator or the web UI.
       HUMAN_ROUTE_KEY: ${HUMAN_ROUTE_KEY:-}

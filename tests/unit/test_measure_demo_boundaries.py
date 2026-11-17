@@ -29,12 +29,14 @@ NAMES = (
     "measure_demo_list", "measure_demo_open", "measure_demo_try", "measure_demo_case",
     "measure_demo_confirm", "measure_demo_reject", "confirm_measure", "reject_measure",
     "approve_measure", "record_teacher_decision",
+    "list_held", "lift_hold", "measure_demo_held", "measure_demo_lift_hold",  # T-077
 )
-SIX_ROUTES = {
+ALL_ROUTES = {  # the six of T-073 and the approver's two of T-077
     "/human/measures", "/human/measures/{measure_id}/{version}",
     "/human/measures/{measure_id}/{version}/try", "/human/measures/{measure_id}/{version}/case",
     "/human/measures/{measure_id}/{version}/confirm",
     "/human/measures/{measure_id}/{version}/reject",
+    "/human/measures/held", "/human/measures/{measure_id}/{version}/clear-hold",
 }
 
 
@@ -63,14 +65,15 @@ def test_the_demo_package_and_the_routes_file_exist():
     assert (DEMO / "api.py").exists() and ROUTES_FILE.exists()
 
 
-def test_the_chat_allow_list_is_exactly_what_it_was_before_the_demo():
+def test_the_chat_allow_list_is_exactly_what_it_was_before_the_demo_plus_export_report():
     from orchestrator import tools
 
     assert set(tools.MDEIS_TOOLS) == {
         "ingest_assessments", "resolve_issue", "compute_trend", "get_criterion", "draft_summary",
         "check_citations", "make_chart", "release_report", "list_measures", "compute_measure",
+        "export_report",  # T-076, added on purpose (owner decision); the demo added nothing
     }
-    assert len(tools.MDEIS_TOOLS) == 10
+    assert len(tools.MDEIS_TOOLS) == 11
     for name in tools.MDEIS_TOOLS:
         assert "demo" not in name and "confirm" not in name and "reject" not in name
 
@@ -120,12 +123,12 @@ def test_the_mcp_tool_list_offers_no_demo_confirm_or_reject_tool(server_module, 
 
 
 @pytest.mark.parametrize("on", [False, True], ids=["view off", "view on"])
-def test_the_six_routes_are_on_the_server_with_the_class_view_on_or_off(
+def test_the_eight_routes_are_on_the_server_with_the_class_view_on_or_off(
     server_module, monkeypatch, on
 ):
     server = reloaded(server_module, monkeypatch, on)
     found = {getattr(r, "path", None) for r in server.mcp.streamable_http_app().routes}
-    assert SIX_ROUTES <= found
+    assert ALL_ROUTES <= found
 
 
 def test_the_server_adds_the_routes_by_one_call_outside_the_class_view_block():
@@ -152,7 +155,9 @@ def test_the_demo_changes_the_registry_only_through_a_teacher_case_and_the_teach
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module and "registry" in node.module:
                 reads |= {a.name for a in node.names}
-    assert reads <= {"record_tests", "record_teacher_decision", "transitions"}, reads
+    # T-077 (owner approved): the approver's clearing of a hold goes through the registry's own
+    # `clear_hold`, and only through it
+    assert reads <= {"record_tests", "record_teacher_decision", "transitions", "clear_hold"}, reads
 
 
 def test_the_demo_writes_no_sql_of_its_own_to_the_registry_or_the_patches():
@@ -166,9 +171,43 @@ def test_the_demo_writes_no_sql_of_its_own_to_the_registry_or_the_patches():
 def test_the_demo_never_advances_reviews_clears_retires_or_creates():
     for path in demo_files():
         text = path.read_text("utf-8")
-        for word in ("advance_status", "record_review", "clear_hold", "create_version", "retire(",
+        for word in ("advance_status", "record_review", "create_version", "retire(",
                      "template_patches SET", "apply_patch", "build_api", "build_record_review"):
             assert word not in text, (path.name, word)
+
+
+def test_a_hold_is_cleared_in_one_function_only_through_the_registry_and_with_a_note():
+    """The demo may now clear a hold (T-077), but only inside `lift_hold`, only by calling the
+    registry's own `clear_hold`, and never by moving the status itself."""
+    for path in demo_files():
+        tree = ast.parse(path.read_text("utf-8"))
+        for fn in (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)):
+            names = {n.id for n in ast.walk(fn) if isinstance(n, ast.Name)}
+            if fn.name == "lift_hold":
+                assert "clear_hold" in names, "it clears through the registry"
+                assert "_developer" in names and "_clean_note" in names
+            elif fn.name != "<module>":
+                assert "clear_hold" not in names, (path.name, fn.name)
+    api_text = (DEMO / "api.py").read_text("utf-8")
+    assert api_text.count("clear_hold(") == 1
+    for other in (DEMO / "compose.py", ROUTES_FILE):
+        assert "clear_hold(" not in other.read_text("utf-8")
+
+
+def test_the_two_new_demo_functions_have_no_argument_that_names_a_person_or_a_decision():
+    import inspect
+
+    from mdeis.measure_demo import api
+
+    assert list(inspect.signature(api.list_held).parameters) == ["ctx"]
+    parameters = list(inspect.signature(api.lift_hold).parameters)
+    assert parameters == ["ctx", "measure_id", "version", "note"]
+
+
+def test_the_automated_review_still_cannot_clear_or_approve_in_the_build_package():
+    for path in python_files("mdeis", "measure_build"):
+        text = path.read_text("utf-8")
+        assert "clear_hold" not in text and "lift_hold" not in text, path
 
 
 @pytest.mark.parametrize("place", [("tools",), ("orchestrator",), ("gateway",), ("portal",)])

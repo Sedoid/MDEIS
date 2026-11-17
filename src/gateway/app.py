@@ -161,6 +161,13 @@ class RejectMeasureBody(BaseModel):
     note: str = Field(min_length=1)
 
 
+class ClearHoldBody(BaseModel):
+    """Clearing a hold holds the note of what was checked. No field names a person or a decision."""
+
+    model_config = ConfigDict(extra="forbid")
+    note: str = Field(min_length=1)
+
+
 @dataclass(frozen=True)
 class Settings:
     api_key: str
@@ -542,6 +549,25 @@ def create_app(client_factory=None) -> FastAPI:
     ):
         return await to_tool_server(
             request, "POST", f"/human/measures/{measure_id}/{version}/reject", body.model_dump()
+        )
+
+    # T-077: the approver's list of versions the automated review holds, and clearing one hold
+    @app.get("/portal/measures/held", dependencies=[Depends(require_portal_key)])
+    async def portal_measures_held(request: Request):
+        return await to_tool_server(request, "GET", "/human/measures/held")
+
+    @app.post(
+        "/portal/measures/{measure_id}/{version}/clear-hold",
+        dependencies=[Depends(require_portal_key)],
+    )
+    async def portal_measure_hold_clear(
+        request: Request,
+        body: ClearHoldBody,
+        measure_id: Annotated[str, Path(pattern=MEASURE_ID)],
+        version: Annotated[str, Path(pattern=MEASURE_VERSION)],
+    ):
+        return await to_tool_server(
+            request, "POST", f"/human/measures/{measure_id}/{version}/clear-hold", body.model_dump()
         )
 
     @app.post("/portal/reports/{report_id}/pdf", dependencies=[Depends(require_portal_key)])

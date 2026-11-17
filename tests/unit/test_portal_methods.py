@@ -41,6 +41,10 @@ LISTED = [
     ("POST", f"/api/measures/{MS}/1/confirm", {"note": "checked"},
      f"/portal/measures/{MS}/1/confirm"),
     ("POST", f"/api/measures/{MS}/1/reject", {"note": "no"}, f"/portal/measures/{MS}/1/reject"),
+    # T-077: the approver's held list and the clearing of one hold
+    ("GET", "/api/measures/held", None, "/portal/measures/held"),
+    ("POST", f"/api/measures/{MS}/1/clear-hold", {"note": "read it"},
+     f"/portal/measures/{MS}/1/clear-hold"),
 ]
 POSTS = [row for row in LISTED if row[0] == "POST"]
 
@@ -189,6 +193,11 @@ def test_an_entry_holds_a_subject_a_term_and_a_score_and_nothing_that_names_anyo
     (f"/api/measures/{MS}/1/reject", {}),
     (f"/api/measures/{MS}/1/reject", {"note": ""}),
     (f"/api/measures/{MS}/1/reject", {"note": "   "}),
+    (f"/api/measures/{MS}/1/clear-hold", {}),
+    (f"/api/measures/{MS}/1/clear-hold", {"note": ""}),
+    (f"/api/measures/{MS}/1/clear-hold", {"note": "   "}),
+    (f"/api/measures/{MS}/1/clear-hold", {"note": 5}),
+    (f"/api/measures/{MS}/1/clear-hold", {"note": None}),
 ])
 def test_a_body_of_the_wrong_shape_is_a_plain_400_and_is_not_sent_on(world, path, body):
     client, gateway = world
@@ -509,3 +518,80 @@ def test_the_answer_is_listed_field_by_field_in_a_fixed_order_with_the_exact_for
               "change": {"value": "11.00", "exact": "11"}}
     got = logic(f"L.answerLines({json.dumps(answer)})")
     assert got == ["change: 11.00 (exact 11)", "threshold_met: 1.00 (exact 1)"]
+
+
+# --------------------------------------------------------------------------- T-077: held versions
+def test_a_clear_hold_with_no_body_at_all_is_a_plain_400_and_is_not_sent_on(world):
+    client, gateway = world
+    headers = {"X-CSRF-Token": csrf(client), **ORIGIN}
+    assert client.post(f"/api/measures/{MS}/1/clear-hold", headers=headers).status_code == 400
+    assert gateway.calls == []
+
+
+def test_the_held_list_is_not_taken_for_a_measure_and_an_unknown_action_is_404(world):
+    client, gateway = world
+    assert client.get("/api/measures/held").status_code == 200
+    assert gateway.calls[-1]["path"] == "/portal/measures/held"
+    assert post(client, f"/api/measures/{MS}/1/clear_hold", {"note": "n"}).status_code == 404
+    assert post(client, f"/api/measures/{MS}/1/approve-hold", {"note": "n"}).status_code == 404
+    assert len(gateway.calls) == 1
+
+
+def test_a_clear_hold_note_is_passed_on_as_written_and_nothing_else(world):
+    client, gateway = world
+    answer = post(client, f"/api/measures/{MS}/1/clear-hold", {"note": "read section 6.4"})
+    assert answer.status_code == 200
+    (call,) = gateway.calls
+    assert call["body"] == {"note": "read section 6.4"}
+    assert (call["user"].id, call["user"].name) == (ADA.id, ADA.name)
+
+
+def test_the_portal_names_no_registry_function_for_a_hold():
+    text = Path(portal.__file__).read_text("utf-8")
+    for word in ("clear_hold", "lift_hold", "list_held", "record_review", "mdeis.registry"):
+        assert word not in text, word
+
+
+def test_the_page_has_a_held_block_that_reads_the_held_list_and_clears_with_a_note():
+    for text in ("Held by the automated review", "Clear the hold", "api/measures/held",
+                 "clear-hold", "approves nothing", "clearHoldState", "heldText"):
+        assert text in SCRIPT, text
+    assert "innerHTML" not in function_source("heldBlock") + function_source("heldItem")
+    clearing = function_source("clearHold(")
+    assert "postJson(" in clearing and "noteBody(" in clearing
+    assert not re.search(r"approver|school|user|status|decision|token|learner", function_source(
+        "clearHoldState"))
+
+
+def test_the_page_says_a_cleared_hold_approves_nothing_and_goes_to_the_demo():
+    shown = function_source("heldBlock")
+    assert "approves nothing" in shown and "demo" in shown and "teacher" in shown
+    assert "decides" in shown
+
+
+def test_the_held_block_is_made_by_the_script_and_adds_nothing_to_the_page_file():
+    assert "methods-held" in SCRIPT
+    assert "methods-held" not in PAGE, "the container is made by methods.js, not by index.html"
+
+
+def test_the_held_block_has_no_label_rank_or_pathway_wording():
+    block = "".join(function_source(n) for n in ("heldBlock", "clearHold(", "heldText"))
+    for word in ("weak", "remedial", "gifted", "rank", "career", "pathway", "subject choice"):
+        assert not re.search(rf"\b{word}\b", block, re.IGNORECASE), word
+
+
+@needs_node
+def test_a_hold_can_be_cleared_only_when_a_note_is_written():
+    assert logic("L.clearHoldState('read section 6.4')")["enabled"] is True
+    for note in ("", "   ", None):
+        shown = logic(f"L.clearHoldState({json.dumps(note)})")
+        assert shown["enabled"] is False and shown["why"]
+    assert logic("L.clearHoldState(undefined)")["enabled"] is False
+
+
+@needs_node
+def test_the_held_count_is_said_in_plain_words_for_none_one_and_many():
+    assert logic("L.heldText(0)") == "Nothing is held by the automated review."
+    assert logic("L.heldText(1)") == "1 version is held by the automated review."
+    assert logic("L.heldText(4)") == "4 versions are held by the automated review."
+    assert logic("L.heldText(undefined)") == "Nothing is held by the automated review."

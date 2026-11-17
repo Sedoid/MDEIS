@@ -6,8 +6,9 @@
     POST /api/documents?kind=    upload a file       GET  /api/documents[/D-000001]  status
     GET  /api/documents/D-000001/file   the file itself, for a new tab
     GET  /healthz
-    GET  /api/measures  /api/measures/MS-0001/1                        the Methods page, read
+    GET  /api/measures  /api/measures/MS-0001/1  /api/measures/held    the Methods page, read
     POST /api/measures/MS-0001/1/try  .../case  .../confirm  .../reject  the Methods page, act
+    POST /api/measures/MS-0001/1/clear-hold   the approver clears a hold of the automated review
     GET  /api/lessons/options  /api/lessons  /api/lessons/LP-000001    the Lessons page, read
     POST /api/lessons  /api/lessons/LP-000001/approve  .../reject      the Lessons page, act
     POST /api/reports/R-000001/pdf    the PDF of a released report, for the Files page (T-056)
@@ -138,6 +139,8 @@ def _measure_problem(kind: str, body: dict) -> str | None:
             return "Say whether you agreed with the answer shown."
     if kind == "confirm" and body.get("note") is not None and not isinstance(body["note"], str):
         return "The note must be text."
+    if kind == "clear-hold" and not (isinstance(body.get("note"), str) and body["note"].strip()):
+        return "A note saying what you checked is needed."
     if kind == "reject" and (not isinstance(body.get("note"), str) or not body["note"].strip()):
         return "A rejection needs a note saying why."
     return None
@@ -505,6 +508,10 @@ def create_app(settings: Settings | None = None, auth=None, store=None, gateway=
     async def measure_list(request: Request):
         return await methods_call(request, "GET", "/portal/measures")
 
+    @app.get("/api/measures/held")
+    async def measure_held(request: Request):
+        return await methods_call(request, "GET", "/portal/measures/held")
+
     @app.get("/api/measures/{measure_id}/{version}")
     async def measure_demo(measure_id: str, version: str, request: Request):
         path = f"/portal/measures/{measure_id}/{version}"
@@ -512,7 +519,7 @@ def create_app(settings: Settings | None = None, auth=None, store=None, gateway=
 
     @app.post("/api/measures/{measure_id}/{version}/{action}")
     async def measure_act(measure_id: str, version: str, action: str, request: Request):
-        if action not in ("try", "case", "confirm", "reject"):
+        if action not in ("try", "case", "confirm", "reject", "clear-hold"):
             return _refuse(404, "measure_not_found", "There is no such measure version.")
         path = f"/portal/measures/{measure_id}/{version}/{action}"
         return await methods_call(request, "POST", path, (measure_id, version), action)

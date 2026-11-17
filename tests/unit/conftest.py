@@ -24,6 +24,13 @@ DB_NAME = os.environ.get("MDEIS_DB_NAME", "mdeis")
 ORCH_DB_NAME = os.environ.get("ORCHESTRATOR_DB_NAME", "orchestrator")
 
 
+@pytest.fixture(autouse=True)
+def reviewers_setting_off(monkeypatch):
+    """`REVIEWERS_ARE_APPROVERS` is off in every test unless the test turns it on itself, whatever
+    the environment the tests run in holds (T-077)."""
+    monkeypatch.delenv("REVIEWERS_ARE_APPROVERS", raising=False)
+
+
 @pytest.fixture
 def conn():
     url = os.environ.get("DATABASE_URL")

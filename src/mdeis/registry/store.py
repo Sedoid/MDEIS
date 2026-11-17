@@ -25,11 +25,13 @@ from contextlib import contextmanager
 from psycopg import errors
 from psycopg.rows import dict_row
 
+from .. import approver_setting as setting
 from ..db.diary import jsonb
 from ..sandbox import static_check
 from ..sandbox.config import load_rules
 from ..tools._call import logged_tool
 from ..tools.context import Refusal, ToolContext
+from . import approvers
 from . import transitions as t
 from .values import template_values
 
@@ -112,7 +114,13 @@ def _signed_in(ctx: ToolContext):
 
 
 def _registered(ctx: ToolContext, role: str):
-    """The signed-in person and the name the registry holds for them, or a refusal."""
+    """The signed-in person, the name for them, and whether the row for them is still to be made.
+
+    A person with a live row in the registry is as before: their registry name, nothing to make.
+    With `REVIEWERS_ARE_APPROVERS` on, a signed-in person with a school in the token and no record
+    at all is accepted too, under the name the token gave; the third value is then True and the
+    caller makes the row inside its own savepoint (`approvers.add_row`). A record an administrator
+    ended is refused, with the setting on or off."""
     who = _signed_in(ctx)
     row = (
         _cursor(ctx)
@@ -123,9 +131,18 @@ def _registered(ctx: ToolContext, role: str):
         )
         .fetchone()
     )
-    if row is None:
+    if row is not None:
+        return who, row["name"], False
+    if not setting.enabled():
         raise Refusal(f"the signed-in person is not recorded as a {role} in the registry")
-    return who, row["name"]
+    if setting.ended(ctx.conn, who.id, role):
+        raise Refusal(setting.ended_text(role))
+    if setting.school_of(ctx) is None:
+        raise Refusal("no school is attached to this session")
+    name = setting.name_of(who)
+    if name is None:
+        raise Refusal("the signed-in approver has no name in the session, so none can be recorded")
+    return who, name, True
 
 
 def _moved(measure_id, version, before, after, **more) -> dict:
@@ -366,9 +383,11 @@ def record_tests(ctx: ToolContext, *, measure_id, version, results, new_tests=No
     if here not in t.RESULT_STATUSES:
         raise Refusal("test results are taken while a version is testing or at the demo")
     adding = _clean_tests(new_tests, t.DEMO_SOURCES if here == t.AWAITING_DEMO else t.BUILD_SOURCES)
+    joining = None  # (person, name) when the setting accepts a teacher who has no row yet
     if adding:
         if here == t.AWAITING_DEMO:
-            _registered(ctx, t.TEACHER)
+            who, name, pending = _registered(ctx, t.TEACHER)
+            joining = (who, name) if pending else None
         taken = {test["name"] for test in row["tests"]}
         clash = [test["name"] for test in adding if test["name"] in taken]
         if clash:
@@ -380,12 +399,17 @@ def record_tests(ctx: ToolContext, *, measure_id, version, results, new_tests=No
             "a test fails at the demo: record that by rejecting the version, with a note, "
             "not as a result"
         )
+    made = False
     with _database(ctx):
+        if joining is not None:
+            made = approvers.add_row(ctx, joining[0], t.TEACHER, joining[1])
         ctx.conn.execute(
             "UPDATE measure_versions SET tests = %s, test_result = %s "
             "WHERE measure_id = %s AND version = %s",
             (jsonb(tests), jsonb(outcome), measure_id, version),
         )
+    if made:
+        approvers.log(ctx, joining[0], t.TEACHER, joining[1])
     return {
         "status": "ok",
         "measure_id": measure_id,
@@ -437,28 +461,51 @@ def record_review(ctx: ToolContext, *, measure_id, version, result, reasons=None
 
 
 @logged_tool("registry_clear_hold")
-def clear_hold(ctx: ToolContext, *, measure_id, version, note):
+def clear_hold(ctx: ToolContext, *, measure_id, version, note, to_demo=False):
     """A registered developer clears a hold, with a note saying what they checked.
 
     The person is the signed-in user. Nobody signed in, or someone not recorded as a developer in
     the registry, is refused. Clearing a hold does not approve anything: the version still goes to
-    the teacher.
+    the teacher. With `REVIEWERS_ARE_APPROVERS` on, a signed-in approver with a school counts as a
+    developer too (see `approvers`). The automated review never reaches this: it is a system step
+    with no signed-in person, and a hold is only ever cleared by this explicit call.
+
+    `to_demo` (default False) moves the version on to the demo in the same step, as the system's
+    `advance_status` would, so that the approver's clearing does not need a second call. It changes
+    nothing else: the database still refuses the move unless the review is cleared, and nothing is
+    approved.
     """
-    who, name = _registered(ctx, t.DEVELOPER)
+    who, name, pending = _registered(ctx, t.DEVELOPER)
     _text(note, "a note saying what was checked")
     row = _load(ctx, measure_id, version)
     if row["status"] != t.AWAITING_REVIEW or row["review_result"] != t.HOLD:
         raise Refusal("there is no hold on this version to clear")
     if row["hold_cleared_by_id"] is not None:
         raise Refusal("the hold was already cleared")
+    made = False
     with _database(ctx):
+        if pending:
+            made = approvers.add_row(ctx, who, t.DEVELOPER, name)
         ctx.conn.execute(
             "UPDATE measure_versions SET hold_cleared_by_id = %s, hold_cleared_name = %s, "
             "hold_cleared_at = now(), hold_cleared_note = %s "
             "WHERE measure_id = %s AND version = %s",
             (who.id, name, note, measure_id, version),
         )
-    cleared = {"status": "ok", "measure_id": measure_id, "version": version, "cleared_by": who.id}
+        if to_demo is True:
+            ctx.conn.execute(
+                "UPDATE measure_versions SET status = %s WHERE measure_id = %s AND version = %s",
+                (t.AWAITING_DEMO, measure_id, version),
+            )
+    if made:
+        approvers.log(ctx, who, t.DEVELOPER, name)
+    cleared = {
+        "status": "ok",
+        "measure_id": measure_id,
+        "version": version,
+        "cleared_by": who.id,
+        "version_status": t.AWAITING_DEMO if to_demo is True else t.AWAITING_REVIEW,
+    }
     return cleared, "ok"
 
 
@@ -470,10 +517,12 @@ def record_teacher_decision(ctx: ToolContext, *, measure_id, version, decision, 
     user, and must be recorded as a teacher in the registry. The database refuses the approval
     unless the tests passed, at least one test is not the model's, the static check passed, the
     automated review is not holding, and this decision is `confirmed`. A rejection needs a note.
+    With `REVIEWERS_ARE_APPROVERS` on, a signed-in approver with a school counts as a registered
+    teacher: the registry row is made in the same savepoint, so a refused approval leaves none.
     Confirming a newer version retires the one in force in the same step; if the database refuses,
     the old one stays in force.
     """
-    who, name = _registered(ctx, t.TEACHER)
+    who, name, pending = _registered(ctx, t.TEACHER)
     if decision not in t.DECISIONS:
         raise Refusal(f"a decision is {' or '.join(t.DECISIONS)}")
     if decision == t.REJECTED:
@@ -482,7 +531,10 @@ def record_teacher_decision(ctx: ToolContext, *, measure_id, version, decision, 
     if row["status"] != t.AWAITING_DEMO:
         raise Refusal("a decision is taken at the demo, when the version waits for the teacher")
     confirming = decision == t.CONFIRMED
+    made = False
     with _database(ctx):
+        if pending:
+            made = approvers.add_row(ctx, who, t.TEACHER, name)
         if confirming:
             ctx.conn.execute(
                 "UPDATE measure_versions SET status = 'retired', retired_reason = 'superseded' "
@@ -499,6 +551,8 @@ def record_teacher_decision(ctx: ToolContext, *, measure_id, version, decision, 
                 who.id, name, decision, note, confirming, measure_id, version,
             ),
         )
+    if made:
+        approvers.log(ctx, who, t.TEACHER, name)
     after = "approved" if confirming else t.REJECTED
     return _moved(measure_id, version, row["status"], after, decision=decision), "ok"
 

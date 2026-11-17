@@ -43,6 +43,9 @@ ROUTES = [
     ("POST", f"{OPEN}/case", CASE),
     ("POST", f"{OPEN}/confirm", {"note": "checked"}),
     ("POST", f"{OPEN}/reject", {"note": "does not match section 6.4"}),
+    # T-077: the approver's clearing of an automated-review hold, and the list of holds
+    ("GET", "/human/measures/held", None),
+    ("POST", f"{OPEN}/clear-hold", {"note": "read the section; it says 10"}),
 ]
 
 
@@ -82,6 +85,8 @@ class FakeStore:
             "case": {"status": "saved", "measure_id": MS, "name": "teacher case 1"},
             "confirm": {"status": "confirmed", "measure_id": MS, "version": 1},
             "reject": {"status": "rejected", "measure_id": MS, "version": 1},
+            "held": {"status": "ok", "held": 1, "measures": [{"measure_id": MS, "version": 1}]},
+            "clear_hold": {"status": "cleared", "measure_id": MS, "version": 1},
         }
 
     def _note(self, what, ctx, **arguments):
@@ -108,6 +113,12 @@ class FakeStore:
 
     def reject(self, ctx, measure_id, version, note):
         return self._note("reject", ctx, measure_id=measure_id, version=version, note=note)
+
+    def list_held(self, ctx):
+        return self._note("held", ctx)
+
+    def lift_hold(self, ctx, measure_id, version, note):
+        return self._note("clear_hold", ctx, measure_id=measure_id, version=version, note=note)
 
 
 @contextmanager
@@ -146,7 +157,7 @@ def refusals(world):
 
 
 # --------------------------------------------------------------------------- the route table
-def test_the_server_adds_exactly_these_six_routes():
+def test_the_server_adds_exactly_these_eight_routes():
     collector = Collector()
     measure_routes.install(collector, store=FakeStore(), env={})
     found = {(m, r.path) for r in collector.routes for m in r.methods if m != "HEAD"}
@@ -157,6 +168,8 @@ def test_the_server_adds_exactly_these_six_routes():
         ("POST", "/human/measures/{measure_id}/{version}/case"),
         ("POST", "/human/measures/{measure_id}/{version}/confirm"),
         ("POST", "/human/measures/{measure_id}/{version}/reject"),
+        ("GET", "/human/measures/held"),
+        ("POST", "/human/measures/{measure_id}/{version}/clear-hold"),
     }
 
 
@@ -176,7 +189,8 @@ GATE_CASES = [
     ("wrong key", {"X-Human-Route-Key": "another-key"}, "wrong_key", 401),
     ("key in capitals", {"X-Human-Route-Key": KEY.upper()}, "wrong_key", 401),
     ("no token", {"X-Approver-Token": None}, "no_token", 401),
-    ("forged token", {"X-Approver-Token": lambda: token(secret="not-the-secret")}, "bad_token", 401),
+    ("forged token", {"X-Approver-Token": lambda: token(secret="not-the-secret")},
+     "bad_token", 401),
     ("garbage token", {"X-Approver-Token": "garbage"}, "bad_token", 401),
     ("expired token", {"X-Approver-Token": long_ago()}, "expired_token", 401),
     ("token without a school", {"X-Approver-Token": lambda: token(school=None)}, "no_school", 403),
@@ -235,7 +249,7 @@ def test_the_person_and_the_school_come_from_the_token_and_nowhere_else(world, m
 ])
 @pytest.mark.parametrize("path,body", [
     (f"{OPEN}/try", TRY), (f"{OPEN}/case", CASE), (f"{OPEN}/confirm", {"note": "n"}),
-    (f"{OPEN}/reject", {"note": "n"}),
+    (f"{OPEN}/reject", {"note": "n"}), (f"{OPEN}/clear-hold", {"note": "n"}),
 ])
 def test_no_body_can_name_a_person_a_school_a_status_or_a_decision(world, path, body, field):
     answer = send(world, "POST", path, {**body, field: "x"})
@@ -250,6 +264,52 @@ def test_no_body_can_name_a_person_a_school_a_status_or_a_decision(world, path, 
 ])
 def test_the_fields_a_body_may_hold_are_fixed(path, fields):
     assert getattr(measure_routes, f"{path.upper()}_FIELDS") == fields
+
+
+def test_the_clear_hold_body_may_hold_a_note_and_nothing_else():
+    assert measure_routes.CLEAR_HOLD_FIELDS == ("note",)
+
+
+@pytest.mark.parametrize("path,body", [
+    (f"{OPEN}/clear-hold", {}),
+    (f"{OPEN}/clear-hold", {"note": ""}),
+    (f"{OPEN}/clear-hold", {"note": "   "}),
+    (f"{OPEN}/clear-hold", {"note": None}),
+    (f"{OPEN}/clear-hold", {"note": 5}),
+    (f"{OPEN}/clear-hold", {"note": ["a"]}),
+])
+def test_a_clear_hold_needs_a_note_and_is_refused_before_the_store_is_reached(world, path, body):
+    answer = send(world, "POST", path, body)
+    assert answer.status_code in (400, 422) and answer.json()["status"] == "refused"
+    assert world.store.calls == []
+    raw = world.client.post(path, headers=good())  # no body at all is not a note either
+    assert raw.status_code in (400, 422) and world.store.calls == []
+
+
+def test_a_clear_hold_reaches_the_store_with_the_note_and_the_version_as_a_number(world):
+    answer = send(world, "POST", f"{OPEN}/clear-hold", {"note": "  read it  "})
+    assert answer.status_code == 200 and answer.json()["status"] == "cleared"
+    (call,) = world.store.calls
+    assert call.what == "clear_hold"
+    assert call.args == {"measure_id": MS, "version": 1, "note": "  read it  "}
+    assert (call.approver.id, call.approver.name, call.school) == ("u-teacher", "Ms Teacher", "BAO")
+
+
+def test_the_list_of_held_versions_takes_no_ids_and_no_body_and_is_not_the_open_route(world):
+    answer = send(world, "GET", "/human/measures/held")
+    assert answer.status_code == 200 and answer.json()["held"] == 1
+    (call,) = world.store.calls
+    assert call.what == "held" and call.args == {}
+    assert measure_routes.route_name("/human/measures/held") == "/human/measures/held"
+    assert measure_routes.route_name(f"{OPEN}/clear-hold") == (
+        "/human/measures/{measure_id}/{version}/clear-hold")
+    assert measure_routes.route_name("/human/measures") == "/human/measures"
+
+
+def test_a_clear_hold_on_a_number_that_is_not_ours_is_404_and_not_sent_on(world):
+    answer = send(world, "POST", "/human/measures/MS-1/1/clear-hold", {"note": "n"})
+    assert answer.status_code == 404 and answer.json()["reason"] == "measure_not_found"
+    assert world.store.calls == []
 
 
 @pytest.mark.parametrize("path,body", [
@@ -338,6 +398,9 @@ def test_a_good_answer_is_handed_back_with_status_200_and_no_diary_row_of_the_ro
     ("open", OPEN, None, {"status": "confirmed"}),
     ("try", f"{OPEN}/try", TRY, {"status": "saved"}),
     ("case", f"{OPEN}/case", CASE, {"status": "ok"}),
+    ("held", "/human/measures/held", None, {"status": "cleared"}),
+    ("clear_hold", f"{OPEN}/clear-hold", {"note": "n"}, {"status": "ok"}),
+    ("clear_hold", f"{OPEN}/clear-hold", {"note": "n"}, {"status": "confirmed"}),
     ("confirm", f"{OPEN}/confirm", {}, {"status": "ok"}),
     ("confirm", f"{OPEN}/confirm", {}, {"status": "approved"}),
     ("reject", f"{OPEN}/reject", {"note": "n"}, {"status": "confirmed"}),
@@ -371,6 +434,15 @@ REFUSAL_TYPES = [
     ("[bad_expected] expected answer", "bad_expected", 422),
     ("[runner_unavailable] the sandbox could not be reached", "runner_unavailable", 503),
     ("[measure_failed] the function did not give an answer", "measure_failed", 502),
+    ("[not_a_developer] the signed-in person is not recorded as a developer in the registry",
+     "not_a_developer", 403),
+    ("the signed-in person is not recorded as a developer in the registry",
+     "not_a_developer", 403),
+    ("the signed-in approver is not recorded as a developer in the registry: an administrator "
+     "ended that record", "not_a_developer", 403),
+    ("[not_held] this version is not held by the automated review", "not_held", 409),
+    ("there is no hold on this version to clear", "not_held", 409),
+    ("the hold was already cleared", "not_held", 409),
     ("something the table does not know", "refused", 409),
     (None, "refused", 409),
 ]
