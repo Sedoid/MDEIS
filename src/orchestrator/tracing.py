@@ -4,20 +4,24 @@ The Postgres action log is the audit log and is not touched here. This is a wind
 is off unless LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY and LANGFUSE_HOST are all set. Off means a
 no-op: no client, no network, no change in any answer.
 
+Langfuse Cloud shut its legacy ingestion API on 2026-11-16. The route now is OpenTelemetry over
+HTTP with a JSON body (OTLP/JSON) to `{host}/api/public/otel/v1/traces`. There is no OpenTelemetry
+or Langfuse package here: the JSON is built by hand and sent with httpx.
+
 How it works, in four parts:
-* `Tracer` holds a bounded queue and sends batches to Langfuse's public ingestion route with httpx
-  (basic auth, the public key as user and the secret key as password). No Langfuse package.
-* `Trace` is one run: its id is the run id, so a trace lines up with the action log rows of that
-  run. It wraps the run's model (`TracedModel`: one generation event per call) and its tool servers
-  (`TracedServer`: one span event per call). The graphs and the loop are not changed: they are
-  handed the wrapped objects.
+* A `Trace` is one run. Its model calls and tool calls are collected as child spans while the run
+  goes on, under one root span (`mdeis-chat` or `mdeis-lesson`). When the run finishes, all its
+  spans go to Langfuse in ONE request. `TracedModel` and `TracedServer` wrap the run's model and
+  tool servers, so the loop and the graphs are not changed: they are handed the wrapped objects.
+* The trace id is made from the run id (the uuid in `RUN-<uuid>`), and the full run id is also an
+  attribute, so a trace lines up with the action log rows of that run.
 * Metadata only by default: tokens, cost, time, model, provider, tool names, outcomes, counts.
   Never a prompt, a reply, a tool argument or a tool result. With LANGFUSE_CAPTURE_CONTENT on, the
   text of a chat's model calls is added (tool results are still withheld), for debugging with
   SYNTHETIC data. A lesson's notes and objective are never sent in any mode, and nor is a learner
   name that a tool returned.
-* Fire and forget: sending runs in a background task with a short timeout. Any failure is swallowed
-  and counted in `Tracer.stats`; a run is never slowed, changed or broken by the tracer.
+* Fire and forget: a background task sends the queued runs with a short timeout. Any failure is
+  swallowed and counted in `Tracer.stats`; a run is never slowed, changed or broken by the tracer.
 
 The cost is what OpenRouter reported (`usage.cost`, in USD). It is never worked out here.
 """
@@ -26,38 +30,75 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import logging
 import re
+import secrets
 import time
-import uuid
 import weakref
 from collections import deque
-from datetime import UTC, datetime, timedelta
 
 import httpx
 
 from .model import ModelError, usage_of
 
-INGEST_PATH = "/api/public/ingestion"
-SEND_TIMEOUT_SECONDS = 3.0  # one batch to Langfuse: give up quickly, the run does not wait for it
+TRACES_PATH = "/api/public/otel/v1/traces"
+INGESTION_VERSION = "4"  # makes the data appear in real time (header x-langfuse-ingestion-version)
+SERVICE_NAME = "mdeis-orchestrator"
+SCOPE_NAME = "mdeis"
+SPAN_KIND_INTERNAL = 1  # OTLP span kind
+STATUS_OK, STATUS_ERROR = 1, 2  # OTLP status codes
+SEND_TIMEOUT_SECONDS = 3.0  # one run to Langfuse: give up quickly, the run does not wait for it
 FLUSH_TIMEOUT_SECONDS = 5.0  # the most a shutdown flush waits in all
-QUEUE_MAX = 500  # events waiting to be sent; the oldest are dropped (and counted) beyond this
-BATCH_MAX = 50  # events in one request
+QUEUE_MAX = 100  # runs waiting to be sent; beyond this the oldest run is dropped (spans counted)
 MASK_MIN_CHARS = 3  # a learner name, or a part of one, shorter than this is not masked
 MAX_DEPTH = 6  # how deep a tool result is searched for names
 MAX_ID_CHARS = 200
+NS_PER_MS = 1_000_000
 WITHHELD = "[withheld]"
 LEVELS = {"refused": "WARNING", "error": "ERROR"}  # a Langfuse level for a tool outcome
+RUN_UUID = re.compile(r"^RUN-([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})$")
 
 log = logging.getLogger("orchestrator.tracing")
 _LIVE: weakref.WeakSet = weakref.WeakSet()  # every tracer, so shutdown can flush them all
 _CACHE: dict = {}
 
 
-def _iso(moment: datetime) -> str:
-    # Fixed width (milliseconds), so that two times compare correctly as text.
-    return moment.astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+def trace_id_for(run_id: str) -> str:
+    """32 lowercase hex characters: the run's uuid when the run id is `RUN-<uuid>`, otherwise the
+    first 32 hex characters of the sha256 of the run id."""
+    found = RUN_UUID.match(run_id)
+    if found:
+        return found.group(1).replace("-", "").lower()
+    return hashlib.sha256(run_id.encode("utf-8")).hexdigest()[:32]
+
+
+def new_span_id() -> str:
+    return secrets.token_hex(8)  # 16 lowercase hex characters
+
+
+def attr(key: str, value) -> dict:
+    """One OTLP/JSON attribute. A 64-bit integer is a JSON string, as the encoding says."""
+    if isinstance(value, bool):
+        typed = {"boolValue": value}
+    elif isinstance(value, int):
+        typed = {"intValue": str(value)}
+    elif isinstance(value, float):
+        typed = {"doubleValue": value}
+    elif isinstance(value, list | tuple):
+        typed = {"arrayValue": {"values": [{"stringValue": str(v)} for v in value]}}
+    else:
+        typed = {"stringValue": str(value)}
+    return {"key": key, "value": typed}
+
+
+def metadata_attrs(prefix: str, values: dict) -> list:
+    """`langfuse.observation.metadata.<key>` style attributes. A list is joined into one string."""
+    return [
+        attr(f"{prefix}.{key}", ", ".join(map(str, v)) if isinstance(v, list | tuple) else v)
+        for key, v in values.items()
+    ]
 
 
 def user_id_from(token: str | None) -> str | None:
@@ -95,11 +136,19 @@ def chat_outcome(item: dict, current: str) -> str:
 class Trace:
     """One run, seen from outside. Every method is safe: a failure is counted, never raised."""
 
-    def __init__(self, tracer: Tracer, run_id: str, kind: str, masks: list):
+    def __init__(
+        self, tracer: Tracer, run_id: str, kind: str, masks: list,
+        user_id: str | None = None, session_id: str | None = None,
+    ):
         self.tracer, self.run_id, self.kind = tracer, run_id, kind
         self.capture = tracer.settings.langfuse_capture_content
         self.masks = masks
+        self.user_id, self.session_id = user_id, session_id
+        self.trace_id, self.root_id = trace_id_for(run_id), new_span_id()
+        self.started = self.begin()
+        self.children: list = []
         self.calls = 0
+        self.done = False
 
     # -- the wrappers the app hands to the graphs
     def wrap_model(self, model):
@@ -108,48 +157,101 @@ class Trace:
     def wrap_servers(self, servers: dict) -> dict:
         return {name: TracedServer(name, server, self) for name, server in servers.items()}
 
-    # -- events
-    def _safe(self, build):
+    # -- spans
+    def _safe(self, build) -> None:
         try:
             build()
         except Exception:
             self.tracer.stats["errors"] += 1
 
-    def begin(self) -> tuple:
-        return datetime.now(UTC), time.monotonic()
+    @staticmethod
+    def begin() -> tuple:
+        return time.time_ns(), time.monotonic_ns()
 
-    def _times(self, started: tuple) -> tuple:
-        wall, mono = started
-        elapsed = time.monotonic() - mono
-        return _iso(wall), _iso(wall + timedelta(seconds=elapsed)), round(elapsed * 1000)
+    @staticmethod
+    def _times(started: tuple) -> tuple:
+        wall_ns, mono_ns = started
+        elapsed = time.monotonic_ns() - mono_ns
+        return wall_ns, wall_ns + elapsed, elapsed // NS_PER_MS
+
+    def _span(self, parent: str | None, name: str, times: tuple, attributes: list, error=False):
+        span = {
+            "traceId": self.trace_id,
+            "spanId": new_span_id() if parent else self.root_id,
+            "name": name,
+            "kind": SPAN_KIND_INTERNAL,
+            "startTimeUnixNano": str(times[0]),
+            "endTimeUnixNano": str(times[1]),
+            "attributes": attributes,
+            "status": {"code": STATUS_ERROR if error else STATUS_OK},
+        }
+        if parent:
+            span["parentSpanId"] = parent
+        return span
+
+    def _trace_attributes(self, outcome_meta: dict) -> list:
+        """The trace-level attributes, put on EVERY span so that filters work."""
+        found = [
+            attr("langfuse.trace.name", f"mdeis-{self.kind}"),
+            attr("langfuse.trace.tags", [self.kind]),
+            attr("mdeis.run_id", self.run_id),
+        ]
+        if self.user_id:
+            found.append(attr("user.id", self.user_id))
+        if self.session_id:
+            found.append(attr("session.id", self.session_id))
+        meta = {"run_id": self.run_id, "graph_kind": self.kind, **outcome_meta}
+        meta["model"] = self.tracer.settings.model
+        return found + metadata_attrs("langfuse.trace.metadata", meta)
 
     def finish(self, outcome: str, **numbers) -> None:
+        """End the run: build the root span and send every span of the run in one request."""
+
         def build():
+            if self.done:
+                return
+            self.done = True
+            times = self._times(self.started)
             meta = {"outcome": outcome}
             meta.update({k: v for k, v in numbers.items() if isinstance(v, int | str)})
-            self.tracer.emit("trace-create", {"id": self.run_id, "metadata": meta})
+            common = self._trace_attributes(meta)
+            failed = outcome == "error"
+            root = [
+                attr("langfuse.observation.type", "span"),
+                attr("langfuse.observation.level", "ERROR" if failed else "DEFAULT"),
+                *metadata_attrs(
+                    "langfuse.observation.metadata",
+                    {"graph_kind": self.kind, "outcome": outcome, "latency_ms": times[2]},
+                ),
+            ]
+            spans = [self._span(None, f"mdeis-{self.kind}", times, common + root, failed)]
+            spans += [{**c, "attributes": common + c["attributes"]} for c in self.children]
+            self.children = []
+            self.tracer.submit(spans)
 
         self._safe(build)
 
     def generation(self, started: tuple, messages: list, tools: list, reply, error=None) -> None:
         def build():
             self.calls += 1
-            start, end, ms = self._times(started)
+            times = self._times(started)
             asked = [c.name for c in getattr(reply, "calls", ())]
             meta = {
-                "graph_kind": self.kind, "call": self.calls, "latency_ms": ms,
+                "graph_kind": self.kind, "call": self.calls, "latency_ms": times[2],
                 "tools_offered": len(tools), "tool_calls_requested": len(asked),
-            }
-            body = {
-                "id": str(uuid.uuid4()), "traceId": self.run_id, "name": f"{self.kind}-model-call",
-                "startTime": start, "endTime": end, "model": self.tracer.settings.model,
-                "metadata": meta,
             }
             if asked:
                 meta["tool_names_requested"] = asked
             provider = getattr(reply, "provider", None)
             if provider:
                 meta["provider"] = provider
+            model = self.tracer.settings.model
+            attributes = [
+                attr("langfuse.observation.type", "generation"),
+                attr("langfuse.observation.model.name", model),
+                attr("gen_ai.request.model", model),
+                attr("langfuse.observation.level", "ERROR" if error is not None else "DEFAULT"),
+            ]
             usage = usage_of({"usage": getattr(reply, "usage", None)}) or {}  # numbers only
             counts = {
                 label: usage[key]
@@ -160,32 +262,43 @@ class Trace:
                 if key in usage
             }
             if counts:
-                body["usageDetails"] = counts
+                attributes.append(attr("langfuse.observation.usage_details", json.dumps(counts)))
             if "cost" in usage:  # USD, as the service reported it. Never worked out here.
-                body["costDetails"] = {"total": usage["cost"]}
+                cost = json.dumps({"total": usage["cost"]})
+                attributes.append(attr("langfuse.observation.cost_details", cost))
             if error is not None:
-                body["level"] = "ERROR"
                 # Only our own model-client errors have a message that is safe to send.
-                body["statusMessage"] = str(error) if isinstance(error, ModelError) else (
-                    type(error).__name__
-                )
+                said = str(error) if isinstance(error, ModelError) else type(error).__name__
+                attributes.append(attr("langfuse.observation.status_message", said))
             if self.capture:
-                body["input"] = self._shown_input(messages)
-                body["output"] = self._shown_output(reply)
-            self.tracer.emit("generation-create", body)
+                shown_in = json.dumps(self._shown_input(messages))
+                shown_out = json.dumps(self._shown_output(reply))
+                attributes.append(attr("langfuse.observation.input", shown_in))
+                attributes.append(attr("langfuse.observation.output", shown_out))
+            attributes += metadata_attrs("langfuse.observation.metadata", meta)
+            name = f"{self.kind}-model-call"
+            span = self._span(self.root_id, name, times, attributes, error is not None)
+            self.children.append(span)
 
         self._safe(build)
 
     def tool(self, started: tuple, server: str, name: str, outcome: str) -> None:
         def build():
-            start, end, ms = self._times(started)
-            self.tracer.emit("span-create", {
-                "id": str(uuid.uuid4()), "traceId": self.run_id, "name": name,
-                "startTime": start, "endTime": end, "level": LEVELS.get(outcome, "DEFAULT"),
-                "metadata": {
-                    "graph_kind": self.kind, "server": server, "outcome": outcome, "latency_ms": ms,
-                },
-            })
+            times = self._times(started)
+            attributes = [
+                attr("langfuse.observation.type", "span"),
+                attr("langfuse.observation.level", LEVELS.get(outcome, "DEFAULT")),
+                *metadata_attrs(
+                    "langfuse.observation.metadata",
+                    {
+                        "graph_kind": self.kind, "server": server, "outcome": outcome,
+                        "latency_ms": times[2],
+                    },
+                ),
+            ]
+            self.children.append(
+                self._span(self.root_id, name, times, attributes, outcome == "error")
+            )
 
         self._safe(build)
 
@@ -212,8 +325,8 @@ class Trace:
     def clean(self, text) -> str:
         text = str(text or "")
         settings = self.tracer.settings
-        secrets = (settings.langfuse_public_key, settings.langfuse_secret_key)
-        for mask in sorted({*self.masks, *secrets}, key=len, reverse=True):
+        secrets_ = (settings.langfuse_public_key, settings.langfuse_secret_key)
+        for mask in sorted({*self.masks, *secrets_}, key=len, reverse=True):
             if mask:
                 text = re.sub(re.escape(mask), WITHHELD, text, flags=re.IGNORECASE)
         return text
@@ -242,7 +355,7 @@ class Trace:
 
 
 class TracedModel:
-    """The run's model, with a generation event for each call. The reply is passed on untouched."""
+    """The run's model, with a generation span for each call. The reply is passed on untouched."""
 
     def __init__(self, inner, trace: Trace):
         self.inner, self.trace = inner, trace
@@ -262,7 +375,7 @@ class TracedModel:
 
 
 class TracedServer:
-    """A tool server, with a span event for each call. The result is passed on untouched."""
+    """A tool server, with a span for each call. The result is passed on untouched."""
 
     def __init__(self, name: str, inner, trace: Trace):
         self.name, self.inner, self.trace = name, inner, trace
@@ -309,8 +422,9 @@ class NullTracer:
 
 
 class Tracer:
-    """The queue and the sender. `client` is for tests; the real service makes its own for each
-    batch (so it never holds a connection across event loops)."""
+    """The queue and the sender. The queue holds finished runs, each a list of spans. `client` is
+    for tests; the real service makes its own for each run (so it never holds a connection across
+    event loops)."""
 
     enabled = True
 
@@ -318,6 +432,7 @@ class Tracer:
         self.settings, self._client = settings, client
         self._queue: deque = deque()
         self._task: asyncio.Task | None = None
+        # Counts are of spans, except `errors` (things that went wrong inside the tracer).
         self.stats = {"queued": 0, "sent": 0, "rejected": 0, "failed": 0, "dropped": 0, "errors": 0}
         _LIVE.add(self)
 
@@ -325,72 +440,67 @@ class Tracer:
         self, *, run_id: str, kind: str, token: str | None = None,
         conversation_id: str | None = None, mask=(),
     ) -> Trace:
-        """Open a trace for a run. `kind` is chat, lesson or build. `mask` is text that must never
-        be sent (a lesson's notes and objective)."""
-        trace = Trace(self, run_id, kind, [m for m in mask if isinstance(m, str) and m])
-        try:
-            body = {
-                "id": run_id, "name": f"mdeis-{kind}", "tags": [kind],
-                "metadata": {"graph_kind": kind, "model": self.settings.model},
-            }
-            user = user_id_from(token)
-            if user:
-                body["userId"] = user
-            if conversation_id:
-                body["sessionId"] = str(conversation_id)[:MAX_ID_CHARS]
-            self.emit("trace-create", body)
-        except Exception:
-            self.stats["errors"] += 1
-        return trace
-
-    def emit(self, type_: str, body: dict) -> None:
-        if len(self._queue) >= QUEUE_MAX:
-            self._queue.popleft()
-            self.stats["dropped"] += 1
-        self._queue.append(
-            {"id": str(uuid.uuid4()), "type": type_, "timestamp": _iso(datetime.now(UTC)),
-             "body": body}
+        """Begin a trace for a run. `kind` is chat, lesson or build. `mask` is text that must never
+        be sent (a lesson's notes and objective). Nothing is sent until the run finishes."""
+        session = str(conversation_id)[:MAX_ID_CHARS] if conversation_id else None
+        return Trace(
+            self, run_id, kind, [m for m in mask if isinstance(m, str) and m],
+            user_id=user_id_from(token), session_id=session,
         )
-        self.stats["queued"] += 1
+
+    def submit(self, spans: list) -> None:
+        """Queue a finished run for sending."""
+        while len(self._queue) >= QUEUE_MAX:
+            self.stats["dropped"] += len(self._queue.popleft())
+        self._queue.append(spans)
+        self.stats["queued"] += len(spans)
         try:
             if self._task is None or self._task.done():
                 self._task = asyncio.get_running_loop().create_task(self._drain())
-        except RuntimeError:  # no loop is running: the events wait for a flush
+        except RuntimeError:  # no loop is running: the run waits for a flush
             pass
 
     async def _drain(self) -> None:
         while self._queue:
-            batch = [self._queue.popleft() for _ in range(min(BATCH_MAX, len(self._queue)))]
-            await self._post(batch)
+            await self._post(self._queue.popleft())
 
-    async def _post(self, batch: list) -> None:
+    async def _post(self, spans: list) -> None:
         try:
-            response = await self._send(batch)
+            response = await self._send(spans)
         except Exception as error:  # (the class only: a message could hold anything)
-            self._lost(len(batch), type(error).__name__)
+            self._lost(len(spans), type(error).__name__)
             return
-        if response.status_code not in (200, 201, 207):
-            self._lost(len(batch), f"status {response.status_code}")
+        if not 200 <= response.status_code < 300:
+            self._lost(len(spans), f"status {response.status_code}")
             return
         rejected = 0
-        try:
-            errors = response.json().get("errors")
-            rejected = len(errors) if isinstance(errors, list) else 0
+        try:  # a partial success names how many spans were refused; the reason is not kept
+            count = response.json().get("partialSuccess", {}).get("rejectedSpans", 0)
+            rejected = min(int(count), len(spans))
         except Exception:
             pass
-        self.stats["sent"] += len(batch) - rejected
+        self.stats["sent"] += len(spans) - rejected
         if rejected:
             self.stats["rejected"] += rejected
-            log.warning("langfuse: %d events were rejected", rejected)
+            log.warning("langfuse: %d spans were rejected", rejected)
 
-    async def _send(self, batch: list) -> httpx.Response:
+    async def _send(self, spans: list) -> httpx.Response:
         settings = self.settings
+        body = {
+            "resourceSpans": [{
+                "resource": {"attributes": [attr("service.name", SERVICE_NAME)]},
+                "scopeSpans": [{"scope": {"name": SCOPE_NAME}, "spans": spans}],
+            }]
+        }
 
         async def post(client: httpx.AsyncClient) -> httpx.Response:
             return await client.post(
-                settings.langfuse_host + INGEST_PATH,
-                content=json.dumps({"batch": batch}, default=str),
-                headers={"Content-Type": "application/json"},
+                settings.langfuse_host + TRACES_PATH,
+                content=json.dumps(body, default=str),
+                headers={
+                    "Content-Type": "application/json",
+                    "x-langfuse-ingestion-version": INGESTION_VERSION,
+                },
                 auth=(settings.langfuse_public_key, settings.langfuse_secret_key),
                 timeout=SEND_TIMEOUT_SECONDS,
             )
@@ -402,7 +512,7 @@ class Tracer:
 
     def _lost(self, count: int, why: str) -> None:
         self.stats["failed"] += count
-        log.warning("langfuse: %d events not delivered (%s)", count, why)
+        log.warning("langfuse: %d spans not delivered (%s)", count, why)
 
     async def flush(self) -> None:
         """Send what is queued, once, and wait at most FLUSH_TIMEOUT_SECONDS for all of it."""
@@ -410,7 +520,7 @@ class Tracer:
             await asyncio.wait_for(self._flush(), FLUSH_TIMEOUT_SECONDS)
         except Exception:  # (a timeout, or a task from another loop: counted, never raised)
             self.stats["errors"] += 1
-            self.stats["dropped"] += len(self._queue)
+            self.stats["dropped"] += sum(len(run) for run in self._queue)
             self._queue.clear()
 
     async def _flush(self) -> None:
@@ -437,4 +547,3 @@ def tracer_for(settings):
     if key not in _CACHE:
         _CACHE[key] = Tracer(settings)
     return _CACHE[key]
-

@@ -1,26 +1,32 @@
-"""Optional Langfuse tracing in the orchestrator (T-067). Written before the code.
+"""Optional Langfuse tracing in the orchestrator (T-067). Written before the code, then rewritten
+for OpenTelemetry (OTLP over HTTP with a JSON body) when Langfuse Cloud shut its legacy ingestion
+API on 2026-11-16.
 
-There is no network and no Langfuse package: events go to Langfuse's HTTP ingestion route with
-httpx, and every test puts `httpx.MockTransport` where the network would be. Expected values are
-typed by hand: the sample OpenRouter answer below is made up (plausible fields, invented numbers).
+There is no network and no OpenTelemetry or Langfuse package: spans are built by hand and sent to
+`/api/public/otel/v1/traces` with httpx, and every test puts `httpx.MockTransport` where the network
+would be. Expected values are typed by hand: the sample OpenRouter answer below is made up
+(plausible fields, invented numbers).
 
 What is held here: off unless all three variables are set (and then no client is even made); the
-model request asks OpenRouter for usage and keeps the provider block; tokens and the USD cost come
-from the answer and are never computed (no cost when the answer has none); the default carries no
-prompt, reply, tool argument or tool result; with content capture on, a lesson's notes and
-objective and a learner's name still never leave; the user is an id, never a name; the trace id is
-the run id; the keys are used for basic auth only and are in no body and no log line; a transport
-that fails, times out, answers 401 or hangs changes nothing about the run; the queue is bounded;
-the shutdown flush sends each queued event once; and the chat loop and the lesson graph give the
-same answers with the tracer on and off.
+model request asks OpenRouter for usage and keeps the provider block; the OTLP payload has valid
+ids, parent links, nanosecond timestamps and only the documented attribute names; one request goes
+for a whole run; tokens and the USD cost come from the answer and are never computed; the default
+carries no prompt, reply, tool argument or tool result; with content capture on, a lesson's notes
+and objective and a learner's name still never leave; the user is an id, never a name; the trace id
+comes from the run id; the keys are used for basic auth only and are in no body and no log line; a
+transport that fails, times out, answers 401 or 400, or hangs changes nothing about the run; the
+queue is bounded; the shutdown flush sends each queued run once; and the chat loop and the lesson
+graph give the same answers with the tracer on and off.
 """
 
 import asyncio
 import base64
+import hashlib
 import json
 import logging
 import re
 import time
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -63,6 +69,17 @@ SAMPLE = {
     "choices": [{"message": {"role": "assistant", "content": "The records show a steady trend."}}],
     "usage": {"prompt_tokens": 120, "completion_tokens": 30, "total_tokens": 150, "cost": 0.000345},
 }
+# Every attribute name the code may send: the ones Langfuse documents for OpenTelemetry.
+DOCUMENTED = {
+    "langfuse.trace.name", "langfuse.trace.tags", "user.id", "session.id", "mdeis.run_id",
+    "langfuse.observation.type", "langfuse.observation.level",
+    "langfuse.observation.status_message", "langfuse.observation.model.name",
+    "gen_ai.request.model", "langfuse.observation.usage_details",
+    "langfuse.observation.cost_details", "langfuse.observation.input",
+    "langfuse.observation.output",
+}
+DOCUMENTED_PREFIXES = ("langfuse.observation.metadata.", "langfuse.trace.metadata.")
+GEN = "langfuse.observation.type"
 
 
 def cfg(**over):
@@ -70,6 +87,29 @@ def cfg(**over):
 
 
 SETTINGS = cfg()
+
+
+def tid(run_id):
+    """The trace id of a run id that is not `RUN-<uuid>`: 32 hex characters of its sha256."""
+    return hashlib.sha256(run_id.encode()).hexdigest()[:32]
+
+
+def value_of(value):
+    """An OTLP/JSON attribute value as a Python value. An int64 must be a JSON string."""
+    if "stringValue" in value:
+        return value["stringValue"]
+    if "intValue" in value:
+        assert isinstance(value["intValue"], str), "an int64 is a JSON string in OTLP/JSON"
+        return int(value["intValue"])
+    if "doubleValue" in value:
+        return value["doubleValue"]
+    if "boolValue" in value:
+        return value["boolValue"]
+    return [v["stringValue"] for v in value["arrayValue"]["values"]]
+
+
+def attrs(span):
+    return {a["key"]: value_of(a["value"]) for a in span["attributes"]}
 
 
 class Wire:
@@ -86,14 +126,30 @@ class Wire:
             await asyncio.sleep(3600)
         if self.error:
             raise self.error
-        return httpx.Response(self.status, json=self.answer or {"successes": [], "errors": []})
+        return httpx.Response(self.status, json={} if self.answer is None else self.answer)
 
     def client(self):
         return httpx.AsyncClient(transport=httpx.MockTransport(self.handler))
 
-    def events(self, kind=None):
-        found = [e for r in self.requests for e in json.loads(r.content)["batch"]]
-        return [e for e in found if kind in (None, e["type"])]
+    def spans(self):
+        found = []
+        for r in self.requests:
+            for resource in json.loads(r.content)["resourceSpans"]:
+                for scope in resource["scopeSpans"]:
+                    found += scope["spans"]
+        return found
+
+    def roots(self):
+        return [s for s in self.spans() if "parentSpanId" not in s]
+
+    def generations(self):
+        return [s for s in self.spans() if attrs(s).get(GEN) == "generation"]
+
+    def tool_spans(self):
+        found = [
+            s for s in self.spans() if "parentSpanId" in s and attrs(s).get(GEN) == "span"
+        ]
+        return sorted(found, key=lambda s: int(s["startTimeUnixNano"]))
 
     def text(self):
         return "\n".join(r.content.decode() for r in self.requests)
@@ -218,7 +274,97 @@ def test_the_real_client_sends_the_usage_switch_and_returns_the_usage():
     assert reply.usage["cost"] == 0.000345
 
 
-# --------------------------------------------------------------------------- what an event holds
+# --------------------------------------------------------------------------- the OTLP payload
+def test_the_request_is_a_basic_auth_post_to_the_otel_route_with_the_ingestion_header():
+    wire = Wire()
+    chat(tracer_for(wire), script())
+    request = wire.requests[0]
+    expected = "Basic " + base64.b64encode(f"{PK}:{SK}".encode()).decode()
+    assert request.method == "POST"
+    assert str(request.url) == HOST + "/api/public/otel/v1/traces"
+    assert request.headers["authorization"] == expected
+    assert request.headers["content-type"].startswith("application/json")
+    assert request.headers["x-langfuse-ingestion-version"] == "4"
+
+
+def test_a_whole_run_goes_in_one_request_with_a_root_and_one_child_for_each_call():
+    wire = Wire()
+    chat(tracer_for(wire), script())
+    assert len(wire.requests) == 1, "the spans of a run are sent together, at the end"
+    body = json.loads(wire.requests[0].content)
+    [resource] = body["resourceSpans"]
+    assert {"key": "service.name", "value": {"stringValue": "mdeis-orchestrator"}} in (
+        resource["resource"]["attributes"]
+    )
+    [scope] = resource["scopeSpans"]
+    assert scope["scope"]["name"] == "mdeis"
+    spans = scope["spans"]
+    assert [s["name"] for s in sorted(spans, key=lambda s: int(s["startTimeUnixNano"]))] == [
+        "mdeis-chat", "chat-model-call", "get_criterion", "chat-model-call",
+    ]
+    [root] = wire.roots()
+    assert root["name"] == "mdeis-chat"
+    assert all(s["parentSpanId"] == root["spanId"] for s in spans if s["spanId"] != root["spanId"])
+
+
+def test_ids_times_kind_and_status_follow_the_otlp_json_form():
+    wire = Wire()
+    chat(tracer_for(wire), script(), run_id="RUN-C1")
+    spans = wire.spans()
+    assert len({s["spanId"] for s in spans}) == len(spans)
+    root = wire.roots()[0]
+    for s in spans:
+        assert re.fullmatch(r"[0-9a-f]{32}", s["traceId"]) and s["traceId"] == tid("RUN-C1")
+        assert re.fullmatch(r"[0-9a-f]{16}", s["spanId"]) and set(s["spanId"]) != {"0"}
+        if "parentSpanId" in s:
+            assert re.fullmatch(r"[0-9a-f]{16}", s["parentSpanId"])
+        assert re.fullmatch(r"[1-9][0-9]+", s["startTimeUnixNano"]), "integer nanoseconds, a string"
+        assert re.fullmatch(r"[1-9][0-9]+", s["endTimeUnixNano"])
+        assert int(s["startTimeUnixNano"]) <= int(s["endTimeUnixNano"])
+        assert s["kind"] == 1 and s["status"] == {"code": 1}
+        assert int(root["startTimeUnixNano"]) <= int(s["startTimeUnixNano"])
+        assert int(root["endTimeUnixNano"]) >= int(s["endTimeUnixNano"])
+
+
+def test_a_run_id_made_from_a_uuid_gives_that_uuids_hex_as_the_trace_id():
+    wire = Wire()
+    chat(tracer_for(wire), script(), run_id="RUN-12345678-1234-5678-1234-567812345678")
+    assert {s["traceId"] for s in wire.spans()} == {"12345678123456781234567812345678"}
+    for s in wire.spans():
+        assert attrs(s)["mdeis.run_id"] == "RUN-12345678-1234-5678-1234-567812345678"
+    assert tracing.trace_id_for("RUN-ABCDEF12-1234-5678-1234-567812345678") == (
+        "abcdef12123456781234567812345678"
+    ), "lower case"
+
+
+def test_only_documented_attribute_names_are_sent_and_the_trace_ones_are_on_every_span():
+    wire = Wire()
+    chat(tracer_for(wire, LANGFUSE_CAPTURE_CONTENT="true"), script())
+    for s in wire.spans():
+        mine = attrs(s)
+        for key in mine:
+            assert key in DOCUMENTED or key.startswith(DOCUMENTED_PREFIXES), key
+        assert mine["langfuse.trace.name"] == "mdeis-chat"
+        assert mine["langfuse.trace.tags"] == ["chat"]
+        assert mine["user.id"] == "u-12" and mine["session.id"] == "conv-1"
+        assert mine["langfuse.trace.metadata.run_id"] == "RUN-C1"
+        assert mine["langfuse.trace.metadata.outcome"] == "ok"
+        assert mine[GEN] in ("span", "generation")
+
+
+def test_the_root_span_carries_the_run_outcome_and_a_failed_run_is_an_error_span():
+    wire = Wire()
+    tracer = tracer_for(wire)
+    trace = tracer.start(run_id="RUN-E1", kind="chat", token=TOKEN, conversation_id="c")
+    trace.finish("error")
+    asyncio.run(tracer.flush())
+    [root] = wire.roots()
+    mine = attrs(root)
+    assert mine["langfuse.observation.level"] == "ERROR" and root["status"] == {"code": 2}
+    assert mine["langfuse.observation.metadata.outcome"] == "error"
+
+
+# --------------------------------------------------------------------------- what a span holds
 def real_model(answer=SAMPLE):
     transport = httpx.MockTransport(lambda r: httpx.Response(200, json=answer))
     return OpenRouterModel(SETTINGS, client=httpx.AsyncClient(transport=transport))
@@ -227,31 +373,41 @@ def real_model(answer=SAMPLE):
 def test_a_generation_carries_tokens_cost_model_provider_and_time():
     wire = Wire()
     chat(tracer_for(wire), real_model())
-    [gen] = wire.events("generation-create")
-    body = gen["body"]
-    assert body["traceId"] == "RUN-C1" and body["model"] == "open/weights-model"
-    assert body["usageDetails"] == {"input": 120, "output": 30, "total": 150}
-    assert body["costDetails"] == {"total": 0.000345}
-    assert body["startTime"] <= body["endTime"]
-    assert body["metadata"]["provider"] == "Alpha" and body["metadata"]["graph_kind"] == "chat"
-    assert isinstance(body["metadata"]["latency_ms"], int) and body["metadata"]["latency_ms"] >= 0
+    [gen] = wire.generations()
+    mine = attrs(gen)
+    assert gen["parentSpanId"] == wire.roots()[0]["spanId"]
+    assert json.loads(mine["langfuse.observation.usage_details"]) == {
+        "input": 120, "output": 30, "total": 150,
+    }
+    assert json.loads(mine["langfuse.observation.cost_details"]) == {"total": 0.000345}
+    assert mine["langfuse.observation.model.name"] == "open/weights-model"
+    assert mine["gen_ai.request.model"] == "open/weights-model"
+    assert mine["langfuse.observation.metadata.provider"] == "Alpha"
+    assert mine["langfuse.observation.metadata.graph_kind"] == "chat"
+    assert mine["langfuse.observation.metadata.latency_ms"] >= 0
+    assert mine["langfuse.observation.level"] == "DEFAULT"
+    spent = int(gen["endTimeUnixNano"]) - int(gen["startTimeUnixNano"])
+    assert mine["langfuse.observation.metadata.latency_ms"] == spent // 1_000_000
 
 
 def test_with_no_cost_in_the_answer_tokens_are_sent_and_no_cost():
     wire = Wire()
     answer = {**SAMPLE, "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7}}
     chat(tracer_for(wire), real_model(answer))
-    body = wire.events("generation-create")[0]["body"]
-    assert body["usageDetails"] == {"input": 5, "output": 2, "total": 7}
-    assert "costDetails" not in body
+    mine = attrs(wire.generations()[0])
+    assert json.loads(mine["langfuse.observation.usage_details"]) == {
+        "input": 5, "output": 2, "total": 7,
+    }
+    assert "langfuse.observation.cost_details" not in mine
 
 
 def test_a_reply_with_unusable_usage_still_traces_without_numbers():
     wire = Wire()
     bad = Reply("fine", usage={"prompt_tokens": "x", "cost": True})
     chat(tracer_for(wire), FakeModel(bad))
-    body = wire.events("generation-create")[0]["body"]
-    assert "usageDetails" not in body and "costDetails" not in body
+    mine = attrs(wire.generations()[0])
+    assert "langfuse.observation.usage_details" not in mine
+    assert "langfuse.observation.cost_details" not in mine
 
 
 def test_a_failed_model_call_is_an_error_generation_and_the_error_still_reaches_the_run():
@@ -259,20 +415,44 @@ def test_a_failed_model_call_is_an_error_generation_and_the_error_still_reaches_
     failure = ModelError("the model service answered with an error (500)")
     out = chat(tracer_for(wire), FakeModel(failure))
     assert out[-1]["event"] == "error"
-    body = wire.events("generation-create")[0]["body"]
-    assert body["level"] == "ERROR" and "500" in body["statusMessage"]
+    [gen] = wire.generations()
+    mine = attrs(gen)
+    assert mine["langfuse.observation.level"] == "ERROR" and gen["status"] == {"code": 2}
+    assert "500" in mine["langfuse.observation.status_message"]
 
 
 def test_tool_calls_are_spans_with_the_tool_name_and_the_outcome_only():
     wire = Wire()
     results = {"get_criterion": {"status": "refused", "reason": "not allowed"}}
     chat(tracer_for(wire), script(), results=results)
-    [span] = wire.events("span-create")
-    body = span["body"]
-    assert body["name"] == "get_criterion" and body["traceId"] == "RUN-C1"
-    assert body["metadata"]["outcome"] == "refused" and body["level"] == "WARNING"
-    assert body["startTime"] <= body["endTime"]
+    [span] = wire.tool_spans()
+    mine = attrs(span)
+    assert span["name"] == "get_criterion"
+    assert mine["langfuse.observation.metadata.outcome"] == "refused"
+    assert mine["langfuse.observation.metadata.server"] == "mdeis"
+    assert mine["langfuse.observation.level"] == "WARNING" and span["status"] == {"code": 1}
     assert "TR-1" not in wire.text() and "not allowed" not in wire.text()
+
+
+def test_a_tool_that_raises_is_an_error_span_and_the_error_still_reaches_the_caller():
+    class Broken:
+        async def call(self, name, arguments):
+            raise RuntimeError("SECRET-DETAIL")
+
+    wire = Wire()
+
+    async def go():
+        tracer = tracer_for(wire)
+        trace = tracer.start(run_id="RUN-T1", kind="chat")
+        server = trace.wrap_servers({"mdeis": Broken()})["mdeis"]
+        with pytest.raises(RuntimeError):
+            await server.call("compute_trend", {})
+        trace.finish("error")
+        await tracer.flush()
+
+    asyncio.run(go())
+    [span] = wire.tool_spans()
+    assert span["status"] == {"code": 2} and "SECRET-DETAIL" not in wire.text()
 
 
 def test_the_default_carries_no_prompt_reply_tool_argument_or_tool_result():
@@ -285,10 +465,11 @@ def test_the_default_carries_no_prompt_reply_tool_argument_or_tool_result():
     text = wire.text()
     for secret in ("SECRET-ARG", "SECRET-REPLY", "SECRET-RESULT", "SECRET-PROMPT"):
         assert secret not in text
-    for gen in wire.events("generation-create"):
-        assert "input" not in gen["body"] and "output" not in gen["body"]
-    names = [e["body"]["name"] for e in wire.events("span-create")]
-    assert names == ["get_criterion"], "the tool name and nothing else"
+    for span in wire.spans():
+        mine = attrs(span)
+        assert "langfuse.observation.input" not in mine
+        assert "langfuse.observation.output" not in mine
+    assert [s["name"] for s in wire.tool_spans()] == ["get_criterion"]
 
 
 def test_with_capture_on_the_text_is_sent_but_a_learner_name_from_a_lookup_never_is():
@@ -303,11 +484,14 @@ def test_with_capture_on_the_text_is_sent_but_a_learner_name_from_a_lookup_never
     )
     chat(tracer_for(wire, LANGFUSE_CAPTURE_CONTENT="true"), model, pg=pg,
          text="Tell me about the reading")
-    first, second = [e["body"] for e in wire.events("generation-create")]
-    assert any("Tell me about the reading" in m["content"] for m in second["input"])
-    assert "reading in the Form 1 range" in second["output"]["text"], "capture is really on"
-    assert first["output"]["tool_calls"] == ["execute_sql"]
-    tool_messages = [m for m in second["input"] if m["role"] == "tool"]
+    first, second = sorted(wire.generations(), key=lambda s: int(s["startTimeUnixNano"]))
+    first, second = attrs(first), attrs(second)
+    shown_in = json.loads(second["langfuse.observation.input"])
+    shown_out = json.loads(second["langfuse.observation.output"])
+    assert any("Tell me about the reading" in m["content"] for m in shown_in)
+    assert "reading in the Form 1 range" in shown_out["text"], "capture is really on"
+    assert json.loads(first["langfuse.observation.output"])["tool_calls"] == ["execute_sql"]
+    tool_messages = [m for m in shown_in if m["role"] == "tool"]
     assert tool_messages and all(m["content"] == tracing.WITHHELD for m in tool_messages)
     text = wire.text()
     for part in ("Amara", "Okafor", "select display_name"):
@@ -321,68 +505,52 @@ def test_with_capture_on_a_lessons_notes_and_objective_are_never_sent():
     text = wire.text()
     for fragment in (A_ASK, NEW_ASK, OBJECTIVE, "underline the key sentence", "Give learners a"):
         assert fragment not in text
-    [gen] = wire.events("generation-create")
-    system, user = gen["body"]["input"]
+    [gen] = wire.generations()
+    mine = attrs(gen)
+    system, user = json.loads(mine["langfuse.observation.input"])
     assert system["content"] == lesson_prompt.system_prompt(), "capture is really on"
     assert user["content"] == tracing.WITHHELD
-    assert gen["body"]["output"]["text"] == tracing.WITHHELD
+    assert json.loads(mine["langfuse.observation.output"])["text"] == tracing.WITHHELD
 
 
 def test_a_lesson_trace_has_the_graph_tools_the_outcome_and_the_repair_count():
     wire = Wire()
     lesson(tracer_for(wire), FakeModel(say(GOOD)))
-    spans = [e["body"]["name"] for e in wire.events("span-create")]
-    assert spans == ["class_baseline", "guard_lesson_notes", "save_lesson_plan"]
-    created = [e["body"] for e in wire.events("trace-create")]
-    first, last = created[0], created[-1]
-    assert first["id"] == "RUN-L1" and first["metadata"]["graph_kind"] == "lesson"
-    assert "sessionId" not in first, "a lesson has no conversation"
-    assert last["id"] == "RUN-L1"
-    assert last["metadata"] == {"outcome": "stored", "repair_rounds": 0, "model_calls": 1}
-    text = wire.text()
+    assert [s["name"] for s in wire.tool_spans()] == [
+        "class_baseline", "guard_lesson_notes", "save_lesson_plan",
+    ]
+    [root] = wire.roots()
+    mine = attrs(root)
+    assert root["name"] == "mdeis-lesson"
+    assert mine["langfuse.trace.metadata.graph_kind"] == "lesson"
+    assert mine["langfuse.trace.metadata.outcome"] == "stored"
+    assert mine["langfuse.trace.metadata.repair_rounds"] == 0
+    assert mine["langfuse.trace.metadata.model_calls"] == 1
+    assert "session.id" not in mine, "a lesson has no conversation"
     for fragment in (A_ASK, NEW_ASK, OBJECTIVE):
-        assert fragment not in text
+        assert fragment not in wire.text()
 
 
 # --------------------------------------------------------------------------- who and which run
 def test_the_user_is_the_id_the_session_is_the_conversation_and_the_trace_is_the_run():
     wire = Wire()
     chat(tracer_for(wire), script(), run_id="RUN-ABC", conv="conv-9")
-    first = wire.events("trace-create")[0]["body"]
-    assert first["id"] == "RUN-ABC"
-    assert first["userId"] == "u-12" and first["sessionId"] == "conv-9"
+    for s in wire.spans():
+        mine = attrs(s)
+        assert s["traceId"] == tid("RUN-ABC") and mine["mdeis.run_id"] == "RUN-ABC"
+        assert mine["user.id"] == "u-12" and mine["session.id"] == "conv-9"
     assert "Ada" not in wire.text() and "Teacher" not in wire.text()
-    for e in wire.events():
-        if e["type"] != "trace-create":
-            assert e["body"]["traceId"] == "RUN-ABC"
 
 
 @pytest.mark.parametrize("token", [None, "", "signed.token", "no-dot", "a.b.c"])
 def test_a_token_that_cannot_be_read_gives_no_user_and_never_breaks_the_run(token):
     wire = Wire()
     chat(tracer_for(wire), script(), token=token)
-    assert "userId" not in wire.events("trace-create")[0]["body"]
+    assert all("user.id" not in attrs(s) for s in wire.spans()) and wire.spans()
 
 
-# --------------------------------------------------------------------------- the wire
-def test_the_request_is_a_basic_auth_post_to_the_ingestion_route_and_has_the_batch_shape():
-    wire = Wire()
-    chat(tracer_for(wire), script())
-    request = wire.requests[0]
-    expected = "Basic " + base64.b64encode(f"{PK}:{SK}".encode()).decode()
-    assert request.method == "POST"
-    assert str(request.url) == HOST + "/api/public/ingestion"
-    assert request.headers["authorization"] == expected
-    assert request.headers["content-type"].startswith("application/json")
-    events = wire.events()
-    assert events and len({e["id"] for e in events}) == len(events)
-    for e in events:
-        assert set(e) == {"id", "type", "timestamp", "body"}
-        assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z", e["timestamp"])
-    assert {e["type"] for e in events} == {"trace-create", "generation-create", "span-create"}
-
-
-def test_the_keys_are_in_no_event_and_no_log_line(caplog):
+# --------------------------------------------------------------------------- the keys
+def test_the_keys_are_in_no_body_and_no_log_line(caplog):
     caplog.set_level(logging.DEBUG)
     ok, bad = Wire(), Wire(status=401, answer={"message": "Invalid credentials"})
     chat(tracer_for(ok, LANGFUSE_CAPTURE_CONTENT="true"), script())
@@ -411,30 +579,37 @@ def plain_run(model_script):
         {"error": httpx.ConnectError("refused")},
         {"error": httpx.ReadTimeout("too slow")},
         {"status": 401, "answer": {"message": "Invalid credentials"}},
+        {"status": 400, "answer": {"message": "bad request"}},
         {"status": 500, "answer": {"message": "oops"}},
     ],
-    ids=["connect-error", "timeout", "401", "500"],
+    ids=["connect-error", "timeout", "401", "400", "500"],
 )
 def test_a_failing_transport_changes_nothing_and_the_failures_are_counted(wire_args):
     wire = Wire(**wire_args)
     tracer = tracer_for(wire)
     assert chat(tracer, script()) == plain_run(script)
     assert tracer.stats["sent"] == 0
-    assert tracer.stats["failed"] == tracer.stats["queued"] > 0
+    assert tracer.stats["failed"] == tracer.stats["queued"] == 4  # the root and three children
 
 
-def test_a_207_answer_is_normal_and_failed_items_are_counted_not_quoted(caplog):
+def test_a_partial_success_is_counted_by_span_and_the_reason_is_not_quoted(caplog):
     caplog.set_level(logging.DEBUG)
-    failed = {"id": "x", "status": 400, "message": "SECRET-BAD-FIELD"}
-    answer = {"successes": [], "errors": [failed]}
-    wire = Wire(status=207, answer=answer)
+    answer = {"partialSuccess": {"rejectedSpans": 2, "errorMessage": "SECRET-BAD-FIELD"}}
+    wire = Wire(answer=answer)
     tracer = tracer_for(wire)
-    for k in range(3):  # no loop is running, so the three wait and go in one batch
-        tracer.emit("span-create", {"id": f"s{k}", "traceId": "RUN-M1", "name": "t"})
+    tracer.submit([{"traceId": tid("x"), "spanId": f"{k:016x}"} for k in range(3)])
     asyncio.run(tracer.flush())
     assert len(wire.requests) == 1
-    assert tracer.stats["rejected"] == 1 and tracer.stats["sent"] == 2
+    assert tracer.stats["rejected"] == 2 and tracer.stats["sent"] == 1
     assert "SECRET-BAD-FIELD" not in caplog.text
+
+
+def test_a_success_answer_in_either_form_counts_every_span_as_sent():
+    for answer in ({}, {"partialSuccess": {}}):
+        wire = Wire(answer=answer)
+        tracer = tracer_for(wire)
+        chat(tracer, script())
+        assert tracer.stats["sent"] == 4 and tracer.stats["failed"] == 0
 
 
 def test_a_slow_network_adds_no_wait_to_the_run_and_the_flush_is_bounded(monkeypatch):
@@ -453,6 +628,7 @@ def test_a_slow_network_adds_no_wait_to_the_run_and_the_flush_is_bounded(monkeyp
                 servers=trace.wrap_servers({tools.MDEIS: FakeServer(MDEIS_LISTING)}),
             )
         ]
+        trace.finish("ok")
         run_seconds = time.monotonic() - began
         await tracer.flush()
         return out, run_seconds, time.monotonic() - began
@@ -470,47 +646,70 @@ def test_a_tracer_that_raises_inside_does_not_touch_the_run(monkeypatch):
     def boom(*args, **kwargs):
         raise RuntimeError("tracer bug")
 
-    monkeypatch.setattr(tracer, "emit", boom)
+    monkeypatch.setattr(tracer, "submit", boom)
     assert chat(tracer, script()) == plain_run(script)
     assert tracer.stats["errors"] > 0 and wire.requests == []
 
 
-def test_the_queue_is_bounded_and_the_overflow_is_counted():
+def test_a_span_that_cannot_be_built_is_counted_and_the_run_is_unchanged(monkeypatch):
+    wire = Wire()
+    tracer = tracer_for(wire)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("builder bug")
+
+    monkeypatch.setattr(tracing.Trace, "_span", boom)
+    assert chat(tracer, script()) == plain_run(script)
+    assert tracer.stats["errors"] > 0
+
+
+def test_the_queue_is_bounded_and_the_overflow_is_counted_in_spans():
     tracer = tracing.Tracer(SETTINGS, client=Wire().client())
     for k in range(tracing.QUEUE_MAX + 5):
-        tracer.emit("span-create", {"id": f"s{k}", "traceId": "RUN-Q"})
+        tracer.submit([{"spanId": f"{k:016x}"}, {"spanId": f"{k:016x}"}])
     assert len(tracer._queue) == tracing.QUEUE_MAX
-    assert tracer.stats["dropped"] == 5
+    assert tracer.stats["dropped"] == 10, "five runs of two spans"
 
 
-def test_the_flush_on_shutdown_sends_each_queued_event_once():
+def test_the_flush_on_shutdown_sends_each_queued_run_once():
     wire = Wire()
     tracer = tracer_for(wire)
     trace = tracer.start(run_id="RUN-F1", kind="chat", token=TOKEN, conversation_id="c")
-    trace.finish("ok")  # two events are queued; no loop is running, so nothing was sent
+    trace.finish("ok")  # the run is queued; no loop is running, so nothing was sent
     assert wire.requests == []
     asyncio.run(tracer.flush())
-    assert len(wire.requests) == 1 and len(wire.events()) == 2
+    assert len(wire.requests) == 1 and len(wire.spans()) == 1
     asyncio.run(tracer.flush())
     assert len(wire.requests) == 1, "a second flush has nothing left to send"
-    assert tracer.stats["sent"] == 2
+    assert tracer.stats["sent"] == 1
 
 
-def test_a_flush_right_after_the_events_does_not_send_any_of_them_twice():
+def test_a_flush_right_after_several_runs_sends_one_request_each_and_nothing_twice():
     wire = Wire()
     tracer = tracer_for(wire)
 
     async def go():
-        trace = tracer.start(run_id="RUN-F2", kind="chat", token=TOKEN, conversation_id="c")
-        for k in range(120):  # more than one batch
-            tracer.emit("span-create", {"id": f"s{k}", "traceId": "RUN-F2", "name": "t"})
-        trace.finish("ok")
+        for k in range(3):
+            trace = tracer.start(run_id=f"RUN-M{k}", kind="chat", token=TOKEN)
+            trace.finish("ok")
         await tracer.flush()
 
     asyncio.run(go())
-    ids = [e["id"] for e in wire.events()]
-    assert len(ids) == 122 and len(set(ids)) == 122
-    assert all(len(json.loads(r.content)["batch"]) <= tracing.BATCH_MAX for r in wire.requests)
+    assert len(wire.requests) == 3
+    spans = wire.spans()
+    assert len({s["spanId"] for s in spans}) == 3 == len({s["traceId"] for s in spans})
+
+
+def test_finishing_a_run_twice_sends_it_once():
+    wire = Wire()
+    tracer = tracer_for(wire)
+    trace = tracer.start(run_id="RUN-D1", kind="chat", token=TOKEN)
+    trace.finish("ok")
+    trace.finish("error")
+    asyncio.run(tracer.flush())
+    assert len(wire.requests) == 1 and attrs(wire.roots()[0])[
+        "langfuse.trace.metadata.outcome"
+    ] == "ok"
 
 
 # --------------------------------------------------------------------------- the graphs, on and off
@@ -533,9 +732,10 @@ def test_a_lesson_repair_round_is_counted_in_the_trace():
     wire = Wire()
     answer = lesson(tracer_for(wire), FakeModel(say("not json"), say(GOOD)))
     assert answer["repair_rounds"] == 1
-    last = wire.events("trace-create")[-1]["body"]["metadata"]
-    assert last["repair_rounds"] == 1 and last["model_calls"] == 2
-    assert len(wire.events("generation-create")) == 2
+    mine = attrs(wire.roots()[0])
+    assert mine["langfuse.trace.metadata.repair_rounds"] == 1
+    assert mine["langfuse.trace.metadata.model_calls"] == 2
+    assert len(wire.generations()) == 2
 
 
 # --------------------------------------------------------------------------- the service
@@ -592,11 +792,13 @@ def test_the_service_traces_a_chat_run_under_its_run_id_and_flushes_on_shutdown(
     with TestClient(app) as client:
         response = client.post("/run", json=body, headers=AUTH)
     final = run_events(response)[-1][1]
-    created = [e["body"] for e in wire.events("trace-create")]
-    assert created[0]["id"] == final["run_id"] and created[0]["sessionId"] == "c-1"
-    assert created[0]["userId"] == "u-12"
-    assert created[-1]["metadata"]["outcome"] == "ok"
-    assert len(wire.events("generation-create")) == 1
+    [root] = wire.roots()
+    mine = attrs(root)
+    assert root["traceId"] == uuid.UUID(final["run_id"].removeprefix("RUN-")).hex
+    assert mine["mdeis.run_id"] == final["run_id"]
+    assert mine["session.id"] == "c-1" and mine["user.id"] == "u-12"
+    assert mine["langfuse.trace.metadata.outcome"] == "ok"
+    assert len(wire.generations()) == 1
     assert "How is the reading going?" not in wire.text()
 
 
@@ -623,7 +825,7 @@ def test_the_service_traces_a_lesson_without_the_notes(monkeypatch):
     with TestClient(app) as client:
         response = client.post("/lessons", json=body, headers=AUTH)
     assert response.json()["outcome"] == "stored"
-    assert wire.events("trace-create")[-1]["body"]["metadata"]["outcome"] == "stored"
+    assert attrs(wire.roots()[0])["langfuse.trace.metadata.outcome"] == "stored"
     for fragment in (A_ASK, NEW_ASK, OBJECTIVE):
         assert fragment not in wire.text()
 
@@ -652,10 +854,13 @@ def test_the_service_with_tracing_off_makes_no_tracer_traffic(monkeypatch):
 
 
 # --------------------------------------------------------------------------- the code itself
-def test_no_new_dependency_and_no_literal_key_in_the_tracing_module():
+def test_no_new_dependency_no_legacy_route_and_no_literal_key_in_the_tracing_module():
     source = (ROOT / "src" / "orchestrator" / "tracing.py").read_text(encoding="utf-8")
-    assert not re.search(r"^\s*(import|from)\s+langfuse", source, re.M)
-    assert "langfuse" not in (ROOT / "pyproject.toml").read_text(encoding="utf-8").lower()
+    assert not re.search(r"^\s*(import|from)\s+(langfuse|opentelemetry)", source, re.M)
+    toml = (ROOT / "pyproject.toml").read_text(encoding="utf-8").lower()
+    assert "langfuse" not in toml and "opentelemetry" not in toml
+    assert "/api/public/ingestion" not in source, "Langfuse Cloud closed that route on 2026-11-16"
+    assert "/api/public/otel/v1/traces" in source
     assert not re.search(r"[ps]k-lf-[A-Za-z0-9]{8}", source)
 
 
