@@ -82,3 +82,7 @@ Thumbs.db
 .agents/
 skills-lock.json
 .codex/
+
+# Pitch deck files (local only)
+MDEIS_Nairobi_Pitch_Deck.*
+MDEIS_pitch_deck.js
